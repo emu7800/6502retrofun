@@ -361,31 +361,36 @@ output_char_to_screen:
             jsr add_to_rcv_buffer
 @skip_buffering:
             cmp #CR
-            bne @is_not_cr
-            jsr output_space_and_cursor_left_to_screen
-            lda #CR
-            bne @chrout_and_finescroll_ifneeded
-@is_not_cr:
+            beq @is_cr
             bit petscii_flag
             bmi @is_petscii
             cmp #BS
             beq @is_backspace
             cmp #DEL
             beq @is_backspace
-            bne @is_not_backspace
+            bne :+
 @is_petscii:
             cmp #petscii_delete
-            bne @is_not_backspace
+            beq @is_backspace
+            cmp #$03
+            beq @ignore
+            cmp #$83
+            beq @ignore
+:           cmp #quote
+            beq @is_quote
+            jmp @chrout_and_finescroll_ifneeded
 @is_backspace:
             jsr output_backspace_to_screen
             jmp finescroll_oneline_ifneeded
-@is_not_backspace:
-            cmp #quote
-            bne @chrout_and_finescroll_ifneeded
-            jsr CHROUT
+@is_quote:  jsr CHROUT
             lda #quote
             jsr CHROUT
-            lda #cursor_left
+            jsr output_backspace_to_screen
+            jmp finescroll_oneline_ifneeded
+@is_cr:     jsr output_space_and_cursor_left_to_screen
+            lda #CR
+            bne @chrout_and_finescroll_ifneeded
+@ignore:    rts
 @chrout_and_finescroll_ifneeded:
             jsr CHROUT
 
