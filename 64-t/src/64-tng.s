@@ -180,7 +180,6 @@ get_byte_from_keyboard:
             eor rcv_flag
             sta rcv_flag
             sta rcv_notadded_flag
-@set_rcv_flag:
             lda #CR
             jsr output_char_to_screen
             jsr indicate_rcv_flag
@@ -364,7 +363,6 @@ output_char_to_screen:
             cmp #CR
             bne @is_not_cr
             jsr output_space_and_cursor_left_to_screen
-@is_cr:
             lda #CR
             bne @chrout_and_finescroll_ifneeded
 @is_not_cr:
