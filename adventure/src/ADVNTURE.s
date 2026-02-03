@@ -18,7 +18,7 @@
 ; 0000-007f TIA
 ; 0080-00ff PIA: RAM (128 bytes)
 ; 0100-017f TIA
-; 0180-01ff PIA: RAM (128 bytes)
+; 0180-01ff PIA: RAM (128 bytes); stack location, grows downward from $1ff
 ; 0200-027f TIA
 ; 0280-02ff PIA
 ; 0280      PIA: SWCHA      RW Port A data register (joysticks...)
@@ -73,12 +73,16 @@ HMOVE       = $2a       ; W ---- ----  Apply Horizontal Motion
 HMCLR       = $2b       ; W ---- ----  Clear Horizontal Move Registers
 CXCLR       = $2c       ; W ---- ----  Clear Collision Latches
 
+                        ;                             D7    D6
+CXM0P       = $30       ; R xx00 0000  Read collision M0-P1 M0-P0 (unused)
+CXM1P       = $31       ; R xx00 0000  Read collision M1-P0 M1-P1 (unused)
 CXP0FB      = $32       ; R xx00 0000  Read Collision P0-PF P0-BL
 CXP1FB      = $33       ; R xx00 0000  Read Collision P1-PF P1-BL
 CXM0FB      = $34       ; R xx00 0000  Read Collision M0-PF M0-BL
 CXM1FB      = $35       ; R xx00 0000  Read Collision M1-PF M1-BL
 CXBLPF      = $36       ; R x000 0000  Read Collision BL-PF -----
 CXPPMM      = $37       ; R xx00 0000  Read Collision P0-P1 M0-M1
+
 INPT4       = $3c       ; R x000 0000  Read Input (Trigger) 0
 
 SWCHA       = $0280     ; RW Port A data register (joysticks...)
@@ -316,7 +320,7 @@ SetupObjectPrint:
             sta $93
             lda Store2,x          ;get high pointer to its dynamic information
             sta $94
-            ldy #$01
+            ldy #1
             lda ($93),y           ;get Object1's X coordinate
             sta $86               ; and store for print
             ldy #2
@@ -326,7 +330,7 @@ SetupObjectPrint:
             sta $93
             lda Store4,x          ;get high pointer to state value
             sta $94
-            ldy #$00
+            ldy #0
             lda ($93),y           ;retrieve Object1's current state
             sta $dc
             lda Store5,x          ;get low pointer to state information
@@ -602,14 +606,14 @@ NonActiveLoop:
             jmp MainGameLoop
 
 ; position missiles to "thin wall" areas
-ThinWalls:  lda     #$0d              ;position missile 00 to
-            ldx     #2                ; (0d,00) - left thin wall
-            jsr     PosSpriteX
-            lda     #$96              ;position missile 01 to
-            ldx     #3                ; (96,00) - right thin wall
-            jsr     PosSpriteX
-            sta     WSYNC             ;wait for horizontal blank
-            sta     HMOVE             ;apply the horizontal move
+ThinWalls:  lda #$0d              ;position missile 00 to
+            ldx #2                ; (0d,00) - left thin wall
+            jsr PosSpriteX
+            lda #$96              ;position missile 01 to
+            ldx #3                ; (96,00) - right thin wall
+            jsr PosSpriteX
+            sta WSYNC             ;wait for horizontal blank
+            sta HMOVE             ;apply the horizontal move
             rts
 
 CheckGameStart:
@@ -660,9 +664,9 @@ SetupRoomObjects:
             sta $8c               ;and the previous Y coordinate
             sta $e4               ;(so can't be seen)
             ldy $dd               ;get the level number
-            lda Loc_4,y           ;get the low pointer to object locations
+            lda GameObjects,y     ;get the low pointer to object locations
             sta $93
-            lda Loc_5,y           ;get the high pointer to object locations
+            lda GameObjects+1,y   ;get the high pointer to object locations
             sta $94
             ldy #$30              ;copy all the objects dynamic information
 :           lda ($93),y           ; (the rooms and positions) into
@@ -697,26 +701,25 @@ RandomizeLevel3:
             sec
             adc $e5               ;store the low input counter
             sta $e5
-            and #$1f              ;trim so represents a room value
-            cmp Loc_2,y           ;if it is less than the
-            bcc :-                ; lower bound for object then get another
-            cmp Loc_3,y           ;if it equals or is
-            beq :+                ; less than the higher bound for object
-            bcs :-                ; then continue (branch if higher)
-:           ldx Loc_1,y           ;get the dynamic data index for this object
-            sta $00,x             ;store the new room value
+            and #$1f                   ;trim so represents a room value
+            cmp Lvl3ObjRoomBounds+1,y  ;if it is less than the
+            bcc :-                     ; lower bound for object then get another
+            cmp Lvl3ObjRoomBounds+2,y  ;if it equals or is
+            beq :+                     ; less than the higher bound for object
+            bcs :-                     ; then continue (branch if higher)
+:           ldx Lvl3ObjRoomBounds,y    ;get the object-room index value
+            sta $00,x                  ;store the new room value
             dey
-            dey                   ;goto the next object
+            dey                        ;goto the next object
             dey
-            bpl :--               ;until all done
+            bpl :--                    ;until all done
             rts
 
 ; Room bounds data.
 ;
-; e.g. the chalice at location $B9 can only exist in rooms 13-1A for level 3.
-Loc_1:      .byte $b9               ;chalice
-Loc_2:      .byte $13
-Loc_3:      .byte $1a
+; e.g. the chalice at location $b9 can only exist in room range [$13, $1a] for level 3.
+Lvl3ObjRoomBounds:
+            .byte $b9, $13, $1a     ;chalice
             .byte $a4, $01, $1d     ;red dragon
             .byte $a9, $01, $1d     ;yellow dragon
             .byte $ae, $01, $1d     ;green dragon
@@ -727,46 +730,51 @@ Loc_3:      .byte $1a
             .byte $c5, $01, $12     ;black key
             .byte $cb, $01, $1d     ;bat
             .byte $b3, $01, $1d     ;magnet
-Loc_4:      .byte <Game1Objects     ;pointer to object locations for game 01
-Loc_5:      .byte >Game1Objects
+
+GameObjects:
+            .word Game1Objects      ;pointer to object locations for game 01
             .word Game2Objects      ;pointer to object locations for game 02
             .word Game2Objects      ;pointer to object locations for game 03
+
 ; object locations (room and coordinate) for game 01
 Game1Objects:
-            .byte $15, $51, $12     ;black dot (room, X, Y)
-            .byte $0e, $50, $20, $00, $00 ;red dragon (room, X, Y, movement, state)
-            .byte $01, $50, $20, $00, $00 ;yellow dragon (room, X, Y, movement, state)
-            .byte $1d, $50, $20, $00, $00 ;green dragon (room, X, Y, movement, state)
-            .byte $1b, $80, $20     ;magnet (room, X, Y)
-            .byte $12, $20, $20     ;sword (room, X, Y)
-            .byte $1c, $30, $20     ;chalice (room, X, Y)
-            .byte $04, $29, $37     ;bridge (room, X, Y)
-            .byte $11, $20, $40     ;yellow key (room, X, Y)
-            .byte $0e, $20, $40     ;white key (room, X, Y)
-            .byte $1d, $20, $40     ;black key (room, X, Y)
-            .byte $1c               ;portcullis state
-            .byte $1c               ;portcullis state
-            .byte $1c               ;portcullis state
-            .byte $1a,$20,$20,$00,$00     ;bat (room, X, Y, movement, state)
-            .byte $78,$00           ;bat (carrying, fed-up)
+            ;     Rm,  X,   Y,   Mvt, State
+            .byte $15, $51, $12           ;black dot
+            .byte $0e, $50, $20, $00, $00 ;red dragon
+            .byte $01, $50, $20, $00, $00 ;yellow dragon
+            .byte $1d, $50, $20, $00, $00 ;green dragon
+            .byte $1b, $80, $20           ;magnet
+            .byte $12, $20, $20           ;sword
+            .byte $1c, $30, $20           ;chalice
+            .byte $04, $29, $37           ;bridge
+            .byte $11, $20, $40           ;yellow key
+            .byte $0e, $20, $40           ;white key
+            .byte $1d, $20, $40           ;black key
+            .byte $1c                     ;portcullis state
+            .byte $1c                     ;portcullis state
+            .byte $1c                     ;portcullis state
+            .byte $1a, $20, $20, $00, $00 ;bat
+            .byte $78, $00                ;bat (carrying, fed-up)
+
 ; object locations (room and coordinate) for games 02 and 03
 Game2Objects:
-            .byte $15, $51, $12       ;black dot (room, X, Y)
-            .byte $14, $50, $20, $a0, $00 ;red dragon (room, X, Y, movement, state)
-            .byte $19, $50, $20, $a0, $00 ;yellow dragon (room, X, Y, movement, state)
-            .byte $04, $50, $20, $a0, $00 ;green dragon (room, X, Y, movement, state)
-            .byte $0e, $80, $20       ;magnet (room, X, Y)
-            .byte $11, $20, $20       ;sword (room, X, Y)
-            .byte $14, $30, $20       ;chalice (room, X, Y)
-            .byte $0b, $40, $40       ;bridge (room, X, Y)
-            .byte $09, $20, $40       ;yellow key (room, X, Y)
-            .byte $06, $20, $40       ;white key (room, X, Y)
-            .byte $19, $20, $40       ;black key (room, X, Y)
-            .byte $1c                 ;portcullis state
-            .byte $1c                 ;portcullis state
-            .byte $1c                 ;portcullis state
-            .byte $02, $20, $20, $90, $00 ;bat (room, X, Y, movement, state)
-            .byte $78, $00            ;bat (carrying, fed-up)
+            ;     Rm,  X,   Y,   Mvt, State
+            .byte $15, $51, $12           ;black dot
+            .byte $14, $50, $20, $a0, $00 ;red dragon
+            .byte $19, $50, $20, $a0, $00 ;yellow dragon
+            .byte $04, $50, $20, $a0, $00 ;green dragon
+            .byte $0e, $80, $20           ;magnet
+            .byte $11, $20, $20           ;sword
+            .byte $14, $30, $20           ;chalice
+            .byte $0b, $40, $40           ;bridge
+            .byte $09, $20, $40           ;yellow key
+            .byte $06, $20, $40           ;white key
+            .byte $19, $20, $40           ;black key
+            .byte $1c                     ;portcullis state
+            .byte $1c                     ;portcullis state
+            .byte $1c                     ;portcullis state
+            .byte $02, $20, $20, $90, $00 ;bat
+            .byte $78, $00                ;bat (carrying, fed-up)
 
 ; check ball collisions and move ball
 BallMovement:
@@ -2411,13 +2419,14 @@ RoomDataTable:
             .byte $36, $0a, $21, $8f, $01, $10, $03
             .word BelowYellowCastle ;1e name room; purple
             .byte $66, $0a, $21, $06, $01, $06, $03
+
 ; room differences for different levels (level 1, 2, 3)
-RoomDiffs:   .byte $10, $0f, $0f       ;down from room 01
-             .byte $05, $11, $11       ;down from room 02
-             .byte $1d, $0a, $0a       ;down from room 03
-             .byte $1c, $16, $16       ;U/L/R/D from room 1b (black castle room)
-             .byte $1b, $0c, $0c       ;down from room 1c
-             .byte $03, $0c, $0c       ;up from room 1d (top entry room)
+RoomDiffs:  .byte $10, $0f, $0f     ;down from room 01
+            .byte $05, $11, $11     ;down from room 02
+            .byte $1d, $0a, $0a     ;down from room 03
+            .byte $1c, $16, $16     ;U/L/R/D from room 1b (black castle room)
+            .byte $1b, $0c, $0c     ;down from room 1c
+            .byte $03, $0c, $0c     ;up from room 1d (top entry room)
 ; Objects
 ;
 ; offset 0: low byte object information (moveable stuff)
