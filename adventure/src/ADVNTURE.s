@@ -90,6 +90,27 @@ SWCHB       = $0282     ; RW Port B data (console switches)
 INTIM       = $0284     ; R Timer output
 TIM64T      = $0296     ; W set 64 clock interval
 
+            .zeropage   ; segment mapped to $80
+
+roomgfx_base:
+            .word 0     ; $80
+print_ptr:
+            .word 0     ; $82
+print2_ptr:
+            .word 0     ; $84
+print3_ptr:
+            .word 0     ; $86  player00 sprite?
+print4_ptr:
+            .word 0     ; $88  player01 sprite?
+
+curr_room:  .byte 0     ; $8a  current room number
+man_x:      .byte 0     ; $8b  man's x coordinate
+man_y:      .byte 0     ; $8c  man's y coordinate
+man_y2:     .byte 0     ; $8d  man's adjusted y coordinate?
+scan_line:  .byte 0     ; $8e  current scan line
+roomgfx_offset:
+            .byte 0     ; $8f  room graphics offset
+
             .code
 START:      jmp StartGame
 
@@ -99,19 +120,19 @@ START:      jmp StartGame
 
 PrintDisplay:
             sta HMCLR       ;clear horizontal motion
-            lda $86         ;position Player00 sprite to
+            lda print3_ptr  ;position Player00 sprite to
             ldx #0          ; the X coordinate of Object1
             jsr PosSpriteX
-            lda $88         ;position Player01 sprite to
+            lda print4_ptr  ;position Player01 sprite to
             ldx #1          ; the X coordinate of Object2
             jsr PosSpriteX
-            lda $8b         ;position ball sprite to
+            lda man_x       ;position ball sprite to
             ldx #4          ; the X coordinate of the Man
             jsr PosSpriteX
             sta WSYNC       ;wait for horizontal blank
             sta HMOVE       ;apply horizontal motion
             sta CXCLR       ;clear collision latches
-            lda $8c         ;get the Y coordinate of the Man
+            lda man_y       ;get the Y coordinate of the Man
             sec
             sbc #4          ;and adjust it (by four scan lines)
             sta $8d         ; for printing (so Y coordinate specifies middle)
@@ -121,24 +142,24 @@ PrintDisplay:
             lda #0
             sta $90                   ;set Player00 definition index
             sta $91                   ;set Player01 definition index
-            sta $8f                   ;set room definition index
+            sta roomgfx_offset        ;set room definition index
             sta GRP1                  ;clear any graphics for Player01
             lda #1
             sta VDELP1                ;vertically delay Player01
             lda #$68
-            sta $8e                   ;set scan line count
+            sta scan_line             ;set scan line count
 ; print top line of room
-            ldy $8f                   ;get room definition index
-            lda ($80),y               ;get first room definition byte
+            ldy roomgfx_offset        ;get room definition index
+            lda (roomgfx_base),y      ;get first room definition byte
             sta PF0                   ; and display
             iny
-            lda ($80),y               ;get next room definition byte
+            lda (roomgfx_base),y      ;get next room definition byte
             sta PF1                   ; and display
             iny
-            lda ($80),y               ;get last room definition byte
+            lda (roomgfx_base),y      ;get last room definition byte
             sta PF2                   ; and display
             iny
-            sty $8f                   ;save for next time
+            sty roomgfx_offset        ;save for next time
             sta WSYNC                 ;wait for horizontal blank
             lda #0
             sta VBLANK                ;clear any vertical blank
@@ -146,57 +167,57 @@ PrintDisplay:
 
 ; print Player01 (Object2)
 PrintPlayer01:
-            lda $8e                   ;get current scan line
+            lda scan_line             ;get current scan line
             sec                       ;have we reached Object2's
-            sbc $89                   ; Y coordinate?
+            sbc print4_ptr+1          ; Y coordinate?
             sta WSYNC                 ;wait for horizontal blank
             bpl PrintPlayer00         ;if not, branch
             ldy $91                   ;get the Player01 definition index
-            lda ($84),y               ;get the next Player01 definition byte
+            lda (print2_ptr),y        ;get the next Player01 definition byte
             sta GRP1                  ; and display
             beq PrintPlayer00         ;if zero then definition finished
             inc $91                   ;goto next Player01 definition byte
 ; print Player00 (Object1), Ball (Man), and Room
 PrintPlayer00:
             ldx #0
-            lda $8e                  ;get the current scan line
+            lda scan_line            ;get the current scan line
             sec                      ;have we reached the Object1's
-            sbc $87                  ; Y coordinate?
+            sbc print3_ptr+1         ; Y coordinate?
             bpl @PrintPlayer00_1     ;if not then branch
             ldy $90                  ;get Player00 definition index
-            lda ($82),y              ;get the next Player00 definition byte
+            lda (print_ptr),y        ;get the next Player00 definition byte
             tax
             beq @PrintPlayer00_1     ;if zero then definition finished
             inc $90                  ;go to next Player00 definition byte
 @PrintPlayer00_1:
             ldy #0                   ;disable Ball graphic
-            lda $8e                  ;get scan line count
+            lda scan_line            ;get scan line count
             sec                      ;have we reached the Man's
-            sbc $8d                  ; Y coordinate?
+            sbc man_y2               ; Y coordinate?
             and #$fc                 ;mask value to four either side (getting depth of 8)
             bne @PrintPlayer00_2     ;if not, branch
             ldy #2                   ;enable Ball graphic
 @PrintPlayer00_2:
-            lda $8e                  ;get scan line count
+            lda scan_line            ;get scan line count
             and #$0f                 ;have we reached a sixteenth scan line?
             bne @PrintPlayer00_4     ;if not, branch
             sta WSYNC                ;wait for horizontal blank
             sty ENABL                ;enable Ball (if wanted)
             stx GRP0                 ;display Player00 definition byte (if wanted)
-            ldy $8f                  ;get room definition index
-            lda ($80),y              ;get first room definition byte
+            ldy roomgfx_offset       ;get room definition index
+            lda (roomgfx_base),y     ;get first room definition byte
             sta PF0                  ; and display
             iny
-            lda ($80),y              ;get next room definition byte
+            lda (roomgfx_base),y     ;get next room definition byte
             sta PF1                  ; and display
             iny
-            lda ($80),y              ;get next room definition byte
+            lda (roomgfx_base),y     ;get last room definition byte
             sta PF2                  ; and display
             iny
-            sty $8f                  ;save for next time
+            sty roomgfx_offset        ;save for next time
 @PrintPlayer00_3:
-            dec $8e                  ;goto next scan line
-            lda $8e                  ;get the scan line
+            dec scan_line            ;goto next scan line
+            lda scan_line            ;get the scan line
             cmp #8                   ;have we reached to within 8 scanlines of the bottom?
             bpl PrintPlayer01        ;if not, branch
             sta VBLANK               ;turn on VBLANK
@@ -209,7 +230,7 @@ PrintPlayer00:
             stx GRP0                 ;display Player00 definition byte (if wanted)
             jmp @PrintPlayer00_3
 
-TidyUp:     lda #$00
+TidyUp:     lda #0
             sta GRP1                 ;clear any graphics for Player01
             sta GRP0                 ;clear any graphics for Player00
             lda #$20
@@ -255,14 +276,14 @@ DoVSYNC:    lda INTIM           ;get timer output
 
 ; set up a room for print
 SetupRoomPrint:
-            lda $8a               ;get current room number
+            lda curr_room         ;get current room number
             jsr RoomNumToAddress  ;convert it to an address
             ldy #0
             lda ($93),y           ;get low pointer to room graphics
-            sta $80
+            sta roomgfx_base
             ldy #1
             lda ($93),y           ;get high pointer to room graphics
-            sta $81
+            sta roomgfx_base+1
 ; checdk B&W switch for room graphics
             lda SWCHB             ;get console switches
             and #8                ;check black and white switch
@@ -322,10 +343,10 @@ SetupObjectPrint:
             sta $94
             ldy #1
             lda ($93),y           ;get Object1's X coordinate
-            sta $86               ; and store for print
+            sta print3_ptr        ; and store for print
             ldy #2
             lda ($93),y           ;get Object1's Y coordinate
-            sta $87               ; and store for print
+            sta print3_ptr+1      ; and store for print
             lda Store3,x          ;get low pointer to state value
             sta $93
             lda Store4,x          ;get high pointer to state value
@@ -340,10 +361,10 @@ SetupObjectPrint:
             jsr GetObjectState    ;find current state in the state information
             iny                   ;index to the state's corresponding graphic pointer
             lda ($93),y           ;get Object1's low graphic address
-            sta $82               ; and store for print
+            sta print_ptr         ; and store for print
             iny
             lda ($93),y           ;get Object1's high graphic address
-            sta $83               ; and store for print
+            sta print_ptr+1       ; and store for print
 ; check B&W for Object01
             lda SWCHB             ;get console switches
             and #8                ;check B&W switches
@@ -372,10 +393,10 @@ ResizeObject:
             sta $94
             ldy #1
             lda ($93),y           ;get Object2's X coordinate
-            sta $88               ; and store for print
+            sta print4_ptr        ; and store for print
             ldy #2
             lda ($93),y           ;get Object2's Y coordinate
-            sta $89               ; and store for print
+            sta print4_ptr+1      ; and store for print
             lda Store3,x          ;get low pointer to state value
             sta $93
             lda Store4,x          ;get high pointer to state value
@@ -388,12 +409,12 @@ ResizeObject:
             lda Store6,x          ;get high pointer to state information
             sta $94
             jsr GetObjectState    ;find the current state in the state information
-            iny                       ;index to the state's corresponding graphic pointer
+            iny                   ;index to the state's corresponding graphic pointer
             lda ($93),y
-            sta $84               ;get Object2's low graphic address
+            sta print2_ptr       ;get Object2's low graphic address
             iny
             lda ($93),y           ;get Object2's high graphic address
-            sta $85
+            sta print2_ptr+1
 ; check B&W for Object2
             lda SWCHB             ;get console switches
             and #8                ;check B&W switch
@@ -437,7 +458,7 @@ GetObjectsInfo:
             sta $94
             ldx #0
             lda ($93,x)             ;get object's current room
-            cmp $8a                 ; is it in this room?
+            cmp curr_room           ; is it in this room?
             bne CheckForMoreObjects ;if not lets try next object (branch)
             lda $95                 ;check first slot
             cmp #162              ;if not default (no-object)
@@ -626,14 +647,14 @@ CheckGameStart:
             cmp #$ff              ;if not then branch
             beq SetupRoomObjects
             lda #$11              ;get the yellow castle room
-            sta $8a               ;make it the current room
+            sta curr_room         ;make it the current room
             sta $e2               ;make it the previous room
             lda #$50              ;get the X coordinate
-            sta $8b               ;make it the current ball X coordinate
-            sta $e3               ;make it the previous ball X coordinate
+            sta man_x             ;make it the current man X coordinate
+            sta $e3               ;make it the previous man X coordinate
             lda #$20              ;get the Y coordinate
-            sta $8c               ;make it the current ball Y coordinate
-            sta $e4               ;make it the previous ball Y coordinate
+            sta man_y             ;make it the current man Y coordinate
+            sta $e4               ;make it the previous man Y coordinate
             lda #0
             sta $a8               ;set the red dragon's state to OK
             sta $ad               ;set the yellow dragon's state to OK
@@ -646,7 +667,7 @@ CheckReset: lda SWCHB             ;get the console switches
             and $92               ;compare with what was before
             and #2                ;and check only the select switch
             beq StoreSwitches     ;branch if select not being used
-            lda $8a               ;get the current room
+            lda curr_room         ;get the current room
             cmp #0                ;is it the "number" room?
             bne SetupRoomObjects  ;branch if not
             lda $dd               ;increment the level
@@ -658,10 +679,10 @@ CheckReset: lda SWCHB             ;get the console switches
 ResetSetup: sta $dd               ;store the new level number
 SetupRoomObjects:
             lda #0                ;set the current room to the
-            sta $8a               ; "number" room
+            sta curr_room         ; "number" room
             sta $e2               ;and the previous room
-            lda #0                ;set the ball's Y coordinate to zero
-            sta $8c               ;and the previous Y coordinate
+            lda #0                ;set the man's Y coordinate to zero
+            sta man_y             ;and the previous Y coordinate
             sta $e4               ;(so can't be seen)
             ldy $dd               ;get the level number
             lda GameObjects,y     ;get the low pointer to object locations
@@ -813,11 +834,11 @@ PlayerCollision:
             lda $9d               ;get the object being carried
             cmp #$5a              ;branch if it is the bridge
             beq ReadStick
-            lda $8a               ;get the current room
+            lda curr_room         ;get the current room
             cmp $bc               ;is the bridge in this room?
             bne ReadStick         ;if not branch
 ; check going through the bridge
-            lda $8b               ;get the ball's X coordinate
+            lda man_x             ;get the man's X coordinate
             sec
             sbc $bd               ;subtract the bridge's X coordinate
             cmp #$0a              ;if less than $0A then forget it
@@ -826,7 +847,7 @@ PlayerCollision:
             bcs ReadStick
             lda $be               ;get the bridge's Y coordinate
             sec
-            sbc $8c               ;subtract the ball's Y coordinate
+            sbc man_y             ;subtract the man's Y coordinate
             cmp #$fc
             bcs NoCollision       ;if more than $FC then going through bridge
             cmp #$19              ;if more than $19 then forget it
@@ -835,11 +856,11 @@ PlayerCollision:
 NoCollision:
             lda #$ff              ;reset the joystick input
             sta $99
-            lda $8a               ;get the current room
+            lda curr_room         ;get the current room
             sta $e2               ; and store temporarily
-            lda $8b               ;get the ball's X coordinate
+            lda man_x             ;get the man's X coordinate
             sta $e3               ; and store temporarily
-            lda $8c               ;get the ball's Y coordinate
+            lda man_y             ;get the man's Y coordinate
             sta $e4               ; and store temporarily
 ; read sticks
 ReadStick:  cpy #0                ;???is game in first phase?
@@ -848,11 +869,11 @@ ReadStick:  cpy #0                ;???is game in first phase?
             sta $99               ; and store value
 @ReadStick_2:
             lda $e2               ;get temporary room
-            sta $8a               ; and make it the current room
+            sta curr_room         ; and make it the current room
             lda $e3               ;get temporary X coordinate
-            sta $8b               ; and make it the man's X coordinate
+            sta man_x             ; and make it the man's X coordinate
             lda $e4               ;get temporary Y coordinate
-            sta $8c               ; and make it the man's Y coordinate
+            sta man_y             ; and make it the man's Y coordinate
             lda $99               ;get the joystick position
             ora ReadStick_3,y     ;merge out movement not allowed in this phase
             sta $9b               ;and store cooked movement
@@ -912,7 +933,7 @@ CollisionDetected:
             bcc NoObject          ;if not, branch
             ldy #0
             lda ($93),y           ;get the object's room
-            cmp $8a               ;is it in the current room?
+            cmp curr_room         ;is it in the current room?
             bne NoObject          ;if not, branch
             lda $97               ;get the object collided with
             cmp $9d               ;is it the object being carried?
@@ -931,12 +952,12 @@ PickupObject:
             ldy #1
             lda ($93),y           ;get the object's X coordinate
             sec
-            sbc $8b               ;subtract the ball's X coordinate
+            sbc man_x             ;subtract the man's X coordinate
             sta $9e               ; and store the difference
             ldy #2
             lda ($93),y           ;get the object's Y coordinate
             sec
-            sbc $8c               ;subtract the Balls' Y coordinate
+            sbc man_y             ;subtract the man's Y coordinate
             sta $9f               ; and store the difference
 NoObject:   rts                   ; no collision
 
@@ -947,15 +968,15 @@ MoveCarriedObject:
             beq @MoveCarriedObject_2
             jsr GetObjectAddress  ;get its dynamic information
             ldy #0
-            lda $8a               ;get the current room
+            lda curr_room         ;get the current room
             sta ($93),y           ; and store the object's current room
             ldy #$01
-            lda $8b               ;get the ball's X coordinate
+            lda man_x             ;get the man's X coordinate
             clc
             adc $9e               ;add the X difference
             sta ($93),y           ; and store as the object's X coordinate
             ldy #2
-            lda $8c               ;get the ball's Y coordinate
+            lda man_y             ;get the man's Y coordinate
             clc
             adc $9f               ;add the Y difference
             sta ($93),y           ; and store as the object's Y coordinate
@@ -1367,17 +1388,17 @@ MoveDragon: stx $a0               ;save object we're dealing with
             bne @MoveDragon_7     ;branch if not
 ; normal dragon state 2 (eaten ball)
             lda $00,x             ;get the dragon's current room
-            sta $8a               ;store as the ball's current room
+            sta curr_room         ;store as the ball's current room
             sta $e2               ; and previous room
             lda $01,x             ;get the dragon's X coordinate
             clc
             adc #3                ;adjust
-            sta $8b               ; and store as the ball's X coordinate
+            sta man_x             ; and store as the man's X coordinate
             sta $e3               ; and previous X coordinate
             lda $02,x             ;get the dragon's Y coordinate
             sec
             sbc #$0a              ;adjust
-            sta $8c               ; and store as the ball's Y coordinate
+            sta man_y             ; and store as the man's Y coordinate
             sta $e4               ; and the previous Y coordinate
             jmp @MoveDragon_9
 
@@ -1599,7 +1620,7 @@ MagnetMatrix:
             .byte 0
 
 ; deal with invisible surround moving
-Surround:   lda $8a               ;set the current room
+Surround:   lda curr_room         ;set the current room
             jsr RoomNumToAddress  ;convert it to an address
             ldy #2
             lda ($93),y           ;get the room's color
@@ -1610,13 +1631,13 @@ Surround:   lda $8a               ;set the current room
             jmp @Surround_4       ; wanted
 
 @Surround_2:
-            lda $8a               ;get the current room
+            lda curr_room         ;get the current room
             sta $d9               ;and store as the invisible surround
-            lda $8b               ;get the ball's X coordinate
+            lda man_x             ;get the man's X coordinate
             sec
             sbc #$0e              ;adjust for surround,
             sta $da               ; and store as surround's X coordinate
-            lda $8c               ;get the ball's Y coordinate
+            lda man_y             ;get the man's Y coordinate
             clc
             adc #$0e              ;adjust for surround
             sta $db               ; and store as surround's Y coordinate
