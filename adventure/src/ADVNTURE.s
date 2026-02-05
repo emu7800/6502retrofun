@@ -90,6 +90,7 @@ SWCHB       = $0282     ; RW Port B data (console switches)
 INTIM       = $0284     ; R Timer output
 TIM64T      = $0296     ; W set 64 clock interval
 
+
             .zeropage   ; segment mapped to $80
 
 roomgfx_base:
@@ -110,6 +111,70 @@ man_y2:     .byte 0     ; $8d  man's adjusted y coordinate?
 scan_line:  .byte 0     ; $8e  current scan line
 roomgfx_offset:
             .byte 0     ; $8f  room graphics offset
+p0gfx_offset:
+            .byte 0     ; $90  player00 graphics offset
+p1gfx_offset:
+            .byte 0     ; $91  player01 graphics offset
+cached_swchb:
+            .byte 0     ; $92  cached console switches
+dr_ptr:     .word 0     ; $93  pointer for dereferencing
+object1:    .byte 0     ; $95
+object2:    .byte 0     ; $96
+obj_collided_with:
+            .byte 0     ; $97
+unread1:    .byte 0     ; $98  unread byte
+cached_joystick:
+            .byte 0     ; $99
+portcullis_number:
+            .byte 0     ; $9a
+direction_wanted:
+            .byte 0     ; $9b
+obj_counter:
+            .byte 0     ; $9c
+object_carried:
+            .byte 0     ; $9d  object carried by the man
+objman_x_delta:
+            .byte 0     ; $9e
+objman_y_delta:
+            .byte 0     ; $9f
+curr_obj_number:
+            .byte 0     ; $a0
+room_of_black_dot:
+            .byte 0     ; $a1
+
+            ; a2-af unused
+            .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+
+            ; b0-bf unused?
+            .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+
+            ; c0-c7 unused?
+            .byte 0, 0, 0, 0, 0, 0, 0, 0
+
+PortCurrBase:
+            .byte 0, 0, 0  ; $c8, $c9, $ca
+
+            ; cb-cf unused?
+            .byte 0, 0, 0, 0, 0
+
+            ; d0-d8 unused?
+            .byte 0, 0, 0, 0, 0, 0, 0, 0, 0
+
+SurroundInfo:
+            .word 0      ; $d9/$da
+
+            ; db-df unused?
+            .byte 0, 0, 0, 0, 0
+
+            ; e0-e4 unused?
+            .byte 0, 0, 0, 0, 0
+
+input_counter:
+            .word 0     ; $e5/$e6
+
+stack_space:
+;           $e7-$ff (12 frames)
+
 
             .code
 START:      jmp StartGame
@@ -135,13 +200,13 @@ PrintDisplay:
             lda man_y       ;get the Y coordinate of the Man
             sec
             sbc #4          ;and adjust it (by four scan lines)
-            sta $8d         ; for printing (so Y coordinate specifies middle)
+            sta man_y2      ; for printing (so Y coordinate specifies middle)
 @PrintDisplay_1:
             lda INTIM                 ;wait for end of the
             bne @PrintDisplay_1       ; current frame
             lda #0
-            sta $90                   ;set Player00 definition index
-            sta $91                   ;set Player01 definition index
+            sta p0gfx_offset          ;set Player00 definition index
+            sta p1gfx_offset          ;set Player01 definition index
             sta roomgfx_offset        ;set room definition index
             sta GRP1                  ;clear any graphics for Player01
             lda #1
@@ -172,11 +237,11 @@ PrintPlayer01:
             sbc print4_ptr+1          ; Y coordinate?
             sta WSYNC                 ;wait for horizontal blank
             bpl PrintPlayer00         ;if not, branch
-            ldy $91                   ;get the Player01 definition index
+            ldy p1gfx_offset          ;get the Player01 definition index
             lda (print2_ptr),y        ;get the next Player01 definition byte
             sta GRP1                  ; and display
             beq PrintPlayer00         ;if zero then definition finished
-            inc $91                   ;goto next Player01 definition byte
+            inc p1gfx_offset          ;goto next Player01 definition byte
 ; print Player00 (Object1), Ball (Man), and Room
 PrintPlayer00:
             ldx #0
@@ -184,11 +249,11 @@ PrintPlayer00:
             sec                      ;have we reached the Object1's
             sbc print3_ptr+1         ; Y coordinate?
             bpl @PrintPlayer00_1     ;if not then branch
-            ldy $90                  ;get Player00 definition index
+            ldy p0gfx_offset         ;get Player00 definition index
             lda (print_ptr),y        ;get the next Player00 definition byte
             tax
             beq @PrintPlayer00_1     ;if zero then definition finished
-            inc $90                  ;go to next Player00 definition byte
+            inc p0gfx_offset         ;go to next Player00 definition byte
 @PrintPlayer00_1:
             ldy #0                   ;disable Ball graphic
             lda scan_line            ;get scan line count
@@ -279,10 +344,10 @@ SetupRoomPrint:
             lda curr_room         ;get current room number
             jsr RoomNumToAddress  ;convert it to an address
             ldy #0
-            lda ($93),y           ;get low pointer to room graphics
+            lda (dr_ptr),y        ;get low pointer to room graphics
             sta roomgfx_base
             ldy #1
-            lda ($93),y           ;get high pointer to room graphics
+            lda (dr_ptr),y        ;get high pointer to room graphics
             sta roomgfx_base+1
 ; checdk B&W switch for room graphics
             lda SWCHB             ;get console switches
@@ -290,13 +355,13 @@ SetupRoomPrint:
             beq UseBW             ;branch if B&W
 ; use color
             ldy #2
-            lda ($93),y           ;get room color
+            lda (dr_ptr),y        ;get room color
             jsr ChangeColor       ;change if necessary
             sta COLUPF            ;put in playfield color register
             jmp UseColor
 
 UseBW:      ldy #3
-            lda ($93),y           ;get B&W color
+            lda (dr_ptr),y        ;get B&W color
             jsr ChangeColor       ;change if necessary
             sta COLUPF            ;put in the playfield color registerg
 ; color background
@@ -305,7 +370,7 @@ UseColor:   lda #8                ;get light grey background
             sta COLUBK            ;put it in the background color register
 ; playfield control
             ldy #4
-            lda ($93),y           ;get the playfield control value
+            lda (dr_ptr),y        ;get the playfield control value
             sta CTRLPF            ; and put in the playfield control register
             and #$c0              ;get the "this wall" flag
             lsr a
@@ -319,130 +384,130 @@ UseColor:   lda #8                ;get light grey background
 ; get objects to display
             jsr CacheObjects      ;get next two objects to display
 ; sort out their order
-            lda $95               ;if the Object1 is the
+            lda object1           ;if the Object1 is the
             cmp #0                ; invisible surround
             beq SwapPrintObjects  ; then branch to swap (we want it was Player01)
             cmp #$5a              ;if the first object is the bridge then
             bne SetupObjectPrint  ; swap the objects (we want it as Player01)
-            lda $96               ;if the Object2 is the
+            lda object2           ;if the Object2 is the
             cmp #0                ; invisible surround then branch to leave
             beq SetupObjectPrint  ; it (we want it as Player01)
 SwapPrintObjects:
-            lda $95
+            lda object1
             sta $d8
-            lda $96
-            sta $95               ;swap the objects to print
+            lda object2
+            sta object1
             lda $d8
-            sta $96
+            sta object2
 ; setup Object1 to print
 SetupObjectPrint:
-            ldx $95               ;get Object1
-            lda Store1,x          ;get low pointer to its dynamic information
-            sta $93
-            lda Store2,x          ;get high pointer to its dynamic information
-            sta $94
+            ldx object1
+            lda a:Objects+ObjectType::info_ptr,x
+            sta dr_ptr
+            lda a:Objects+ObjectType::info_ptr+1,x
+            sta dr_ptr+1
             ldy #1
-            lda ($93),y           ;get Object1's X coordinate
+            lda (dr_ptr),y        ;get Object1's X coordinate
             sta print3_ptr        ; and store for print
             ldy #2
-            lda ($93),y           ;get Object1's Y coordinate
+            lda (dr_ptr),y        ;get Object1's Y coordinate
             sta print3_ptr+1      ; and store for print
-            lda Store3,x          ;get low pointer to state value
-            sta $93
-            lda Store4,x          ;get high pointer to state value
-            sta $94
+            lda a:Objects+ObjectType::currstate_ptr,x
+            sta dr_ptr
+            lda a:Objects+ObjectType::currstate_ptr+1,x
+            sta dr_ptr+1
             ldy #0
-            lda ($93),y           ;retrieve Object1's current state
+            lda (dr_ptr),y        ;retrieve Object1's current state
             sta $dc
-            lda Store5,x          ;get low pointer to state information
-            sta $93
-            lda Store6,x          ;get high pointer to state information
-            sta $94
+            lda a:Objects+ObjectType::states_ptr,x
+            sta dr_ptr
+            lda a:Objects+ObjectType::states_ptr+1,x
+            sta dr_ptr+1
             jsr GetObjectState    ;find current state in the state information
             iny                   ;index to the state's corresponding graphic pointer
-            lda ($93),y           ;get Object1's low graphic address
+            lda (dr_ptr),y        ;get Object1's low graphic address
             sta print_ptr         ; and store for print
             iny
-            lda ($93),y           ;get Object1's high graphic address
+            lda (dr_ptr),y        ;get Object1's high graphic address
             sta print_ptr+1       ; and store for print
 ; check B&W for Object01
             lda SWCHB             ;get console switches
             and #8                ;check B&W switches
             beq MakeObjectBW      ;branch if B&W
 ; color
-            lda Store7,x          ;get Object1's color
+            lda a:Objects+ObjectType::color,x
             jsr ChangeColor       ;change if necessary
             sta COLUP0            ; and set color luminance00
             jmp ResizeObject
 
 ; B&W
 MakeObjectBW:
-            lda Store8,x          ;get object's B&W color
+            lda a:Objects+ObjectType::bw,x
             jsr ChangeColor       ;change if necessary
             sta COLUP0            ;set color luminance00
 ; Object1 size
 ResizeObject:
-            lda Store9,x          ;get Object1's size
+            lda a:Objects+ObjectType::size,x
             ora #$10              ;and set to larger size if necessary
             sta NUSIZ0            ;(used by bridge and invisible surround)
 ; set up Object2 to print
-            ldx $96               ;get Object2
-            lda Store1,x          ;get low pointer to its dynamic information
-            sta $93
-            lda Store2,x          ;get high pointer to its dynamic information
-            sta $94
+            ldx object2
+            lda a:Objects+ObjectType::info_ptr,x
+            sta dr_ptr
+            lda a:Objects+ObjectType::info_ptr+1,x
+            sta dr_ptr+1
             ldy #1
-            lda ($93),y           ;get Object2's X coordinate
+            lda (dr_ptr),y        ;get Object2's X coordinate
             sta print4_ptr        ; and store for print
             ldy #2
-            lda ($93),y           ;get Object2's Y coordinate
+            lda (dr_ptr),y        ;get Object2's Y coordinate
             sta print4_ptr+1      ; and store for print
-            lda Store3,x          ;get low pointer to state value
-            sta $93
-            lda Store4,x          ;get high pointer to state value
-            sta $94
+            lda a:Objects+ObjectType::currstate_ptr,x
+            sta dr_ptr
+            lda a:Objects+ObjectType::currstate_ptr+1,x
+            sta dr_ptr+1
             ldy #0
-            lda ($93),y           ;retrieve Object2's current state
+            lda (dr_ptr),y        ;retrieve Object2's current state
             sta $dc
-            lda Store5,x          ;get low pointer to state information
-            sta $93
-            lda Store6,x          ;get high pointer to state information
-            sta $94
+            lda a:Objects+ObjectType::states_ptr,x
+            sta dr_ptr
+            lda a:Objects+ObjectType::states_ptr+1,x
+            sta dr_ptr+1
             jsr GetObjectState    ;find the current state in the state information
             iny                   ;index to the state's corresponding graphic pointer
-            lda ($93),y
-            sta print2_ptr       ;get Object2's low graphic address
+            lda (dr_ptr),y
+            sta print2_ptr        ;get Object2's low graphic address
             iny
-            lda ($93),y           ;get Object2's high graphic address
+            lda (dr_ptr),y        ;get Object2's high graphic address
             sta print2_ptr+1
 ; check B&W for Object2
             lda SWCHB             ;get console switches
             and #8                ;check B&W switch
             beq MakeObject2BW     ;if B&W then branch
 ; color
-            lda Store7,x          ;get Object2's color
+            lda a:Objects+ObjectType::color,x
             jsr ChangeColor       ;change if necessary
             sta COLUP1            ;and set color luminance01
             jmp ResizeObject2
 
 ; B&W
 MakeObject2BW:
-            lda Store8,x          ;get Object's B&W color
+            lda a:Objects+ObjectType::bw,x
             jsr ChangeColor       ;change if necessary
             sta COLUP1            ;and set color luminance01
 ; Object2 size
 ResizeObject2:
-            lda Store9,x          ;get Object2's size
+            lda a:Objects+ObjectType::size,x
             ora #$10              ;and set to large size if necessary
             sta NUSIZ1            ;(used by bridge and invisible surround)
             rts
 
 ; fill cache with two objects in this room
 CacheObjects:
-            ldy $9c               ;get last object
+            ldy obj_counter       ;get last object
             lda #$a2              ;set cache to no-objects
-            sta $95
-            sta $96
+            sta object1
+            sta object2
 MoveNextObject:
             tya
             clc                   ;goto the next object to
@@ -452,57 +517,57 @@ MoveNextObject:
             lda #0                ;if so, wrap to zero
 GetObjectsInfo:
             tay
-            lda Store1,y          ;get low byte of object info
-            sta $93
-            lda Store2,y          ;get high byte of object info
-            sta $94
+            lda Objects+ObjectType::info_ptr,y
+            sta dr_ptr
+            lda Objects+ObjectType::info_ptr+1,y
+            sta dr_ptr+1
             ldx #0
-            lda ($93,x)             ;get object's current room
+            lda (dr_ptr,x)          ;get object's current room
             cmp curr_room           ; is it in this room?
             bne CheckForMoreObjects ;if not lets try next object (branch)
-            lda $95                 ;check first slot
+            lda object1             ;check first slot
             cmp #162              ;if not default (no-object)
             bne StoreObjectToPrint  ; then branch
-            sty $95                 ;store this object's number to print
+            sty object1             ;store this object's number to print
             jmp CheckForMoreObjects ; and try for more
 
 StoreObjectToPrint:
-            sty $96               ;store this object's number to print
+            sty object2           ;store this object's number to print
             jmp StoreCount        ; and then give up - no slots free
 
 CheckForMoreObjects:
-            cpy $9c               ;have we done all the objects?
+            cpy obj_counter       ;have we done all the objects?
             bne MoveNextObject    ;if not, continue
-StoreCount: sty $9c               ;if so, store current count
+StoreCount: sty obj_counter       ;if so, store current count
             rts                   ; for next time
 
 ; convert room number to address
 RoomNumToAddress:
             sta $d8               ;store room number wanted
-            sta $93
+            sta dr_ptr
             lda #0                ;zero the high byte of the
-            sta $94               ; offset
+            sta dr_ptr+1          ; offset
             clc
-            rol $93
-            rol $94               ;multiply room number by eight
-            rol $93
-            rol $94
-            rol $93
-            rol $94
+            rol dr_ptr
+            rol dr_ptr+1          ;multiply room number by eight
+            rol dr_ptr
+            rol dr_ptr+1
+            rol dr_ptr
+            rol dr_ptr+1
             lda $d8               ;get the original room number
             clc
-            adc $93
-            sta $93               ;and add it to the offset
+            adc dr_ptr
+            sta dr_ptr            ;and add it to the offset
             lda #0
-            adc $94               ;in effect the room number is
-            sta $94               ; multiplied by nine
+            adc dr_ptr+1          ;in effect the room number is
+            sta dr_ptr+1          ; multiplied by nine
             lda #<RoomDataTable
             clc
-            adc $93               ;add the room data base address
-            sta $93               ; to the offset therefore getting
+            adc dr_ptr            ;add the room data base address
+            sta dr_ptr            ; to the offset therefore getting
             lda #>RoomDataTable   ; the final room data address
-            adc $94
-            sta $94
+            adc dr_ptr+1
+            sta dr_ptr+1
             rts
 
 ; get pointer to current state
@@ -510,7 +575,7 @@ GetObjectState:
             ldy #0
             lda $dc               ;get the current object state
 @GetObjectState_1:
-            cmp ($93),y           ;have we found it in the list of states?
+            cmp (dr_ptr),y        ;have we found it in the list of states?
             bcc @GetObjectState_2 ;if nearing it then found it and return
             beq @GetObjectState_2 ;if found it then return
             iny
@@ -521,26 +586,23 @@ GetObjectState:
 @GetObjectState_2:
             rts
 
-; check for input
-CheckInput: inc $e5               ;increment low count
-            bne GetJoystick
-            inc $e6               ;increment high count if
-            bne GetJoystick       ; needed
-            lda #$80              ;wrap the high count (indicating
-            sta $e6               ; timeout) if needed
-GetJoystick:
-            lda SWCHA             ;get joystick values
+
+CheckInput: inc input_counter
+            bne :+
+            inc input_counter+1
+            bne :+
+            lda #$80              ;wrap the high count (indicating timeout) if needed
+            sta input_counter+1
+:           lda SWCHA             ;get joystick values
             cmp #$ff              ;if any movement then branch
-            bne @GetJoystick_2
+            bne :+
             lda SWCHB             ;get the console switches
             and #3                ;mask for the reset/select switches
             cmp #3                ;have either of them been used?
-            beq @GetJoystick_3    ;if not branch
-@GetJoystick_2:
-            lda #0                ;zero the high count of the
-            sta $e6               ; switches or joystick have been used
-@GetJoystick_3:
-            rts
+            beq :++               ;if not branch
+:           lda #0                ;zero the high count of the
+            sta input_counter+1   ; switches or joystick have been used
+:           rts
 
 ; change color if necessary
 ChangeColor:
@@ -549,9 +611,9 @@ ChangeColor:
             tay                   ;use color as an index (usually E5 - the low counter)
             lda $0080,y           ;get flash color (usually the low counter)
 @ChangeColor2:
-            ldy $e6               ;get the input counter
+            ldy input_counter+1   ;get the input counter
             bpl @ChangeColor3     ;if console/joystick moved recently then branch
-            eor $e6               ;merge the high counter with the color wanted
+            eor input_counter+1   ;merge the high counter with the color wanted
             and #$fb              ;keep this color bug merge down the luminance
 @ChangeColor3:
             asl a                 ;and restore original color if necessary
@@ -559,10 +621,10 @@ ChangeColor:
 
 ; get the address of the dynamic information for an object
 GetObjectAddress:
-            lda Store1,x
-            sta $93               ;get and store the low address
-            lda Store2,x
-            sta $94               ;get and store the high address
+            lda a:Objects+ObjectType::info_ptr,x
+            sta dr_ptr            ;get and store the low address
+            lda a:Objects+ObjectType::info_ptr+1,x
+            sta dr_ptr+1          ;get and store the high address
             rts
 
 ; game start entry point
@@ -640,7 +702,7 @@ ThinWalls:  lda #$0d              ;position missile 00 to
 CheckGameStart:
             lda SWCHB             ;get the console switches
             eor #$ff              ;flip (as reset active low)
-            and $92               ;compare with what was before
+            and cached_swchb      ;compare with what was before
             and #1                ;and check only the reset switch
             beq CheckReset        ;if no reset then branch
             lda $de               ;has the game started?
@@ -661,10 +723,10 @@ CheckGameStart:
             sta $b2               ;set the green dragon's state to OK
             sta $df               ;set the note count to zero (ops!??)
             lda #$a2
-            sta $9d               ;set no object being carried
+            sta object_carried    ;set no object being carried
 CheckReset: lda SWCHB             ;get the console switches
             eor #$ff              ;flip (as select active low)
-            and $92               ;compare with what was before
+            and cached_swchb      ;compare with what was before
             and #2                ;and check only the select switch
             beq StoreSwitches     ;branch if select not being used
             lda curr_room         ;get the current room
@@ -686,11 +748,11 @@ SetupRoomObjects:
             sta $e4               ;(so can't be seen)
             ldy $dd               ;get the level number
             lda GameObjects,y     ;get the low pointer to object locations
-            sta $93
+            sta dr_ptr
             lda GameObjects+1,y   ;get the high pointer to object locations
-            sta $94
+            sta dr_ptr+1
             ldy #$30              ;copy all the objects dynamic information
-:           lda ($93),y           ; (the rooms and positions) into
+:           lda (dr_ptr),y           ; (the rooms and positions) into
             sta $00a1,y           ; the working area
             dey
             bpl :-
@@ -704,24 +766,24 @@ SignalGameStart:
             lda #0                ;signal that the game has started
             sta $de
             lda #$a2              ;set no object being carried
-            sta $9d
+            sta object_carried
 StoreSwitches:
             lda SWCHB             ;store the current console switches
-            sta $92
+            sta cached_swchb
             rts
 
 ; put objects in random rooms for level 3
 RandomizeLevel3:
             ldy #30               ;for each of the eleven objects...
-:           lda $e5               ;get the low input counter as seed
+:           lda input_counter     ;get the low input counter as seed
             lsr a
             lsr a
             lsr a                 ;generate a pseudo-random
             lsr a                 ; room number
             lsr a
             sec
-            adc $e5               ;store the low input counter
-            sta $e5
+            adc input_counter     ;store the low input counter
+            sta input_counter
             and #$1f                   ;trim so represents a room value
             cmp Lvl3ObjRoomBounds+1,y  ;if it is less than the
             bcc :-                     ; lower bound for object then get another
@@ -808,21 +870,21 @@ BallMovement:
             lda CXM1FB
             and #$40              ;get ball-missile01 collision
             beq @BallMove_1       ;branch if no collision
-            lda $96               ;if Object2 (to print) is
+            lda object2           ;if Object2 (to print) is
             cmp #$87              ; not the black dot then collide
             bne PlayerCollision
 @BallMove_1:
             lda CXP0FB
             and #$40              ;get ball-player00 collision
             beq @BallMove_2       ;if no collision then branch
-            lda $95               ;if Object1 (to print is)
+            lda object1           ;if Object1 (to print is)
             cmp #0                ; not the invisible surround then
             bne PlayerCollision   ; branch (collision)
 @BallMove_2:
             lda CXP1FB
             and #$40              ;get ball-player01 collision
             beq NoCollision       ;if no collision then branch
-            lda $96               ;if player 01 to print is
+            lda object2           ;if player 01 to print is
             cmp #0                ; not the invisible surround then
             bne PlayerCollision   ; branch (collision)
             jmp NoCollision
@@ -831,7 +893,7 @@ BallMovement:
 PlayerCollision:
             cpy #2                ;are we checking for the bridge?
             bne ReadStick         ;if not, branch
-            lda $9d               ;get the object being carried
+            lda object_carried
             cmp #$5a              ;branch if it is the bridge
             beq ReadStick
             lda curr_room         ;get the current room
@@ -855,7 +917,7 @@ PlayerCollision:
 ; no collision (and going through bridge)
 NoCollision:
             lda #$ff              ;reset the joystick input
-            sta $99
+            sta cached_joystick
             lda curr_room         ;get the current room
             sta $e2               ; and store temporarily
             lda man_x             ;get the man's X coordinate
@@ -866,7 +928,7 @@ NoCollision:
 ReadStick:  cpy #0                ;???is game in first phase?
             bne @ReadStick_2      ;if not, don't bother with joystick read
             lda SWCHA             ;read joysticks
-            sta $99               ; and store value
+            sta cached_joystick
 @ReadStick_2:
             lda $e2               ;get temporary room
             sta curr_room         ; and make it the current room
@@ -874,9 +936,9 @@ ReadStick:  cpy #0                ;???is game in first phase?
             sta man_x             ; and make it the man's X coordinate
             lda $e4               ;get temporary Y coordinate
             sta man_y             ; and make it the man's Y coordinate
-            lda $99               ;get the joystick position
+            lda cached_joystick   ;get the joystick position
             ora ReadStick_3,y     ;merge out movement not allowed in this phase
-            sta $9b               ;and store cooked movement
+            sta direction_wanted  ;and store cooked movement
             ldy #3                ;set the delta for the ball
             ldx #$8a              ;point to ball's coordinates
             jsr MoveGroundObject  ;move the ball
@@ -895,94 +957,94 @@ PickupPutdown:
             cmp #$40              ;was it previously pressed?
             bne @PickupPutdown_2  ;if not branch
             lda #$a2
-            cmp $9d               ;if nothing is being carried
+            cmp object_carried    ;if nothing is being carried
             beq @PickupPutdown_2  ; then branch
-            sta $9d               ;drop object
+            sta object_carried    ;drop object
             lda #4                ;set noise type to four
             sta $e0
             lda #4                ;set noise count to four
             sta $df
 @PickupPutdown_2:
             lda #$ff              ;????
-            sta $98
+            sta unread1
 ; check for collision
             lda CXP0FB
             and #$40              ;get Ball-Player00 collision
             beq @PickupPutdown_3  ;if nothing occurred then branch
 ; with Player00
-            lda $95               ;get type of Player00
-            sta $97               ; and store
+            lda object1           ;get type of Player00
+            sta obj_collided_with
             jmp CollisionDetected ;deal with collision
 
 @PickupPutdown_3:
             lda CXP1FB
             and #$40              ;get Ball-Player01 collision
             beq @PickupPutdown_4  ;if nothing has happened, branch
-            lda $96               ;get type of Player01
-            sta $97               ; and store
+            lda object2           ;get type of Player01
+            sta obj_collided_with
             jmp CollisionDetected ;deal with collision
 
 @PickupPutdown_4:
             jmp NoObject          ;deal with no collision (return)
 
 CollisionDetected:
-            ldx $97               ;get the object collided with
+            ldx obj_collided_with
             jsr GetObjectAddress  ;get its dynamic information
-            lda $97               ;get the object collided with
+            lda obj_collided_with
             cmp #$51              ;is it carriable?
             bcc NoObject          ;if not, branch
             ldy #0
-            lda ($93),y           ;get the object's room
+            lda (dr_ptr),y        ;get the object's room
             cmp curr_room         ;is it in the current room?
             bne NoObject          ;if not, branch
-            lda $97               ;get the object collided with
-            cmp $9d               ;is it the object being carried?
+            lda obj_collided_with
+            cmp object_carried    ;is it the object being carried?
             beq PickupObject      ;if so, branch (and actually pick it up)
             lda #5                ;set noise type to five
             sta $e0
-            lda #4               ;set noise count to four
+            lda #4                ;set noise count to four
             sta $df
 PickupObject:
-            lda $97               ;set the object as being
-            sta $9d               ; carried
-            ldx $93               ;get the dynamic address low byte
+            lda obj_collided_with ;set the object as being carried
+            sta object_carried
+            ldx dr_ptr            ;get the dynamic address low byte
             ldy #6
-            lda $99               ;????
+            lda cached_joystick   ;????
             jsr MoveObjectDelta   ;????
             ldy #1
-            lda ($93),y           ;get the object's X coordinate
+            lda (dr_ptr),y        ;get the object's X coordinate
             sec
             sbc man_x             ;subtract the man's X coordinate
-            sta $9e               ; and store the difference
+            sta objman_x_delta    ; and store the difference
             ldy #2
-            lda ($93),y           ;get the object's Y coordinate
+            lda (dr_ptr),y        ;get the object's Y coordinate
             sec
             sbc man_y             ;subtract the man's Y coordinate
-            sta $9f               ; and store the difference
+            sta objman_y_delta    ; and store the difference
 NoObject:   rts                   ; no collision
 
 ; move the carried object
 MoveCarriedObject:
-            ldx $9d               ;get the object being carried
+            ldx object_carried
             cpx #$a2              ;if nothing then branch (return)
             beq @MoveCarriedObject_2
             jsr GetObjectAddress  ;get its dynamic information
             ldy #0
             lda curr_room         ;get the current room
-            sta ($93),y           ; and store the object's current room
+            sta (dr_ptr),y        ; and store the object's current room
             ldy #$01
             lda man_x             ;get the man's X coordinate
             clc
-            adc $9e               ;add the X difference
-            sta ($93),y           ; and store as the object's X coordinate
+            adc objman_x_delta    ;add the X difference
+            sta (dr_ptr),y        ; and store as the object's X coordinate
             ldy #2
             lda man_y             ;get the man's Y coordinate
             clc
-            adc $9f               ;add the Y difference
-            sta ($93),y           ; and store as the object's Y coordinate
+            adc objman_y_delta    ;add the Y difference
+            sta (dr_ptr),y        ; and store as the object's Y coordinate
             ldy #0                ;set no delta
             lda #$ff              ;set no movement
-            ldx $93               ;get the object's dynamic address
+            ldx dr_ptr            ;get the object's dynamic address
             jsr MoveGroundObject  ;move the object
 @MoveCarriedObject_2:
             rts
@@ -992,12 +1054,12 @@ MoveGroundObject:
             jsr MoveObjectDelta     ;move the object by delta
             ldy #2                  ;set to do the three
 MoveGroundObject_2:
-            sty $9a                 ; portcullises
+            sty portcullis_number
             lda $00c8,y             ;get the portal state
             cmp #$1c                ;is it in a closed state?
             beq GetPortal           ;if not, next portal
 ; deal with object moving out of a castle
-            ldy $9a                 ;get port number
+            ldy portcullis_number
             lda $00,x               ;get object's room number
             cmp EntryRoomOffsets,y  ;is it in a castle entry room?
             bne GetPortal           ;if not, next portal
@@ -1014,7 +1076,7 @@ MoveGroundObject_2:
             sta $00c8,y             ;set the portcullis state to 01
             rts
 
-GetPortal:  ldy $9a                 ;get the portcullis number
+GetPortal:  ldy portcullis_number
             dey                     ; goto next,
             bpl MoveGroundObject_2  ; and continue
 ; check and deal with Up
@@ -1029,7 +1091,7 @@ GetPortal:  ldy $9a                 ;get the portcullis number
 ; check and deal with left
 DealWithLeft:
             lda $01,x             ;get the object's X coordinate
-            cmp #$3               ;is it three or less?
+            cmp #3                ;is it three or less?
             bcc @DealWithLeft_2   ;if so, branch (off to left)
             cmp #$f0              ;is it $F0 or more?
             bcs @DealWithLeft_2   ;if so, branch (off to right)
@@ -1068,7 +1130,7 @@ DealWithRight:
             lda $00,x             ;get the Ball's room
             cmp #3                ;is it room #3 (right to secret room)
             bne @DealWithRight_3  ;branch if not
-            lda $a1               ;check the room of the black dot
+            lda room_of_black_dot ;check the room of the black dot
             cmp #$15              ;is it in the hidden room area?
             beq @DealWithRight_3  ;if so, branch
 ; manually change to secret room
@@ -1079,7 +1141,7 @@ DealWithRight:
             jmp MovementReturn    ;and exit
 
 @DealWithRight_2:
-            cmp #$9b              ;has the object reached the right of the screen?
+            cmp #direction_wanted ;has the object reached the right of the screen?
             bcc MovementReturn    ;branch if not (no room change)
 @DealWithRight_3:
             lda #3                ;set the next X coordinate
@@ -1090,7 +1152,7 @@ DealWithRight:
 ; get new room
 GetNewRoom: lda $00,x             ;get the object's room
             jsr RoomNumToAddress  ;convert it to an address
-            lda ($93),y           ;get the adjacent room
+            lda (dr_ptr),y        ;get the adjacent room
             jsr AdjustRoomLevel   ;deal with the level differences
             sta $00,x             ; and store as new object's room
 MovementReturn:
@@ -1098,26 +1160,26 @@ MovementReturn:
 
 ; move the object in direction by delta
 MoveObjectDelta:
-            sta $9b               ;store direction wanted
+            sta direction_wanted
 @MoveObject_2:
             dey                   ;count down the delta
             bmi @MoveObject_7
-            lda $9b               ;get direction wanted
+            lda direction_wanted
             and #$80              ;check for right move
             bne @MoveObject_3     ;if no move right then branch
             inc $01,x             ;increment the X coordinate
 @MoveObject_3:
-            lda $9b               ;get the direction wanted
+            lda direction_wanted
             and #$40              ;check for left move
             bne @MoveObject_4     ;if no move left then branch
             dec $01,x             ;decrement the X coordinate
 @MoveObject_4:
-            lda $9b               ;get the direction wanted
+            lda direction_wanted
             and #$10              ;check for move up
             bne @MoveObject_5     ;if no move up then branch
             inc $02,x
 @MoveObject_5:
-            lda $9b               ;get direction wanted
+            lda direction_wanted
             and #$20              ;check for move down
             bne @MoveObject_6     ;if no move down then branch
             dec $02,x             ;decrement the Y coordinate
@@ -1145,9 +1207,9 @@ AdjustRoomLevel:
 
 ; get player-ball collision
 PBCollision:
-            cmp $95               ;is it the first object?
+            cmp object1           ;is it the first object?
             beq @PBCollision_2    ;yes, then branch
-            cmp $96               ;is it the second object?
+            cmp object2           ;is it the second object?
             beq @PBCollision_3    ;yes, then branch
             lda #0                ;otherwise nothing
             rts
@@ -1166,27 +1228,27 @@ PBCollision:
 FindObjHit: lda CXPPMM            ;get player00-player01
             and #$80              ; collision
             beq @FindObjHit_2     ;if nothing, branch
-            cpx $95               ;is object 1 the one being hit?
+            cpx object1           ;is object 1 the one being hit?
             beq @FindObjHit_3     ;if so, branch
-            cpx $96               ;is object 2 the one being hit?
+            cpx object2           ;is object 2 the one being hit?
             beq @FindObjHit_4     ;if so, branch
 @FindObjHit_2:
             lda #$a2              ;therefore select the other
             rts
 
 @FindObjHit_3:
-            lda $96               ;therefore select the other
+            lda object2               ;therefore select the other
             rts
 
 @FindObjHit_4:
-            lda $95               ;therefore select the other
+            lda object1               ;therefore select the other
             rts
 
 ; move object
 MoveGameObject:
             jsr GetLinkedObject   ;get linked object and movement
             ldx $d5               ;get dynamic data address
-            lda $9b               ;get movement
+            lda direction_wanted
             bne @MoveGameObject_2 ;if movement then branch
             lda $03,x             ;use old movement
 @MoveGameObject_2:
@@ -1223,13 +1285,13 @@ GetLinkedObject:
             lda ($d2),y           ;check for end of sequence
             bne @GetLinkedObj_2   ;if not branch
             lda #0                ;set no move if no
-            sta $9b               ; linked object is found
+            sta direction_wanted
             rts
 
 ; work out object's movement
 @GetLinkedObj_4:
             lda #$ff                ;set object movement to none
-            sta $9b
+            sta direction_wanted
             lda $0000,y             ;get Object2's room
             cmp $00,x               ;compare it with object's room
             bne @GetLinkedObject_8  ;if not the same, forget it
@@ -1237,31 +1299,31 @@ GetLinkedObject:
             cmp $01,x               ;get Object1's X coordinate
             bcc @GetLinkedObject_5  ;if Object2 to left of Object1 then branch
             beq @GetLinkedObject_6  ;if Object2 on Object1 then branch
-            lda $9b                 ;get object movement
+            lda direction_wanted
             and #$7f                ;signal a move right
-            sta $9b
+            sta direction_wanted
             jmp @GetLinkedObject_6  ;now try vertical
 
 @GetLinkedObject_5:
-            lda $9b                 ;get object movement
+            lda direction_wanted
             and #$bf                ;signal a move left
-            sta $9b
+            sta direction_wanted
 @GetLinkedObject_6:
             lda $0002,y             ;get Object2's Y coordinate
             cmp $02,x               ;get Object1's X coordinate
             bcc @GetLinkedObject_7  ;if Object2 below Object1 then branch
             beq @GetLinkedObject_8  ;if Object2 on Object1 then branch
-            lda $9b                 ;get object movement
+            lda direction_wanted
             and #$ef                ;signal a move up
-            sta $9b
+            sta direction_wanted
             jmp @GetLinkedObject_8  ;jump to finish
 
 @GetLinkedObject_7:
-            lda $9b                 ;get object movement
+            lda direction_wanted
             and #$df                ;signal a move down
-            sta $9b
+            sta direction_wanted
 @GetLinkedObject_8:
-            lda $9b                 ;get the move
+            lda direction_wanted
             rts
 
 ; move the red dragon
@@ -1326,8 +1388,8 @@ GreenDragMatrix:
             .byte $00
 
 ; move a dragon
-MoveDragon: stx $a0               ;save object we're dealing with
-            lda Store1,x          ;get the object's dynamic data
+MoveDragon: stx curr_obj_number   ;save object we're dealing with
+            lda a:Objects+ObjectType::info_ptr,x
             tax
             lda $04,x             ;get the object's state
             cmp #0                ;is it in state 00 (normal #1)
@@ -1345,7 +1407,7 @@ MoveDragon: stx $a0               ;save object we're dealing with
             sta $d6               ;store difficulty
             stx $d5               ;store dynamic data address
             jsr MoveGameObject
-            lda $a0               ;get object
+            lda curr_obj_number   ;get object
             jsr PBCollision       ; and get the player-ball collision
             beq @MoveDragon_4     ;if none then branch
             lda SWCHB             ;get console switches
@@ -1366,10 +1428,10 @@ MoveDragon: stx $a0               ;save object we're dealing with
             lda #$10
             sta $df               ;set noise count to $10 i.e. make roar noise
 @MoveDragon_4:
-            stx $9a               ;store object's dynamic data address
-            ldx $a0               ;get the object number
+            stx portcullis_number
+            ldx curr_obj_number   ;get the object number
             jsr FindObjHit        ;set if another object has hit the dragon
-            ldx $9a               ;get the object address
+            ldx portcullis_number
             cmp #$51              ;has the sword hit the dragon?
             bne @MoveDragon_5     ;if not, branch
             lda #1                ;set the state to 01 (dead)
@@ -1408,7 +1470,7 @@ MoveDragon: stx $a0               ;save object we're dealing with
             lda $04,x             ;get its state
             cmp #$fc              ;is it near the end?
             bcc @MoveDragon_9     ;if not, branch
-            lda $a0               ;get the dragon's number
+            lda curr_obj_number   ;get the dragon's number
             jsr PBCollision       ;check if the ball is colliding
             beq @MoveDragon_9     ;if not, branch
             lda #2                ;set the state to state 02: eaten
@@ -1502,11 +1564,11 @@ MoveBat:    inc $cf               ;put bat in the next state
             lda $cd               ;get the Bat's Y coordinate
             sta $02,x             ;store is as the object's Y coordinate
             lda $d0               ;get the object being carried by the bat
-            ldy $9d               ;get the object being carried by the ball
-            cmp Store1,y          ;are they the same?
+            ldy object_carried
+            cmp Objects+ObjectType::info_ptr,y  ;are they the same?
             bne @MoveBat_5        ;if not branch
-            lda #$a2              ;set nothing being
-            sta $9d               ; carried
+            lda #$a2              ;set nothing being carried
+            sta object_carried
 @MoveBat_5: rts
 
 ; bat object matrix
@@ -1526,33 +1588,33 @@ BatMatrix:  .byte  $cb, $b9       ;bat, chalice
 Portals:    ldy #2                ;for each portcullis
 @Portals_2: ldx PortOffsets,y     ;get the portcullis' offset number
             jsr FindObjHit        ;see if an object collided with it
-            sta $97               ;store that object
+            sta obj_collided_with
             cmp KeyOffsets,y      ;is it the associated key?
             bne @Portals_3        ;if not then branch
             tya                   ;get the portcullis number
             tax
-            inc $c8,x             ;change its state to open it
+            inc PortCurrBase,x    ;change its state to open it
 @Portals_3: tya                   ;get the portcullis number
             tax
-            lda $c8,x             ;get the state
+            lda PortCurrBase,x    ;get the state
             cmp #$1c              ;is it closed?
             beq @Portals_7        ;yes - then branch
             lda PortOffsets,y     ;get portcullis number
             jsr PBCollision       ;get the player-ball collision
             beq @Portals_4        ;if not then branch
             lda #1                ;set the portcullis to closed
-            sta $c8,x
+            sta PortCurrBase,x
             ldx #$8a              ;set to the castle
             jmp @Portals_6        ;put the ball in the castle
 
-@Portals_4: lda $97               ;get the object that hit the portcullis
+@Portals_4: lda obj_collided_with ;get the object that hit the portcullis
             cmp #$a2              ;is it nothing?
             beq @Portals_5        ;if so, branch
-            ldx $97               ;get object
-            sty $9a               ;save Y
+            ldx obj_collided_with
+            sty portcullis_number
             jsr GetObjectAddress  ;and find its dynamic address
-            ldy $9a               ;retrieve Y
-            ldx $93               ;get object's address
+            ldy portcullis_number
+            ldx dr_ptr            ;get object's address
             jmp @Portals_6        ;put object in the castle
 
 @Portals_5: jmp @Portals_7
@@ -1562,30 +1624,32 @@ Portals:    ldy #2                ;for each portcullis
             sta $02,x
 @Portals_7: tya                   ;get the portcullis number
             tax
-            lda $c8,x             ;get its state
+            lda PortCurrBase,x    ;get its state
             cmp #1                ;is it open?
-            beq @Portals_8        ;yes - then branch
+            beq @Portals_8        ; branch if yes
             cmp #$1c              ;is it closed?
-            beq @Portals_8        ;yes - then branch
-            inc $c8,x             ;increment its state
-            lda $c8,x             ;get the state
+            beq @Portals_8        ; branch if yes
+            inc PortCurrBase,x    ;increment its state
+            lda PortCurrBase,x    ;get the state
             cmp #$38              ;has it reached the maximum state?
-            bne @Portals_8        ;if not, branch
-            lda #1                ;set to closed
-            sta $c8,x             ; state
+            bne @Portals_8        ; branch if not
+            lda #1                ;set to closed state
+            sta PortCurrBase,x
 @Portals_8: dey                   ;go to the next portcullis
-            bmi @Portals_9        ;branch if finished
+            bmi @Portals_Done     ;branch if finished
             jmp @Portals_2        ;do next portcullis
 
-@Portals_9: rts
+@Portals_Done:
+            rts
 
 PortOffsets:
             .byte  $09, $12, $1b       ;portcullis #1, #2, #3
+
 KeyOffsets: .byte  $63, $6c, $75       ;keys (yellow, white, black)
 EntryRoomOffsets:
             .byte  $12, $1a, $1b       ;castle entry rooms (yellow, white, black)
 CastleRoomOffsets:
-            .byte  $11, $0f, $10       ;castle rooms (yellow, white, black)
+            .byte  $11, $0f, $10       ;castle rooms (yellow, white, black)ffff
 
 ; deal with magnet
 Mag:        lda $b5               ;get magnet's Y coordinate
@@ -1599,7 +1663,7 @@ Mag:        lda $b5               ;get magnet's Y coordinate
             lda #>MagnetMatrix    ;set high address of object store
             sta $d3
             jsr GetLinkedObject   ;get linked object and set movement
-            lda $9b               ;get movement
+            lda direction_wanted
             beq @Mag_2            ;if none, then forget it
             ldy #1                ;set delta to one
             jsr MoveGroundObject  ;move object
@@ -1623,37 +1687,37 @@ MagnetMatrix:
 Surround:   lda curr_room         ;set the current room
             jsr RoomNumToAddress  ;convert it to an address
             ldy #2
-            lda ($93),y           ;get the room's color
+            lda (dr_ptr),y        ;get the room's color
             cmp #8                ;is it invisible?
             beq @Surround_2       ;if so branch
             lda #0                ;if not, signal the
-            sta $db               ; invisible surround not
-            jmp @Surround_4       ; wanted
+            sta $db               ; invisible surround not wanted
+            jmp @Surround_Done
 
 @Surround_2:
             lda curr_room         ;get the current room
-            sta $d9               ;and store as the invisible surround
+            sta SurroundInfo      ;and store as the invisible surround
             lda man_x             ;get the man's X coordinate
             sec
             sbc #$0e              ;adjust for surround,
-            sta $da               ; and store as surround's X coordinate
+            sta SurroundInfo+1    ; and store as surround's X coordinate
             lda man_y             ;get the man's Y coordinate
             clc
             adc #$0e              ;adjust for surround
             sta $db               ; and store as surround's Y coordinate
-            lda $da               ;get the surround's X coordinate
+            lda SurroundInfo+1    ;get the surround's X coordinate
             cmp #$f0              ;is it close to the right edge?
             bcc @Surround_3       ;branch if not
             lda #1                ;flick surround to the
-            sta $da               ; other side of the screen
-            jmp @Surround_4
+            sta SurroundInfo+1    ; other side of the screen
+            jmp @Surround_Done
 
 @Surround_3:
             cmp #$82              ;???
-            bcc @Surround_4       ;???
+            bcc @Surround_Done    ;???
             lda #$81              ;???
-            sta $da               ;???
-@Surround_4:
+            sta SurroundInfo+1    ;???
+@Surround_Done:
             rts
 
 ; make a noise
@@ -1738,7 +1802,7 @@ DropObjectNoise:
 NoiseDropObject_2:
             sta AUDF0             ;store in frequency for channel 00
             lda #5
-            sta AUDV0             ;set volumen on channel 00
+            sta AUDV0             ;set volume on channel 00
             lda #6
             sta AUDC0             ;set a noise on channel 00
             rts
@@ -1809,41 +1873,41 @@ PortStates: .byte $04               ;state 04 - open
             .word GfxPort07
 
 ; object 1 states 940FF (graphic)
-GfxPort01:  .byte    $fe
-            .byte    $aa
-GfxPort02:  .byte    $fe
-            .byte    $aa
-GfxPort03:  .byte    $fe
-            .byte    $aa
-GfxPort04:  .byte    $fe
-            .byte    $aa
-GfxPort05:  .byte    $fe
-            .byte    $aa
-GfxPort06:  .byte    $fe
-            .byte    $aa
-GfxPort07:  .byte    $fe
-            .byte    $aa
-GfxPort08:  .byte    $fe
-            .byte    $aa
+GfxPort01:  .byte    $fe          ; 1111111.
+            .byte    $aa          ; 1.1.1.1.
+GfxPort02:  .byte    $fe          ; 1111111.
+            .byte    $aa          ; 1.1.1.1.
+GfxPort03:  .byte    $fe          ; 1111111.
+            .byte    $aa          ; 1.1.1.1.
+GfxPort04:  .byte    $fe          ; 1111111.
+            .byte    $aa          ; 1.1.1.1.
+GfxPort05:  .byte    $fe          ; 1111111.
+            .byte    $aa          ; 1.1.1.1.
+GfxPort06:  .byte    $fe          ; 1111111.
+            .byte    $aa          ; 1.1.1.1.
+GfxPort07:  .byte    $fe          ; 1111111.
+            .byte    $aa          ; 1.1.1.1.
+GfxPort08:  .byte    $fe          ; 1111111.
+            .byte    $aa          ; 1.1.1.1.
 GfxPort09:  .byte    $00
 
 TwoExitRoom:
-            .byte $f0, $ff, $0f
-            .byte $30, $00, $00
-            .byte $30, $00, $00
-            .byte $30, $00, $00
-            .byte $30, $00, $00
-            .byte $30, $00, $00
-            .byte $f0, $ff, $0f
+            .byte $f0, $ff, $0f   ; 1111....11111111....1111
+            .byte $30, $00, $00   ; ..11....................
+            .byte $30, $00, $00   ; ..11....................
+            .byte $30, $00, $00   ; ..11....................
+            .byte $30, $00, $00   ; ..11....................
+            .byte $30, $00, $00   ; ..11....................
+            .byte $f0, $ff, $0f   ; 1111....11111111....1111
 
 BlueMazeTop:
-            .byte $f0, $ff, $0f
-            .byte $00, $0c, $0c
-            .byte $f0, $0c, $3c
-            .byte $f0, $0c, $00
-            .byte $f0, $ff, $3f
-            .byte $00, $30, $30
-            .byte $f0, $33, $3f
+            .byte $f0, $ff, $0f   ; 1111....11111111....1111
+            .byte $00, $0c, $0c   ; ............11......11..
+            .byte $f0, $0c, $3c   ; 1111........11....1111..
+            .byte $f0, $0c, $00   ; 1111........11..........
+            .byte $f0, $ff, $3f   ; 1111....11111111..111111
+            .byte $00, $30, $30   ; ..........11......11....
+            .byte $f0, $33, $3f   ; 1111......11..11..111111
 
 BlueMaze1:  .byte $f0, $ff, $ff
             .byte $00, $00, $00
@@ -2080,6 +2144,7 @@ GfxNum3:    .byte $0e
             .byte $11
             .byte $0e
             .byte $00
+
 ; object #0E: list of states
 BatStates:  .byte $03
             .word GfxBat1
@@ -2109,6 +2174,7 @@ GfxBat2:    .byte $01
             .byte $81
             .byte $81
             .byte $00
+
 ; object #6: states
 DragonStates:
             .byte $00
@@ -2121,72 +2187,73 @@ DragonStates:
             .word GfxDrag1
 
 ; object #6: state #00: graphic
-GfxDrag0:   .byte $06
-            .byte $0f
-            .byte $f3
-            .byte $fe
-            .byte $0e
-            .byte $04
-            .byte $04
-            .byte $1e
-            .byte $3f
-            .byte $7f
-            .byte $e3
-            .byte $c3
-            .byte $c3
-            .byte $c7
-            .byte $ff
-            .byte $3c
-            .byte $08
-            .byte $8f
-            .byte $e1
-            .byte $3f
+GfxDrag0:   .byte $06     ; .....11.
+            .byte $0f     ; ....1111
+            .byte $f3     ; 1111..11
+            .byte $fe     ; 1111111.
+            .byte $0e     ; ....111.
+            .byte $04     ; .....1..
+            .byte $04     ; .....1..
+            .byte $1e     ; ...1111.
+            .byte $3f     ; ..111111
+            .byte $7f     ; .1111111
+            .byte $e3     ; 111...11
+            .byte $c3     ; 11....11
+            .byte $c3     ; 11....11
+            .byte $c7     ; 11..111.
+            .byte $ff     ; 11111111
+            .byte $3c     ; ..1111..
+            .byte $08     ; ....1...
+            .byte $8f     ; 1...1111
+            .byte $e1     ; 111....1
+            .byte $3f     ; ..111111
             .byte $00
 
 ; object #6: state FF: graphic
-GfxDrag1:   .byte $80
-            .byte $40
-            .byte $26
-            .byte $1f
-            .byte $0b
-            .byte $0e
-            .byte $1e
-            .byte $24
-            .byte $44
-            .byte $8e
-            .byte $1e
-            .byte $3f
-            .byte $7f
-            .byte $7f
-            .byte $7f
-            .byte $7f
-            .byte $3e
-            .byte $1c
-            .byte $08
-            .byte $f8
-            .byte $80
-            .byte $e0
+GfxDrag1:   .byte $80     ; 1.......
+            .byte $40     ; .1......
+            .byte $26     ; ..1..11.
+            .byte $1f     ; ...11111
+            .byte $0b     ; ....1.11
+            .byte $0e     ; ....111.
+            .byte $1e     ; ...1111.
+            .byte $24     ; ..1..1..
+            .byte $44     ; .1...1..
+            .byte $8e     ; 1...111.
+            .byte $1e     ; ...1111.
+            .byte $3f     ; ..111111
+            .byte $7f     ; .1111111
+            .byte $7f     ; .1111111
+            .byte $7f     ; .1111111
+            .byte $7f     ; .1111111
+            .byte $3e     ; ..11111.
+            .byte $1c     ; ...111..
+            .byte $08     ; ....1...
+            .byte $f8     ; 11111...
+            .byte $80     ; 1.......
+            .byte $e0     ; 111.....
             .byte $00
 
 ; object #6: state 02: graphic
-GfxDrag2:   .byte $0c
-            .byte $0c
-            .byte $0c
-            .byte $0e
-            .byte $1b
-            .byte $7f
-            .byte $ce
-            .byte $80
-            .byte $fc
-            .byte $fe
-            .byte $fe
-            .byte $7e
-            .byte $78
-            .byte $20
-            .byte $6e
-            .byte $42
-            .byte $7e
+GfxDrag2:   .byte $0c     ; ....11..
+            .byte $0c     ; ....11..
+            .byte $0c     ; ....11..
+            .byte $0e     ; ....111.
+            .byte $1b     ; ...11.11
+            .byte $7f     ; .1111111
+            .byte $ce     ; 11..111.
+            .byte $80     ; 1.......
+            .byte $fc     ; 111111..
+            .byte $fe     ; 1111111.
+            .byte $fe     ; 1111111.
+            .byte $7e     ; .111111.
+            .byte $78     ; .1111...
+            .byte $20     ; ..1.....
+            .byte $6e     ; .11.111.
+            .byte $42     ; .1....1.
+            .byte $7e     ; .111111.
             .byte $00
+
 ; object #9: current state
 SwordCurr:  .byte $00
 ; object #9: list of states
@@ -2313,6 +2380,7 @@ AuthorCurr: .byte 0
 AuthorStates:
             .byte $ff
             .word GfxAuthor
+
 ; object #10: state
 ChaliceCurr:
             .byte 0
@@ -2322,16 +2390,17 @@ ChaliceStates:
             .word GfxChalice
 
 ; object #10: state FF: graphic
-GfxChalice: .byte $81
-            .byte $81
-            .byte $c3
-            .byte $7e
-            .byte $7e
-            .byte $3c
-            .byte $18
-            .byte $18
-            .byte $7e
+GfxChalice: .byte $81    ; 1......1
+            .byte $81    ; 1......1
+            .byte $c3    ; 11....11
+            .byte $7e    ; .111111.
+            .byte $7e    ; .111111.
+            .byte $3c    ; ..1111..
+            .byte $18    ; ...11...
+            .byte $18    ; ...11...
+            .byte $7e    ; .111111.
             .byte $00
+
 ; object #12: state
 NullCurr:   .byte 0
 ; object #12: list of states
@@ -2348,6 +2417,7 @@ NumberStates:
             .word GfxNum2
             .byte $ff
             .word GfxNum3
+
 ; object #11: state
 MagnetCurr: .byte 0
 ; object #11: list of states
@@ -2364,6 +2434,7 @@ GfxMagnet:  .byte $3c  ; ..1111..
             .byte $c3  ; 11....11
             .byte $c3  ; 11....11
             .byte 0
+
 ; Room Data
 ;
 ; offset 0: low byte room graphics data
@@ -2448,41 +2519,35 @@ RoomDiffs:  .byte $10, $0f, $0f     ;down from room 01
             .byte $1c, $16, $16     ;U/L/R/D from room 1b (black castle room)
             .byte $1b, $0c, $0c     ;down from room 1c
             .byte $03, $0c, $0c     ;up from room 1d (top entry room)
-; Objects
-;
-; offset 0: low byte object information (moveable stuff)
-; offset 1: high byte object information (moveable stuff)
-; offset 2: low byte to object's current state
-; offset 3: high byte to object's current state
-; offset 4: low byte list of states
-; offset 5: high byte list of states
-; offset 6: color
-; offset 7: color in B&W
-; offset 8: size of object
-;
+
+
+Objects:
+            .struct ObjectType
+                info_ptr      .word  ; object information (moveable stuff)
+                currstate_ptr .word  ; object's current state
+                states_ptr    .word  ; list of statues
+                color         .byte
+                bw            .byte  ; color in B&W
+                size          .byte  ; size of object
+            .endstruct
 ; 00 invisible surround offsets
-Store1:     .byte $d9
-Store2:     .byte 0
-Store3:     .byte <SurroundCurr
-Store4:     .byte >SurroundCurr
-Store5:     .byte <SurroundStates
-Store6:     .byte >SurroundStates
-Store7:     .byte $28
-Store8:     .byte $0c
-Store9:     .byte 7
+            .word SurroundInfo
+            .word SurroundCurr
+            .word SurroundStates
+            .byte $28, $0c, 7
 ; 01 portcullis #1; black
             .word PortInfo1
-            .byte $c8, $00
+            .word PortCurrBase+0
             .word PortStates
             .byte $00, $00, $00
 ; 02 portcullis #2; black
             .word PortInfo2
-            .byte $c9, $00
+            .word PortCurrBase+1
             .word PortStates
             .byte $00, $00, $00
 ; 03 portcullis #3; black
             .word PortInfo3
-            .byte $ca, $00
+            .word PortCurrBase+2
             .word PortStates
             .byte $00, $00, $00
 ; 04 name; flash
@@ -2492,67 +2557,71 @@ Store9:     .byte 7
             .byte $cb, $00, $00
 ; 05 number; green
             .word NumberInfo
-            .byte $dd, $00
+            .word $dd
             .word NumberStates
             .byte $c8, $00, $00
 ; 06 dragon #1; red
-            .byte $a4, $00, $a8, $00
+            .word $a4
+            .word $a8
             .word DragonStates
             .byte $36, $0e, $00
 ; 07 dragon #2; yellow
-            .byte $a9, $00, $ad, $00
+            .word $a9
+            .word $ad
             .word DragonStates
             .byte $1a, $06, $00
 ; 08 dragon #3; green
-            .byte $ae, $00, $b2, $00
+            .word $ae
+            .word $b2
             .word DragonStates
             .byte $c8, $00, $00
 ; 09 sword; yellow
-            .byte $b6, $00
+            .word $b6
             .word SwordCurr
             .word SwordStates
             .byte $1a, $06, $00
 ; 0a bridge; purple
-            .byte $bc, $00
+            .word $bc
             .word BridgeCurr
             .word BridgeStates
             .byte $66, $02, $07
 ; 0b key #01; yellow
-            .byte $bf, $00
+            .word $bf
             .word KeyCurr
             .word KeyStates
             .byte $1a, $06, $00
 ; 0c key #02; white
-            .byte $c2, $00
+            .word $c2
             .word KeyCurr
             .word KeyStates
             .byte $0e, $0e, $00
 ; 0d key #03; black
-            .byte $c5, $00
+            .word $c5
             .word KeyCurr
             .word KeyStates
             .byte $00, $00, $00
 ; 0e bat; black
-            .byte $cb, $00, $cf, $00
+            .word $cb
+            .word $cf
             .word BatStates
             .byte $00, $00, $00
 ; 0f black dot; light gray
-            .byte $a1, $00
+            .word $a1
             .word DotCurr
             .word DotStates
             .byte $08, $08, $00
 ; 10 chalice; flash
-            .byte $b9, $00
+            .word $b9
             .word ChaliceCurr
             .word ChaliceStates
             .byte $cb, $06, $00
 ; 11 magnet; black
-            .byte $b3, $00
+            .word $b3
             .word MagnetCurr
             .word MagnetStates
             .byte $00, $06, $00
 ; 12 null; black
-            .byte $bc, $00
+            .word $bc
             .word NullCurr
             .word NullStates
             .byte $00, $00, $00
