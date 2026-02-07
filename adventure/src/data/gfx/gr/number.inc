@@ -1,4 +1,4 @@
-.macro number1_gfx_data
+.macro number1_gfxgr_data
     .byte $04  ; .....1..
     .byte $0c  ; ....11..
     .byte $04  ; .....1..
@@ -9,7 +9,7 @@
     .byte 0
 .endmacro
 
-.macro number2_gfx_data
+.macro number2_gfxgr_data
     .byte $0e  ; ....111.
     .byte $11  ; ...1...1
     .byte $01  ; .......1
@@ -20,7 +20,7 @@
     .byte 0
 .endmacro
 
-.macro number3_gfx_data
+.macro number3_gfxgr_data
     .byte $0e  ; ....111.
     .byte $11  ; ...1...1
     .byte $01  ; .......1

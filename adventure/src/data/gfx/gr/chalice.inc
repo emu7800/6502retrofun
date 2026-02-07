@@ -1,6 +1,6 @@
 ; "Holy Grail"
 
-.macro chalice_gfx_data
+.macro chalice_gfxgr_data
     .byte $81    ; 1......1
     .byte $81    ; 1......1
     .byte $c3    ; 11....11

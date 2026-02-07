@@ -1,4 +1,4 @@
-.macro bridge_gfx_data
+.macro bridge_gfxgr_data
     .byte $c3  ; 11....11
     .byte $c3  ; 11....11
     .byte $c3  ; 11....11

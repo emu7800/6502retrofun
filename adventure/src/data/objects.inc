@@ -37,7 +37,7 @@
     SurroundCurr:      .byte 0
     SurroundStates:    .byte $ff
                        .word :+
-    : surround_gfx_data
+    : surround_gfxgr_data
 .endif
 .endmacro
 
@@ -48,7 +48,7 @@
     DotCurr:           .byte 0
     DotStates:         .byte $ff
                        .word :+
-    : dot_gfx_data
+    : dot_gfxgr_data
 .endif
 .endmacro
 
@@ -64,9 +64,9 @@
                        .word :+
                        .byte $ff
                        .word :++
-    : dragonnormal_gfx_data invert
-    : dragonroar_gfx_data   invert
-    : dragondead_gfx_data   invert
+    : dragonnormal_gfxgr_data invert
+    : dragonroar_gfxgr_data   invert
+    : dragondead_gfxgr_data   invert
 .endif
 .endmacro
 
@@ -92,7 +92,7 @@
     MagnetCurr:        .byte 0
     MagnetStates:      .byte $ff
                        .word :+
-    :  magnet_gfx_data
+    :  magnet_gfxgr_data
 .endif
 .endmacro
 
@@ -103,7 +103,7 @@
     SwordCurr:         .byte 0
     SwordStates:       .byte $ff
                        .word :+
-    : sword_gfx_data invert
+    : sword_gfxgr_data invert
 .endif
 .endmacro
 
@@ -114,7 +114,7 @@
     ChaliceCurr:       .byte 0
     ChaliceStates:     .byte $ff
                        .word :+
-    : chalice_gfx_data
+    : chalice_gfxgr_data
 .endif
 .endmacro
 
@@ -125,7 +125,7 @@
 BridgeCurr: .byte 0
     BridgeStates:      .byte $ff
                        .word :+
-    : bridge_gfx_data
+    : bridge_gfxgr_data
 .endif
 .endmacro
 
@@ -135,7 +135,7 @@ BridgeCurr: .byte 0
     KeyCurr:           .byte 0
     KeyStates:         .byte $ff
                        .word :+
-    : key_gfx_data
+    : key_gfxgr_data
 .endif
 .endmacro
 
@@ -193,14 +193,14 @@ BridgeCurr: .byte 0
                        .word :++++++
                        .byte $ff                ;state FF - open
                        .word :+++++++
-                       : port_gfx_data
-                       : port_gfx_data
-                       : port_gfx_data
-                       : port_gfx_data
-                       : port_gfx_data
-                       : port_gfx_data
-                       : port_gfx_data
-                       port_gfx_data
+                       : port_gfxgr_data
+                       : port_gfxgr_data
+                       : port_gfxgr_data
+                       : port_gfxgr_data
+                       : port_gfxgr_data
+                       : port_gfxgr_data
+                       : port_gfxgr_data
+                       port_gfxgr_data
                        .byte 0
 .endif
 .endmacro
@@ -216,14 +216,14 @@ BridgeCurr: .byte 0
                            .word :+
                            .byte $ff
                            .word :++
-    : bat1_gfx_data
-    : bat2_gfx_data
+    : bat1_gfxgr_data
+    : bat2_gfxgr_data
 .endif
 .endmacro
 
 .macro EasterEgg original
 .ifnblank original
-    : easteregg_gfx_data norm,
+    : easteregg_gfxgr_data norm,
 .endif
     EasterEggInfo:         .byte $1e, $50, $69       ;room 1E (50, 69)
     EasterEggCurr:         .byte 0
@@ -232,7 +232,7 @@ BridgeCurr: .byte 0
                            .word :-
 .else
                            .word :+
-    : easteregg_gfx_data ,alt
+    : easteregg_gfxgr_data ,alt
 .endif
 .endmacro
 
@@ -240,7 +240,7 @@ BridgeCurr: .byte 0
     NullCurr:              .byte 0
     NullStates:            .byte $ff
                            .word :+
-    : null_gfx_data
+    : null_gfxgr_data
 .endmacro
 
 .macro NumberMacro zp, gfx1, gfx2, gfx3
@@ -267,9 +267,9 @@ BridgeCurr: .byte 0
                            .word :+++
     .endif
     .ifblank gfx1
-        : number1_gfx_data
-        : number2_gfx_data
-        : number3_gfx_data
+        : number1_gfxgr_data
+        : number2_gfxgr_data
+        : number3_gfxgr_data
     .endif
 .endif
 .endmacro

@@ -1,6 +1,6 @@
 ; "Rhindle, Yorgle, and Grundle"
 
-.macro dragonnormal_gfx_data invert
+.macro dragonnormal_gfxgr_data invert
 .if invert
     .byte $60     ; .11.....
     .byte $f0     ; 1111....
@@ -47,7 +47,7 @@
     .byte 0
 .endmacro
 
-.macro dragonroar_gfx_data invert
+.macro dragonroar_gfxgr_data invert
 .if invert
     .byte $01     ; .......1
     .byte $02     ; ......1.
@@ -98,7 +98,7 @@
     .byte 0
 .endmacro
 
-.macro dragondead_gfx_data invert
+.macro dragondead_gfxgr_data invert
 .if invert
     .byte $30     ; ..11....
     .byte $30     ; ..11....

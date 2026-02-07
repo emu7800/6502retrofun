@@ -1975,10 +1975,10 @@ BlackMazeEntry:
             .byte $f0, $ff, $0f
 
 BridgeMacro
-GfxNum1:    number1_gfx_data
+GfxNum1:    number1_gfxgr_data
 KeyMacro
-GfxNum2:    number2_gfx_data
-GfxNum3:    number3_gfx_data
+GfxNum2:    number2_gfxgr_data
+GfxNum3:    number3_gfxgr_data
 BlackBatMacro
 DragonMacro ,0
 SwordMacro ,0

@@ -1,4 +1,4 @@
-.macro sword_gfx_data invert
+.macro sword_gfxgr_data invert
 .if invert
     .byte $04  ; .....1..
     .byte $02  ; ......1.

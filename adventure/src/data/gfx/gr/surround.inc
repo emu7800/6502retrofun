@@ -1,4 +1,4 @@
-.macro surround_gfx_data
+.macro surround_gfxgr_data
     .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
     .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
     .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
