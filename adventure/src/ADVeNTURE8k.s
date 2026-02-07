@@ -100,7 +100,7 @@ dr_ptr:                         .word 0     ; pointer for dereferencing
 object1:                        .byte 0
 object2:                        .byte 0
 obj_collided_with:              .byte 0
-unread1:                        .byte 0     ; unread byte
+                                .byte 0     ; unused byte
 cached_joystick:                .byte 0
 portcullis_number:              .byte 0
 direction_wanted:               .byte 0
@@ -146,10 +146,6 @@ man_object  = $8a
 
             .code
 START:      jmp StartGame
-
-            sei             ;setup for 6507, start with no
-            cld             ; variable initialization
-            jmp MainGameLoop
 
 PrintDisplay:
             sta HMCLR       ;clear horizontal motion
@@ -311,10 +307,10 @@ DoVSYNC:    lda INTIM           ;get timer output
 SetupRoomPrint:
             lda curr_room         ;get current room number
             jsr RoomNumToAddress  ;convert it to an address
-            ldy #RoomDataEntry::gfx_ptr
-            lda (dr_ptr),y
+            ldy #0
+            lda (dr_ptr),y        ;get low pointer to room graphics
             sta roomgfx_base
-            ldy #RoomDataEntry::gfx_ptr+1
+            ldy #1
             lda (dr_ptr),y        ;get high pointer to room graphics
             sta roomgfx_base+1
 ; checdk B&W switch for room graphics
@@ -322,14 +318,14 @@ SetupRoomPrint:
             and #8                ;check black and white switch
             beq UseBW             ;branch if B&W
 ; use color
-            ldy #RoomDataEntry::color
-            lda (dr_ptr),y
+            ldy #2
+            lda (dr_ptr),y        ;get room color
             jsr ChangeColor       ;change if necessary
             sta COLUPF            ;put in playfield color register
             jmp UseColor
 
-UseBW:      ldy #RoomDataEntry::bw_color
-            lda (dr_ptr),y
+UseBW:      ldy #3
+            lda (dr_ptr),y        ;get B&W color
             jsr ChangeColor       ;change if necessary
             sta COLUPF            ;put in the playfield color registerg
 ; color background
@@ -337,8 +333,8 @@ UseColor:   lda #8                ;get light grey background
             jsr ChangeColor       ;change if necessary
             sta COLUBK            ;put it in the background color register
 ; playfield control
-            ldy #RoomDataEntry::pf_control
-            lda (dr_ptr),y
+            ldy #4
+            lda (dr_ptr),y        ;get the playfield control value
             sta CTRLPF            ; and put in the playfield control register
             and #$c0              ;get the "this wall" flag
             lsr a
@@ -720,7 +716,7 @@ SetupRoomObjects:
             lda GameObjects+1,y   ;get the high pointer to object locations
             sta dr_ptr+1
             ldy #$30              ;copy all the objects dynamic information
-:           lda (dr_ptr),y           ; (the rooms and positions) into
+:           lda (dr_ptr),y        ; (the rooms and positions) into
             sta $00a1,y           ; the working area
             dey
             bpl :-
@@ -766,66 +762,6 @@ RandomizeLevel3:
             bpl :--                    ;until all done
             rts
 
-; Room bounds data.
-;
-; e.g. the chalice can only exist in room range [$13, $1a] for level 3.
-Lvl3ObjRoomBounds:
-            .byte ChaliceInfo,   $13, $1a     ;chalice
-            .byte Dragon1Info,   $01, $1d     ;red dragon
-            .byte Dragon2Info,   $01, $1d     ;yellow dragon
-            .byte Dragon3Info,   $01, $1d     ;green dragon
-            .byte SwordInfo,     $01, $1d     ;sword
-            .byte BridgeInfo,    $01, $1d     ;bridge
-            .byte YellowKeyInfo, $01, $1d     ;yellow key
-            .byte WhiteKeyInfo,  $01, $16     ;white key
-            .byte BlackKeyInfo,  $01, $12     ;black key
-            .byte BlackBatInfo,  $01, $1d     ;bat
-            .byte MagnetInfo,    $01, $1d     ;magnet
-
-GameObjects:
-            .word Game1Objects      ;pointer to object locations for game 01
-            .word Game2Objects      ;pointer to object locations for game 02
-            .word Game2Objects      ;pointer to object locations for game 03
-
-; object locations (room and coordinate) for game 01
-Game1Objects:
-            ;     Rm,  X,   Y,   Mvt, State
-            .byte $15, $51, $12           ;black dot
-            .byte $0e, $50, $20, $00, $00 ;red dragon
-            .byte $01, $50, $20, $00, $00 ;yellow dragon
-            .byte $1d, $50, $20, $00, $00 ;green dragon
-            .byte $1b, $80, $20           ;magnet
-            .byte $12, $20, $20           ;sword
-            .byte $1c, $30, $20           ;chalice
-            .byte $04, $29, $37           ;bridge
-            .byte $11, $20, $40           ;yellow key
-            .byte $0e, $20, $40           ;white key
-            .byte $1d, $20, $40           ;black key
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $1a, $20, $20, $00, $00 ;bat
-            .byte $78, $00                ;bat (carrying, fed-up)
-
-; object locations (room and coordinate) for games 02 and 03
-Game2Objects:
-            ;     Rm,  X,   Y,   Mvt, State
-            .byte $15, $51, $12           ;black dot
-            .byte $14, $50, $20, $a0, $00 ;red dragon
-            .byte $19, $50, $20, $a0, $00 ;yellow dragon
-            .byte $04, $50, $20, $a0, $00 ;green dragon
-            .byte $0e, $80, $20           ;magnet
-            .byte $11, $20, $20           ;sword
-            .byte $14, $30, $20           ;chalice
-            .byte $0b, $40, $40           ;bridge
-            .byte $09, $20, $40           ;yellow key
-            .byte $06, $20, $40           ;white key
-            .byte $19, $20, $40           ;black key
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $02, $20, $20, $90, $00 ;bat
-            .byte $78, $00                ;bat (carrying, fed-up)
 
 ; check ball collisions and move ball
 BallMovement:
@@ -912,8 +848,6 @@ ReadStick:  cpy #0                ;???is game in first phase?
             jsr MoveGroundObject  ;move the man
             rts
 
-JoystickMergeValues:
-            .byte  $00, $c0, $30  ;no change, no horizontal, no vertical
 
 ; deal with object pickup and putdown
 PickupPutdown:
@@ -932,8 +866,6 @@ PickupPutdown:
             lda #4                ;set noise count to four
             sta sound_duration_counter
 @PickupPutdown_2:
-            lda #$ff              ;????
-            sta unread1
 ; check for collision
             lda CXP0FB
             and #$40              ;get Ball-Player00 collision
@@ -1022,7 +954,7 @@ MoveGroundObject:
             ldy #2                  ;set to do the three
 MoveGroundObject_2:
             sty portcullis_number
-            lda a:PortCurrBase,y    ;get the portal state
+            lda PortCurrBase,y      ;get the portal state
             cmp #$1c                ;is it in a closed state?
             beq GetPortal           ;if not, next portal
 ; deal with object moving out of a castle
@@ -1040,7 +972,7 @@ MoveGroundObject_2:
             lda #$2c
             sta $02,x               ;set the new object's Y coordinate
             lda #1
-            sta a:PortCurrBase,y    ;set the portcullis state to 01
+            sta PortCurrBase,y      ;set the portcullis state to 01
             rts
 
 GetPortal:  ldy portcullis_number
@@ -1074,8 +1006,8 @@ DealWithLeft:
             lda #$9e              ;set new X coordinate for the ball
 @DealWithLeft_4:
             sta $01,x             ;store the next X coordinate
-            ldy #RoomDataEntry::room_left
-            jmp GetNewRoom
+            ldy #8                ;and get the direction wanted
+            jmp GetNewRoom        ;go and get new room
 
 ; check and deal with Down
 DealWithDown:
@@ -1084,8 +1016,8 @@ DealWithDown:
             bcs DealWithRight     ; branch
             lda #$69              ;set new Y coordinate
             sta $02,x
-            ldy #RoomDataEntry::room_down
-            jmp GetNewRoom
+            ldy #7                ;get the direction wanted
+            jmp GetNewRoom        ;go and get new room
 
 ; check and deal with right
 DealWithRight:
@@ -1113,8 +1045,8 @@ DealWithRight:
 @DealWithRight_3:
             lda #3                ;set the next X coordinate
             sta $01,x
-            ldy #RoomDataEntry::room_right
-            jmp GetNewRoom
+            ldy #6                ;and get the direction wanted
+            jmp GetNewRoom        ;get the new room
 
 ; get new room
 GetNewRoom: lda $00,x             ;get the object's room
@@ -1305,13 +1237,6 @@ MoveRedDragon:
             jsr MoveDragon
             rts
 
-; red dragon's object matrix
-RedDragMatrix:
-            .byte SwordInfo,   Dragon1Info   ;sword, red dragon
-            .byte Dragon1Info, man_object    ;red dragon, man
-            .byte Dragon1Info, ChaliceInfo   ;red dragon, chalice
-            .byte Dragon1Info, WhiteKeyInfo  ;red dragon, white key
-            .byte $00
 
 ; move the yellow dragon
 MoveYellowDragon:
@@ -1325,13 +1250,6 @@ MoveYellowDragon:
             jsr MoveDragon
             rts
 
-; yellow dragon's object matrix
-YelDragMatrix:
-            .byte  SwordInfo,     Dragon2Info  ;sword, yellow dragon
-            .byte  YellowKeyInfo, Dragon2Info  ;yellow key, yellow dragon
-            .byte  Dragon2Info,   man_object   ;yellow dragon, man
-            .byte  Dragon2Info,   ChaliceInfo  ;yellow dragon, chalice
-            .byte  $00
 
 ; move the green dragon
 MoveGreenDragon:
@@ -1344,15 +1262,6 @@ MoveGreenDragon:
             ldx #$48              ;select dragon #3: green
             jsr MoveDragon
             rts
-
-GreenDragMatrix:
-            .byte SwordInfo,   Dragon3Info   ;sword, green dragon
-            .byte Dragon3Info, man_object    ;green dragon, man
-            .byte Dragon3Info, ChaliceInfo   ;green dragon, chalice
-            .byte Dragon3Info, BridgeInfo    ;green dragon, bridge
-            .byte Dragon3Info, MagnetInfo    ;green dragon, magnet
-            .byte Dragon3Info, BlackKeyInfo  ;green dragon, black key
-            .byte $00
 
 ; move a dragon
 MoveDragon: stx curr_obj_number   ;save object we're dealing with
@@ -1459,11 +1368,6 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
 @MoveDragon_9:
             rts
 
-; dragon difficulty
-DragonDiff: .byte  $d0, $e8       ;level 1: Am, Pro
-            .byte  $f0, $f6       ;level 2: Am, Pro
-            .byte  $f0, $f6       ;level 3: Am, Pro
-
 ; move bat
 MoveBat:    inc BlackBatCurrBase  ;put bat in the next state
             lda BlackBatCurrBase  ;get the bat state
@@ -1538,18 +1442,6 @@ MoveBat:    inc BlackBatCurrBase  ;put bat in the next state
             sta object_carried
 @MoveBat_5: rts
 
-; bat object matrix
-BatMatrix:  .byte  BlackBatInfo, ChaliceInfo    ;bat, chalice
-            .byte  BlackBatInfo, SwordInfo      ;bat, sword
-            .byte  BlackBatInfo, BridgeInfo     ;bat, bridge
-            .byte  BlackBatInfo, YellowKeyInfo  ;bat, yellow key
-            .byte  BlackBatInfo, WhiteKeyInfo   ;bat, white key
-            .byte  BlackBatInfo, BlackKeyInfo   ;bat, black key
-            .byte  BlackBatInfo, Dragon1Info    ;bat, red dragon
-            .byte  BlackBatInfo, Dragon2Info    ;bat, yellow dragon
-            .byte  BlackBatInfo, Dragon3Info    ;bat, green dragon
-            .byte  BlackBatInfo, MagnetInfo     ;bat, magnet
-            .byte  0
 
 ; deal with portcullis and collisions
 Portals:    ldy #2                ;for each portcullis
@@ -1609,14 +1501,6 @@ Portals:    ldy #2                ;for each portcullis
 @Portals_Done:
             rts
 
-PortOffsets:
-            .byte  $09, $12, $1b       ;portcullis #1, #2, #3
-
-KeyOffsets: .byte  $63, $6c, $75       ;keys (yellow, white, black)
-EntryRoomOffsets:
-            .byte  $12, $1a, $1b       ;castle entry rooms (yellow, white, black)
-CastleRoomOffsets:
-            .byte  $11, $0f, $10       ;castle rooms (yellow, white, black)
 
 ; deal with magnet
 Mag:        lda z:MagnetInfo+ObjectInfoType::ycoord
@@ -1634,31 +1518,22 @@ Mag:        lda z:MagnetInfo+ObjectInfoType::ycoord
             beq @Mag_2            ;if none, then forget it
             ldy #1                ;set delta to one
             jsr MoveGroundObject  ;move object
-@Mag_2:     lda z:MagnetInfo+ObjectInfoType::ycoord  ;reset the magnet's Y coordinate
-            clc
+@Mag_2:     lda z:MagnetInfo+ObjectInfoType::ycoord           ;reset the magnet's
+            clc                   ; Y coordinate
             adc #8
             sta z:MagnetInfo+ObjectInfoType::ycoord
             rts
 
-; magnet object matrix
-MagnetMatrix:
-            .byte YellowKeyInfo, MagnetInfo   ;yellow key, magnet
-            .byte WhiteKeyInfo,  MagnetInfo   ;white key, magnet
-            .byte BlackKeyInfo,  MagnetInfo   ;black key, magnet
-            .byte SwordInfo,     MagnetInfo   ;sword, magnet
-            .byte BridgeInfo,    MagnetInfo   ;bridge, magnet
-            .byte ChaliceInfo,   MagnetInfo   ;chalice, magnet
-            .byte 0
 
 ; deal with invisible surround moving
 Surround:   lda curr_room         ;set the current room
             jsr RoomNumToAddress  ;convert it to an address
-            ldy #RoomDataEntry::color
-            lda (dr_ptr),y
+            ldy #2
+            lda (dr_ptr),y        ;get the room's color
             cmp #8                ;is it invisible?
             beq @Surround_2       ;if so branch
-            lda #0                ;if not, signal the invisible surround not wanted
-            sta z:SurroundInfo+ObjectInfoType::ycoord
+            lda #0                ;if not, signal the
+            sta SurroundInfo+ObjectInfoType::ycoord ; invisible surround not wanted
             jmp @Surround_Done
 
 @Surround_2:
@@ -1667,23 +1542,22 @@ Surround:   lda curr_room         ;set the current room
             lda man_x             ;get the man's X coordinate
             sec
             sbc #$0e              ;adjust for surround,
-            sta z:SurroundInfo+ObjectInfoType::xcoord
+            sta SurroundInfo+ObjectInfoType::xcoord
             lda man_y             ;get the man's Y coordinate
             clc
             adc #$0e              ;adjust for surround
-            sta z:SurroundInfo+ObjectInfoType::ycoord
-            lda z:SurroundInfo+ObjectInfoType::xcoord
+            sta SurroundInfo+ObjectInfoType::ycoord
+            lda SurroundInfo+ObjectInfoType::xcoord
             cmp #$f0              ;is it close to the right edge?
             bcc @Surround_3       ;branch if not
             lda #1                ;flick surround to the other side of the screen
-            sta z:SurroundInfo+ObjectInfoType::xcoord
+            sta SurroundInfo+ObjectInfoType::xcoord
             jmp @Surround_Done
-
 @Surround_3:
             cmp #$82              ;???
             bcc @Surround_Done    ;???
             lda #$81              ;???
-            sta z:SurroundInfo+ObjectInfoType::xcoord ;???
+            sta SurroundInfo+ObjectInfoType::xcoord ;???
 @Surround_Done:
             rts
 
@@ -1779,6 +1653,134 @@ GetObjectNoise:
             lda sound_duration_counter
             jmp NoiseDropObject_2 ; and make same noise as drop
 
+
+            .rodata
+
+; Room bounds data.
+;
+; e.g. the chalice can only exist in room range [$13, $1a] for level 3.
+Lvl3ObjRoomBounds:
+            .byte ChaliceInfo,   $13, $1a     ;chalice
+            .byte Dragon1Info,   $01, $1d     ;red dragon
+            .byte Dragon2Info,   $01, $1d     ;yellow dragon
+            .byte Dragon3Info,   $01, $1d     ;green dragon
+            .byte SwordInfo,     $01, $1d     ;sword
+            .byte BridgeInfo,    $01, $1d     ;bridge
+            .byte YellowKeyInfo, $01, $1d     ;yellow key
+            .byte WhiteKeyInfo,  $01, $16     ;white key
+            .byte BlackKeyInfo,  $01, $12     ;black key
+            .byte BlackBatInfo,  $01, $1d     ;bat
+            .byte MagnetInfo,    $01, $1d     ;magnet
+
+GameObjects:
+            .word Game1Objects      ;pointer to object locations for game 01
+            .word Game2Objects      ;pointer to object locations for game 02
+            .word Game2Objects      ;pointer to object locations for game 03
+
+; object locations (room and coordinate) for game 01
+Game1Objects:
+            ;     Rm,  X,   Y,   Mvt, State
+            .byte $03, $51, $12           ;black dot (normally $15, but moved to $03 for game 01 for convenience)
+            .byte $0e, $50, $20, $00, $00 ;red dragon
+            .byte $01, $50, $20, $00, $00 ;yellow dragon
+            .byte $1d, $50, $20, $00, $00 ;green dragon
+            .byte $1b, $80, $20           ;magnet
+            .byte $12, $20, $20           ;sword
+            .byte $1c, $30, $20           ;chalice
+            .byte $04, $29, $37           ;bridge
+            .byte $11, $20, $40           ;yellow key
+            .byte $0e, $20, $40           ;white key
+            .byte $1d, $20, $40           ;black key
+            .byte $1c                     ;portcullis state
+            .byte $1c                     ;portcullis state
+            .byte $1c                     ;portcullis state
+            .byte $1a, $20, $20, $00, $00 ;bat
+            .byte $78, $00                ;bat (carrying, fed-up)
+
+; object locations (room and coordinate) for games 02 and 03
+Game2Objects:
+            ;     Rm,  X,   Y,   Mvt, State
+            .byte $15, $51, $12           ;black dot
+            .byte $14, $50, $20, $a0, $00 ;red dragon
+            .byte $19, $50, $20, $a0, $00 ;yellow dragon
+            .byte $04, $50, $20, $a0, $00 ;green dragon
+            .byte $0e, $80, $20           ;magnet
+            .byte $11, $20, $20           ;sword
+            .byte $14, $30, $20           ;chalice
+            .byte $0b, $40, $40           ;bridge
+            .byte $09, $20, $40           ;yellow key
+            .byte $06, $20, $40           ;white key
+            .byte $19, $20, $40           ;black key
+            .byte $1c                     ;portcullis state
+            .byte $1c                     ;portcullis state
+            .byte $1c                     ;portcullis state
+            .byte $02, $20, $20, $90, $00 ;bat
+            .byte $78, $00                ;bat (carrying, fed-up)
+
+; red dragon's object matrix
+RedDragMatrix:
+            .byte SwordInfo,   Dragon1Info   ;sword, red dragon
+            .byte Dragon1Info, man_object    ;red dragon, man
+            .byte Dragon1Info, ChaliceInfo   ;red dragon, chalice
+            .byte Dragon1Info, WhiteKeyInfo  ;red dragon, white key
+            .byte $00
+
+; yellow dragon's object matrix
+YelDragMatrix:
+            .byte  SwordInfo,     Dragon2Info  ;sword, yellow dragon
+            .byte  YellowKeyInfo, Dragon2Info  ;yellow key, yellow dragon
+            .byte  Dragon2Info,   man_object   ;yellow dragon, man
+            .byte  Dragon2Info,   ChaliceInfo  ;yellow dragon, chalice
+            .byte  $00
+
+GreenDragMatrix:
+            .byte SwordInfo,   Dragon3Info   ;sword, green dragon
+            .byte Dragon3Info, man_object    ;green dragon, man
+            .byte Dragon3Info, ChaliceInfo   ;green dragon, chalice
+            .byte Dragon3Info, BridgeInfo    ;green dragon, bridge
+            .byte Dragon3Info, MagnetInfo    ;green dragon, magnet
+            .byte Dragon3Info, BlackKeyInfo  ;green dragon, black key
+            .byte $00
+
+; dragon difficulty
+DragonDiff: .byte  $d0, $e8       ;level 1: Am, Pro
+            .byte  $f0, $f6       ;level 2: Am, Pro
+            .byte  $f0, $f6       ;level 3: Am, Pro
+
+; bat object matrix
+BatMatrix:  .byte  BlackBatInfo, ChaliceInfo    ;bat, chalice
+            .byte  BlackBatInfo, SwordInfo      ;bat, sword
+            .byte  BlackBatInfo, BridgeInfo     ;bat, bridge
+            .byte  BlackBatInfo, YellowKeyInfo  ;bat, yellow key
+            .byte  BlackBatInfo, WhiteKeyInfo   ;bat, white key
+            .byte  BlackBatInfo, BlackKeyInfo   ;bat, black key
+            .byte  BlackBatInfo, Dragon1Info    ;bat, red dragon
+            .byte  BlackBatInfo, Dragon2Info    ;bat, yellow dragon
+            .byte  BlackBatInfo, Dragon3Info    ;bat, green dragon
+            .byte  BlackBatInfo, MagnetInfo     ;bat, magnet
+            .byte  0
+
+PortOffsets:
+            .byte  $09, $12, $1b       ;portcullis #1, #2, #3
+
+KeyOffsets: .byte  $63, $6c, $75       ;keys (yellow, white, black)
+EntryRoomOffsets:
+            .byte  $12, $1a, $1b       ;castle entry rooms (yellow, white, black)
+CastleRoomOffsets:
+            .byte  $11, $0f, $10       ;castle rooms (yellow, white, black)ffff
+
+MagnetMatrix:
+            .byte YellowKeyInfo, MagnetInfo   ;yellow key, magnet
+            .byte WhiteKeyInfo,  MagnetInfo   ;white key, magnet
+            .byte BlackKeyInfo,  MagnetInfo   ;black key, magnet
+            .byte SwordInfo,     MagnetInfo   ;sword, magnet
+            .byte BridgeInfo,    MagnetInfo   ;bridge, magnet
+            .byte ChaliceInfo,   MagnetInfo   ;chalice, magnet
+            .byte 0
+
+JoystickMergeValues:
+            .byte  $00, $c0, $30  ;no change, no horizontal, no vertical
+
 LeftOfName: .byte $f0, $ff, $ff
             .byte $00, $00, $00
             .byte $00, $00, $00
@@ -1796,24 +1798,21 @@ BelowYellowCastle:
             .byte $f0, $ff, $ff
 
 SideCorridor:
-            .byte $f0, $ff, $0f  ; 1111....11111111....1111
-            .byte $00, $00, $00  ; ........................
-            .byte $00, $00, $00  ; ........................
-            .byte $00, $00, $00  ; ........................
-            .byte $00, $00, $00  ; ........................
-            .byte $00, $00, $00  ; ........................
-            .byte $f0, $ff, $0f  ; 1111....11111111....1111
+            .byte $f0, $ff, $0f
+            .byte $00, $00, $00
+            .byte $00, $00, $00
+            .byte $00, $00, $00
+            .byte $00, $00, $00
+            .byte $00, $00, $00
+            .byte $f0, $ff, $0f
 
-NumberRoom: .byte $f0, $ff, $ff  ; 1111....1111111111111111
-            .byte $30, $00, $00  ; ..11....................
-            .byte $30, $00, $00  ; ..11....................
-            .byte $30, $00, $00  ; ..11....................
-            .byte $30, $00, $00  ; ..11....................
-            .byte $30, $00, $00  ; ..11....................
-            .byte $f0, $ff, $0f  ; 1111....11111111....1111
-
-; object #1 states (portcullis)
-PortMacro ,, states
+NumberRoom: .byte $f0, $ff, $ff
+            .byte $30, $00, $00
+            .byte $30, $00, $00
+            .byte $30, $00, $00
+            .byte $30, $00, $00
+            .byte $30, $00, $00
+            .byte $f0, $ff, $0f
 
 TwoExitRoom:
             .byte $f0, $ff, $0f   ; 1111....11111111....1111
@@ -1899,9 +1898,6 @@ CastleDef:  .byte $f0, $fe, $15
             .byte $30, $00, $00
             .byte $f0, $ff, $0f
 
-PortMacro ,info
-SurroundMacro
-
 RedMaze1:   .byte $f0, $ff, $ff
             .byte $00, $00, $00
             .byte $f0, $ff, $0f
@@ -1974,20 +1970,21 @@ BlackMazeEntry:
             .byte $00, $00, $00
             .byte $f0, $ff, $0f
 
+PortMacro ,info, states
+SurroundMacro
 BridgeMacro
-GfxNum1:    number1_gfx_data
 KeyMacro
-GfxNum2:    number2_gfx_data
-GfxNum3:    number3_gfx_data
 BlackBatMacro
-DragonMacro ,0
-SwordMacro ,0
+DragonMacro ,1
+SwordMacro ,1
 DotMacro
-EasterEgg original
+EasterEgg
 ChaliceMacro
 NullMacro
-NumberMacro ,GfxNum1, GfxNum2, GfxNum3
+NumberMacro
 MagnetMacro
+
+ObjectsMacro
 
 RoomsMacro
 
@@ -1999,11 +1996,15 @@ RoomDiffs:  .byte $10, $0f, $0f     ;down from room 01
             .byte $1b, $0c, $0c     ;down from room 1c
             .byte $03, $0c, $0c     ;up from room 1d (top entry room)
 
-ObjectsMacro
 
+            .segment "CODE0"
 
-; 6502 vectors
             .segment "VECTORS"
+            .word START
+            .word START
+            .word START
+
+            .segment "VECTORS0"
             .word START
             .word START
             .word START

@@ -1,4 +1,6 @@
-            .include "gfx/all.inc"
+            .include "data/gfx/all.inc"
+            .include "data/objects.inc"
+            .include "data/rooms.inc"
 
 ;*******************************************************************************
 ;* Adventure for the Atari 2600, by Warren Robinett                            *
@@ -107,54 +109,28 @@ object_carried:                 .byte 0     ; object carried by the man
 objman_x_delta:                 .byte 0
 objman_y_delta:                 .byte 0
 curr_obj_number:                .byte 0
-room_of_black_dot:
-DotInfo:                        .byte 0
-                                .word 0
-Dragon1Info:                    .word 0
-                                .word 0
-Dragon1CurrBase:                .byte 0
-Dragon2Info:                    .word 0
-                                .word 0
-Dragon2CurrBase:                .byte 0
-Dragon3Info:                    .word 0
-                                .word 0
-Dragon3CurrBase:                .byte 0
-MagnetInfo:                     .byte 0
-MagnetX:                        .byte 0
-MagnetY:                        .byte 0
-SwordInfo:                      .byte 0
-                                .word 0
-ChaliceInfo:                    .byte 0
-                                .word 0
-NullInfo:
-BridgeInfo:                     .byte 0
-BridgeX:                        .byte 0
-BridgeY:                        .byte 0
-YellowKeyInfo:                  .byte 0
-                                .word 0
-WhiteKeyInfo:                   .byte 0
-                                .word 0
-BlackKeyInfo:                   .byte 0
-                                .word 0
-PortCurrBase:                   .byte 0, 0, 0
-BlackBatInfo:                   .byte 0
-BlackBatX:                      .byte 0
-BlackBatY:                      .byte 0
-BlackBatMove:                   .byte 0
-BlackBatCurrBase:               .byte 0
-BlackBatCarriedObject:          .byte 0      ; object being carried by the Black Bat
-BlackBatFedUp:                  .byte 0
+DotMacro zp
+Dragon1Macro
+Dragon2Macro
+Dragon3Macro
+MagnetMacro zp
+SwordMacro zp
+ChaliceMacro zp
+BridgeMacro zp
+YellowKeyMacro zp
+WhiteKeyMacro zp
+BlackKeyMacro zp
+PortMacro zp
+BlackBatMacro zp
 objstore_ptr:                   .word 0
 objdelta:                       .byte 0
 MoveGameObjectArg_ObjNumber:    .byte 0      ; identifies the object to move (used by MoveGameObject)
 MoveGameObjectArg_Difficulty:   .byte 0      ; difficulty for MoveGameObject to use (used by MoveGameObject)
 joystick_record:                .byte 0
 tmp1:                           .byte 0
-SurroundInfo:                   .byte 0
-SurroundX:                      .byte 0
-SurroundY:                      .byte 0
+SurroundMacro zp
 GetObjectState_Arg:             .byte 0
-NumberCurrBase:                 .byte 0      ; level number
+NumberMacro zp
 is_game_active:                 .byte 0      ; $ff=no, 0=yes
 sound_duration_counter:         .byte 0
 sound_type:                     .byte 0
@@ -170,11 +146,6 @@ man_object  = $8a
 
             .code
 START:      jmp StartGame
-
-            .byte $ea, $ea, $ea, $ea, $ea
-            ;sei             ;setup for 6507, start with no
-            ;cld             ; variable initialization
-            ;jmp MainGameLoop
 
 PrintDisplay:
             sta HMCLR       ;clear horizontal motion
@@ -554,11 +525,11 @@ RoomNumToAddress:
             lda #0
             adc dr_ptr+1          ;in effect the room number is
             sta dr_ptr+1          ; multiplied by nine
-            lda #<RoomDataTable
+            lda #<Rooms
             clc
             adc dr_ptr            ;add the room data base address
             sta dr_ptr            ; to the offset therefore getting
-            lda #>RoomDataTable   ; the final room data address
+            lda #>Rooms           ; the final room data address
             adc dr_ptr+1
             sta dr_ptr+1
             rts
@@ -840,7 +811,7 @@ PlayerCollision:
             bcc ReadStick
             cmp #$17              ;if more than $17 then forget it
             bcs ReadStick
-            lda BridgeY           ;get the bridge's Y coordinate
+            lda z:BridgeInfo+ObjectInfoType::ycoord
             sec
             sbc man_y             ;subtract the man's Y coordinate
             cmp #$fc
@@ -870,7 +841,7 @@ ReadStick:  cpy #0                ;???is game in first phase?
             lda prev_man_y        ;get temporary Y coordinate
             sta man_y             ; and make it the man's Y coordinate
             lda cached_joystick   ;get the joystick position
-            ora ReadStick_3,y     ;merge out movement not allowed in this phase
+            ora JoystickMergeValues,y  ;merge out movement not allowed in this phase
             sta direction_wanted  ;and store cooked movement
             ldy #3                ;set the delta for the ball
             ldx #man_object       ;point to man's coordinates
@@ -1058,7 +1029,7 @@ DealWithRight:
             lda $00,x             ;get the Ball's room
             cmp #3                ;is it room #3 (right to secret room)
             bne @DealWithRight_3  ;branch if not
-            lda room_of_black_dot ;check the room of the black dot
+            lda DotInfo+ObjectInfoType::room_num  ;check the room of the black dot
             cmp #$15              ;is it in the hidden room area?
             beq @DealWithRight_3  ;if so, branch
 ; manually change to secret room
@@ -1404,10 +1375,10 @@ MoveBat:    inc BlackBatCurrBase  ;put bat in the next state
             bne @MoveBat_2
             lda #0                ;if so, reset the bat state
             sta BlackBatCurrBase
-@MoveBat_2: lda BlackBatFedUp               ;get the bat fed-up value
+@MoveBat_2: lda BlackBatFedUp     ;get the bat fed-up value
             beq @MoveBat_3        ;if bat fed-up then branch
-            inc BlackBatFedUp               ;increment its value for next time
-            lda BlackBatMove      ;get the bat's movement
+            inc BlackBatFedUp     ;increment its value for next time
+            lda z:BlackBatInfo+LongObjectInfoType::move
             ldx #BlackBatInfo     ;position to bat
             ldy #3                ;get the bat's deltas
             jsr MoveGroundObject  ;move the bat
@@ -1437,14 +1408,14 @@ MoveBat:    inc BlackBatCurrBase  ;put bat in the next state
 ; see if bat can pick up an object
             lda $01,x             ;get the object's X coordinate
             sec
-            sbc BlackBatX         ;find the difference with the Bat's X coordinate
+            sbc z:BlackBatInfo+ObjectInfoType::xcoord  ;find the difference with the Bat's X coordinate
             clc
             adc #4                ;adjust so Bat in middle of object
             and #$f8              ;is Bat within seven pixels?
             bne @MoveBat_4        ;if not, no pickup possible
             lda $02,x             ;get the object's Y coordinate
             sec
-            sbc BlackBatY               ;find the difference with the Bat's
+            sbc z:BlackBatInfo+ObjectInfoType::ycoord  ;find the difference with the Bat's
             clc                   ; Y coordinate
             adc #4                ;adjust
             and #$f8              ;is the Bat within seven pixels?
@@ -1457,11 +1428,11 @@ MoveBat:    inc BlackBatCurrBase  ;put bat in the next state
 @MoveBat_4: ldx BlackBatCarriedObject  ;get object being carried by Bat
             lda BlackBatInfo      ;get the Bat's room
             sta $00,x             ;store this as the object's room
-            lda BlackBatX         ;get the Bat's X coordinate
+            lda z:BlackBatInfo+ObjectInfoType::xcoord
             clc
             adc #8                ;adjust to the right
             sta $01,x             ;make it the object's X coordinate
-            lda BlackBatY         ;get the Bat's Y coordinate
+            lda z:BlackBatInfo+ObjectInfoType::ycoord
             sta $02,x             ;store is as the object's Y coordinate
             lda BlackBatCarriedObject  ;get the object being carried by the bat
             ldy object_carried
@@ -1532,10 +1503,10 @@ Portals:    ldy #2                ;for each portcullis
 
 
 ; deal with magnet
-Mag:        lda MagnetY           ;get magnet's Y coordinate
+Mag:        lda z:MagnetInfo+ObjectInfoType::ycoord
             sec
             sbc #8                ;adjust to its "poles"
-            sta MagnetY
+            sta z:MagnetInfo+ObjectInfoType::ycoord
             lda #0                ;con difficulty!
             sta MoveGameObjectArg_Difficulty
             lda #<MagnetMatrix    ;set low address of object store
@@ -1547,10 +1518,10 @@ Mag:        lda MagnetY           ;get magnet's Y coordinate
             beq @Mag_2            ;if none, then forget it
             ldy #1                ;set delta to one
             jsr MoveGroundObject  ;move object
-@Mag_2:     lda MagnetY           ;reset the magnet's
+@Mag_2:     lda z:MagnetInfo+ObjectInfoType::ycoord           ;reset the magnet's
             clc                   ; Y coordinate
             adc #8
-            sta MagnetY
+            sta z:MagnetInfo+ObjectInfoType::ycoord
             rts
 
 
@@ -1562,7 +1533,7 @@ Surround:   lda curr_room         ;set the current room
             cmp #8                ;is it invisible?
             beq @Surround_2       ;if so branch
             lda #0                ;if not, signal the
-            sta SurroundY         ; invisible surround not wanted
+            sta SurroundInfo+ObjectInfoType::ycoord ; invisible surround not wanted
             jmp @Surround_Done
 
 @Surround_2:
@@ -1571,22 +1542,22 @@ Surround:   lda curr_room         ;set the current room
             lda man_x             ;get the man's X coordinate
             sec
             sbc #$0e              ;adjust for surround,
-            sta SurroundX         ; and store as surround's X coordinate
+            sta SurroundInfo+ObjectInfoType::xcoord
             lda man_y             ;get the man's Y coordinate
             clc
             adc #$0e              ;adjust for surround
-            sta SurroundY         ; and store as surround's Y coordinate
-            lda SurroundX         ;get the surround's X coordinate
+            sta SurroundInfo+ObjectInfoType::ycoord
+            lda SurroundInfo+ObjectInfoType::xcoord
             cmp #$f0              ;is it close to the right edge?
             bcc @Surround_3       ;branch if not
-            lda #1                ;flick surround to the
-            sta SurroundX         ; other side of the screen
+            lda #1                ;flick surround to the other side of the screen
+            sta SurroundInfo+ObjectInfoType::xcoord
             jmp @Surround_Done
 @Surround_3:
             cmp #$82              ;???
             bcc @Surround_Done    ;???
             lda #$81              ;???
-            sta SurroundX         ;???
+            sta SurroundInfo+ObjectInfoType::xcoord ;???
 @Surround_Done:
             rts
 
@@ -1709,7 +1680,7 @@ GameObjects:
 ; object locations (room and coordinate) for game 01
 Game1Objects:
             ;     Rm,  X,   Y,   Mvt, State
-            .byte $15, $51, $12           ;black dot
+            .byte $03, $51, $12           ;black dot (normally $15, but moved to $03 for game 01 for convenience)
             .byte $0e, $50, $20, $00, $00 ;red dragon
             .byte $01, $50, $20, $00, $00 ;yellow dragon
             .byte $1d, $50, $20, $00, $00 ;green dragon
@@ -1798,7 +1769,6 @@ EntryRoomOffsets:
 CastleRoomOffsets:
             .byte  $11, $0f, $10       ;castle rooms (yellow, white, black)ffff
 
-; magnet object matrix
 MagnetMatrix:
             .byte YellowKeyInfo, MagnetInfo   ;yellow key, magnet
             .byte WhiteKeyInfo,  MagnetInfo   ;white key, magnet
@@ -1808,8 +1778,7 @@ MagnetMatrix:
             .byte ChaliceInfo,   MagnetInfo   ;chalice, magnet
             .byte 0
 
-; joystick merge values
-ReadStick_3:
+JoystickMergeValues:
             .byte  $00, $c0, $30  ;no change, no horizontal, no vertical
 
 LeftOfName: .byte $f0, $ff, $ff
@@ -1844,52 +1813,6 @@ NumberRoom: .byte $f0, $ff, $ff
             .byte $30, $00, $00
             .byte $30, $00, $00
             .byte $f0, $ff, $0f
-; object #1 states (portcullis)
-PortStates: .byte $04               ;state 04 - open
-            .word GfxPort07
-            .byte $08
-            .word GfxPort06
-            .byte $0c
-            .word GfxPort05
-            .byte $10
-            .word GfxPort04
-            .byte $14
-            .word GfxPort03
-            .byte $18
-            .word GfxPort02
-            .byte $1c               ;state 1C - closed
-            .word GfxPort01
-            .byte $20
-            .word GfxPort02
-            .byte $24
-            .word GfxPort03
-            .byte $28
-            .word GfxPort04
-            .byte $2c
-            .word GfxPort05
-            .byte $30
-            .word GfxPort06
-            .byte $ff               ;state FF - open
-            .word GfxPort07
-
-; object 1 states 940FF (graphic)
-GfxPort01:  .byte    $fe          ; 1111111.
-            .byte    $aa          ; 1.1.1.1.
-GfxPort02:  .byte    $fe          ; 1111111.
-            .byte    $aa          ; 1.1.1.1.
-GfxPort03:  .byte    $fe          ; 1111111.
-            .byte    $aa          ; 1.1.1.1.
-GfxPort04:  .byte    $fe          ; 1111111.
-            .byte    $aa          ; 1.1.1.1.
-GfxPort05:  .byte    $fe          ; 1111111.
-            .byte    $aa          ; 1.1.1.1.
-GfxPort06:  .byte    $fe          ; 1111111.
-            .byte    $aa          ; 1.1.1.1.
-GfxPort07:  .byte    $fe          ; 1111111.
-            .byte    $aa          ; 1.1.1.1.
-GfxPort08:  .byte    $fe          ; 1111111.
-            .byte    $aa          ; 1.1.1.1.
-GfxPort09:  .byte    $00
 
 TwoExitRoom:
             .byte $f0, $ff, $0f   ; 1111....11111111....1111
@@ -1974,31 +1897,6 @@ CastleDef:  .byte $f0, $fe, $15
             .byte $30, $00, $3f
             .byte $30, $00, $00
             .byte $f0, $ff, $0f
-; Object Data
-;
-; offset 0: room number of object
-; offset 1: X coordinate of object
-; offset 2: Y coordinate of object
-;
-; object #1: portcullis
-PortInfo1:  .byte $11, $4d, $31       ;room 11 (4D, 31)
-PortInfo2:  .byte $0f, $4d, $31       ;room 0F (4D, 31)
-PortInfo3:  .byte $10, $4d, $31       ;room 10 (4D, 31)
-
-; object #0
-SurroundCurr:
-            .byte 0
-SurroundStates:
-            .byte $ff
-            .word GfxSurround
-
-; object #1: graphic
-GfxSurround:
-            .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-            .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-            .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-            .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-            .byte 0
 
 RedMaze1:   .byte $f0, $ff, $ff
             .byte $00, $00, $00
@@ -2072,176 +1970,23 @@ BlackMazeEntry:
             .byte $00, $00, $00
             .byte $f0, $ff, $0f
 
-; object #10
-BridgeCurr: .byte 0
-BridgeStates:
-            .byte $ff
-            .word GfxBridge
-GfxBridge:  bridge_gfx_data
+PortMacro ,info, states
+SurroundMacro
+BridgeMacro
+KeyMacro
+BlackBatMacro
+DragonMacro ,1
+SwordMacro ,1
+DotMacro
+EasterEgg
+ChaliceMacro
+NullMacro
+NumberMacro
+MagnetMacro
 
-; object #5
-GfxNum1:    number1_gfx_data
-GfxNum2:    number2_gfx_data
-GfxNum3:    number3_gfx_data
+ObjectsMacro
 
-; object #11
-KeyCurr:    .byte 0
-KeyStates:  .byte $ff
-            .word GfxKey
-GfxKey:     key_gfx_data
-
-; object #14
-BatStates:  .byte $03
-            .word GfxBat1
-            .byte $ff
-            .word GfxBat2
-GfxBat1:    bat1_gfx_data
-GfxBat2:    bat2_gfx_data
-
-; object #6
-DragonStates:
-            .byte $00
-            .word GfxDrag0
-            .byte $01
-            .word GfxDrag2
-            .byte $02
-            .word GfxDrag0
-            .byte $ff
-            .word GfxDrag1
-
-GfxDrag0:   dragonnormal_gfx_data 1
-GfxDrag1:   dragonroar_gfx_data 1
-GfxDrag2:   dragondead_gfx_data 1
-
-; object #9
-SwordCurr:  .byte 0
-SwordStates:
-            .byte $ff
-            .word GfxSword
-GfxSword:   sword_gfx_data 1
-
-
-DotCurr:    .byte 0
-DotStates:  .byte $ff
-            .word GfxDot
-GfxDot:     dot_gfx_data
-
-; object #4
-AuthorInfo: .byte $1e, $50, $69       ;room 1E (50, 69)
-AuthorCurr: .byte 0
-AuthorStates:
-            .byte $ff
-            .word GfxAuthor
-GfxAuthor:  easteregg_gfx_data
-
-; object #10
-ChaliceCurr:
-            .byte 0
-ChaliceStates:
-            .byte $ff
-            .word GfxChalice
-GfxChalice: chalice_gfx_data
-
-; object #12
-NullCurr:   .byte 0
-NullStates: .byte $ff
-            .word GfxNull
-GfxNull:    .byte 0
-
-; object #5: number
-NumberInfo: .byte $00, $50, $40       ;room 00 (50,40)
-NumberStates:
-            .byte $01
-            .word GfxNum1
-            .byte $03
-            .word GfxNum2
-            .byte $ff
-            .word GfxNum3
-
-; object #11
-MagnetCurr: .byte 0
-
-MagnetStates:
-            .byte $ff
-            .word GfxMagnet
-GfxMagnet:  magnet_gfx_data
-
-; Room Data
-;
-; offset 0: low byte room graphics data
-; offset 1: high byte room graphics data
-; offset 2: color
-; offset 3: B&W color
-; offset 4: bits 5-0: playfield control
-;           bit 6: true if right thin wall wanted
-;           bit 7: true if left thin wall wanted
-; offset 5: room above
-; offset 6: room left
-; offset 7: room down
-; offset 8: room right
-RoomDataTable:
-            .word NumberRoom        ;00 number room; purple
-            .byte $66, $0a, $21, $00, $00, $00, $00
-            .word BelowYellowCastle ;01 (top access) reflected / 8 clock ball
-            .byte $d8, $0a, $a1, $08, $02, $80, $03
-            .word BelowYellowCastle ;02 (top access); green
-            .byte $c8, $0a, $21, $11, $03, $83, $01
-            .word LeftOfName        ;03 left of name
-            .byte $e8, $0a, $61, $06, $01, $86, $02
-            .word BlueMazeTop       ;04 top of blue maze; blue
-            .byte $86, $0a, $21, $10, $05, $07, $06
-            .word BlueMaze1         ;05 blue maze #1; blue
-            .byte $86, $0a, $21, $1d, $06, $08, $04
-            .word BlueMazeBottom    ;06 bottom of blue maze; blue
-            .byte $86, $0a, $21, $07, $04, $03, $05
-            .word BlueMazeCenter    ;07 center of blue maze; blue
-            .byte $86, $0a, $21, $04, $08, $06, $08
-            .word BlueMazeEntry     ;08 blue maze entry; blue
-            .byte $86, $0a, $21, $05, $07, $01, $07
-            .word MazeMiddle        ;09 maze middle; invisible
-            .byte $08, $08, $25, $0a, $0a, $0b, $0a
-            .word MazeEntry         ;0a maze entry; invisible
-            .byte $08, $08, $25, $03, $09, $09, $09
-            .word MazeSide          ;0b maze side; invisible/re
-            .byte $08, $08, $25, $09, $0c, $1c, $0d
-            .word SideCorridor      ;0c (side corridor)
-            .byte $98, $0a, $61, $1c, $0d, $1d, $0b
-            .word SideCorridor      ;0d (side corridor)
-            .byte $b8, $0a, $a1, $0f, $0b, $0e, $0c
-            .word TopEntryRoom      ;0e (top entry room)
-            .byte $a8, $0a, $21, $0d, $10, $0f, $10
-            .word CastleDef         ;0f white castle; white
-            .byte $0c, $0c, $21, $0e, $0f, $0d, $0f
-            .word CastleDef         ;10 black castle; black
-            .byte $00, $02, $21, $01, $1c, $04, $1c
-            .word CastleDef         ;11 yellow castle; yellow
-            .byte $1a, $0a, $21, $06, $03, $02, $01
-            .word NumberRoom        ;12 yellow castle entry; yellow
-            .byte $1a, $0a, $21, $12, $12, $12, $12
-            .word BlackMaze1        ;13 black maze #1; invisible/re
-            .byte $08, $08, $25, $15, $14, $15, $16
-            .word BlackMaze2        ;14 black maze #2; invisible/dupl
-            .byte $08, $08, $24, $16, $15, $16, $13
-            .word BlackMaze3        ;15 black maze #3; invisible/dupl
-            .byte $08, $08, $24, $13, $16, $13, $14
-            .word BlackMazeEntry    ;16 black maze entry; invisible/re
-            .byte $08, $08, $25, $14, $13, $1b, $15
-            .word RedMaze1          ;17 red maze #1; red
-            .byte $36, $0a, $21, $19, $18, $19, $18
-            .word RedMazeTop        ;18 top of red maze; red
-            .byte $36, $0a, $21, $1a, $17, $1a, $17
-            .word RedMazeBottom     ;19 bottom of red maze; red
-            .byte $36, $0a, $21, $17, $1a, $17, $1a
-            .word WhiteCastleEntry  ;1a white castle entry; red
-            .byte $36, $0a, $21, $18, $19, $18, $19
-            .word TwoExitRoom       ;1b black castle entry; red
-            .byte $36, $0a, $21, $89, $89, $89, $89
-            .word NumberRoom        ;1c other purple room; purple
-            .byte $66, $0a, $21, $1d, $07, $8c, $08
-            .word TopEntryRoom      ;1d (top entry room); red
-            .byte $36, $0a, $21, $8f, $01, $10, $03
-            .word BelowYellowCastle ;1e name room; purple
-            .byte $66, $0a, $21, $06, $01, $06, $03
+RoomsMacro
 
 ; room differences for different levels (level 1, 2, 3)
 RoomDiffs:  .byte $10, $0f, $0f     ;down from room 01
@@ -2250,112 +1995,6 @@ RoomDiffs:  .byte $10, $0f, $0f     ;down from room 01
             .byte $1c, $16, $16     ;U/L/R/D from room 1b (black castle room)
             .byte $1b, $0c, $0c     ;down from room 1c
             .byte $03, $0c, $0c     ;up from room 1d (top entry room)
-
-
-Objects:
-            .struct ObjectType
-                info_ptr      .word  ; object information (moveable stuff)
-                currstate_ptr .word  ; object's current state
-                states_ptr    .word  ; list of statues
-                color         .byte
-                bw            .byte  ; color in B&W
-                size          .byte  ; size of object
-            .endstruct
-; 00 invisible surround offsets
-            .word SurroundInfo
-            .word SurroundCurr
-            .word SurroundStates
-            .byte $28, $0c, 7
-; 01 portcullis #1; black
-            .word PortInfo1
-            .word PortCurrBase+0
-            .word PortStates
-            .byte $00, $00, $00
-; 02 portcullis #2; black
-            .word PortInfo2
-            .word PortCurrBase+1
-            .word PortStates
-            .byte $00, $00, $00
-; 03 portcullis #3; black
-            .word PortInfo3
-            .word PortCurrBase+2
-            .word PortStates
-            .byte $00, $00, $00
-; 04 name; flash
-            .word AuthorInfo
-            .word AuthorCurr
-            .word AuthorStates
-            .byte $cb, $00, $00
-; 05 number; green
-            .word NumberInfo
-            .word NumberCurrBase+0
-            .word NumberStates
-            .byte $c8, $00, $00
-; 06 dragon #1; red (aka, "Rhindle")
-            .word Dragon1Info
-            .word Dragon1CurrBase
-            .word DragonStates
-            .byte $36, $0e, $00
-; 07 dragon #2; yellow (aka, "Yorgle")
-            .word Dragon2Info
-            .word Dragon2CurrBase
-            .word DragonStates
-            .byte $1a, $06, $00
-; 08 dragon #3; green (aka,"Grundle")
-            .word Dragon3Info
-            .word Dragon3CurrBase
-            .word DragonStates
-            .byte $c8, $00, $00
-; 09 sword; yellow
-            .word SwordInfo
-            .word SwordCurr
-            .word SwordStates
-            .byte $1a, $06, $00
-; 0a bridge; purple
-            .word BridgeInfo
-            .word BridgeCurr
-            .word BridgeStates
-            .byte $66, $02, $07
-; 0b key #01; yellow
-            .word YellowKeyInfo
-            .word KeyCurr
-            .word KeyStates
-            .byte $1a, $06, $00
-; 0c key #02; white
-            .word WhiteKeyInfo
-            .word KeyCurr
-            .word KeyStates
-            .byte $0e, $0e, $00
-; 0d key #03; black
-            .word BlackKeyInfo
-            .word KeyCurr
-            .word KeyStates
-            .byte $00, $00, $00
-; 0e black bat; black (aka, "Knubberrub")
-            .word BlackBatInfo
-            .word BlackBatCurrBase
-            .word BatStates
-            .byte $00, $00, $00
-; 0f black dot; light gray
-            .word DotInfo
-            .word DotCurr
-            .word DotStates
-            .byte $08, $08, $00
-; 10 enchanted chalice; flash (aka, "Holy Grail")
-            .word ChaliceInfo
-            .word ChaliceCurr
-            .word ChaliceStates
-            .byte $cb, $06, $00
-; 11 magnet; black
-            .word MagnetInfo
-            .word MagnetCurr
-            .word MagnetStates
-            .byte $00, $06, $00
-; 12 null; black
-            .word NullInfo
-            .word NullCurr
-            .word NullStates
-            .byte $00, $00, $00
 
 
 ; 6502 vectors
