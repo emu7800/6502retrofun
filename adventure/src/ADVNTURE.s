@@ -1,4 +1,5 @@
             .include "data/gfx/gr/all.inc"
+            .include "data/gfx/pf/all.inc"
             .include "data/objects.inc"
             .include "data/rooms.inc"
 
@@ -1779,200 +1780,37 @@ GetObjectNoise:
             lda sound_duration_counter
             jmp NoiseDropObject_2 ; and make same noise as drop
 
-LeftOfName: .byte $f0, $ff, $ff
-            .byte $00, $00, $00
-            .byte $00, $00, $00
-            .byte $00, $00, $00
-            .byte $00, $00, $00
-            .byte $00, $00, $00
-
-BelowYellowCastle:
-            .byte $f0, $ff, $0f   ;line shared with above
-            .byte $00, $00, $00
-            .byte $00, $00, $00
-            .byte $00, $00, $00
-            .byte $00, $00, $00
-            .byte $00, $00, $00
-            .byte $f0, $ff, $ff
-
-SideCorridor:
-            .byte $f0, $ff, $0f  ; 1111....11111111....1111
-            .byte $00, $00, $00  ; ........................
-            .byte $00, $00, $00  ; ........................
-            .byte $00, $00, $00  ; ........................
-            .byte $00, $00, $00  ; ........................
-            .byte $00, $00, $00  ; ........................
-            .byte $f0, $ff, $0f  ; 1111....11111111....1111
-
-NumberRoom: .byte $f0, $ff, $ff  ; 1111....1111111111111111
-            .byte $30, $00, $00  ; ..11....................
-            .byte $30, $00, $00  ; ..11....................
-            .byte $30, $00, $00  ; ..11....................
-            .byte $30, $00, $00  ; ..11....................
-            .byte $30, $00, $00  ; ..11....................
-            .byte $f0, $ff, $0f  ; 1111....11111111....1111
+LeftOfName:         leftofname_gfxpf_data orig
+BelowYellowCastle:  belowyellowcastle_gfxpf_data    ;line shared with above room
+SideCorridor:       sidecorridor_gfxpf_data
+NumberRoom:         numberroom_gfxpf_data
 
 ; object #1 states (portcullis)
 PortMacro ,, states
 
-TwoExitRoom:
-            .byte $f0, $ff, $0f   ; 1111....11111111....1111
-            .byte $30, $00, $00   ; ..11....................
-            .byte $30, $00, $00   ; ..11....................
-            .byte $30, $00, $00   ; ..11....................
-            .byte $30, $00, $00   ; ..11....................
-            .byte $30, $00, $00   ; ..11....................
-            .byte $f0, $ff, $0f   ; 1111....11111111....1111
-
-BlueMazeTop:
-            .byte $f0, $ff, $0f   ; 1111....11111111....1111
-            .byte $00, $0c, $0c   ; ............11......11..
-            .byte $f0, $0c, $3c   ; 1111........11....1111..
-            .byte $f0, $0c, $00   ; 1111........11..........
-            .byte $f0, $ff, $3f   ; 1111....11111111..111111
-            .byte $00, $30, $30   ; ..........11......11....
-            .byte $f0, $33, $3f   ; 1111......11..11..111111
-
-BlueMaze1:  .byte $f0, $ff, $ff
-            .byte $00, $00, $00
-            .byte $f0, $fc, $ff
-            .byte $f0, $00, $c0
-            .byte $f0, $3f, $cf
-            .byte $00, $30, $cc
-            .byte $f0, $f3, $cc
-
-BlueMazeBottom:
-            .byte $f0, $f3, $0c
-            .byte $00, $30, $0c
-            .byte $f0, $3f, $0f
-            .byte $f0, $00, $00
-            .byte $f0, $f0, $00
-            .byte $00, $30, $00
-            .byte $f0, $ff, $ff
-
-BlueMazeCenter:
-            .byte $f0, $33, $3f
-            .byte $00, $30, $3c
-            .byte $f0, $ff, $3c
-            .byte $00, $03, $3c
-            .byte $f0, $33, $3c
-            .byte $00, $33, $0c
-            .byte $f0, $f3, $0c
-
-BlueMazeEntry:
-            .byte $f0, $f3, $cc
-            .byte $00, $33, $0c
-            .byte $f0, $33, $fc
-            .byte $00, $33, $00
-            .byte $f0, $f3, $ff
-            .byte $00, $00, $00
-            .byte $f0, $ff, $0f
-
-MazeMiddle: .byte $f0, $ff, $cc
-            .byte $00, $00, $cc
-            .byte $f0, $03, $cf
-            .byte $00, $03, $00
-            .byte $f0, $f3, $fc
-            .byte $00, $33, $0c
-
-MazeSide:   .byte $f0, $33, $cc       ;line shared with above room
-            .byte $00, $30, $cc
-            .byte $00, $3f, $cf
-            .byte $00, $00, $c0
-            .byte $00, $3f, $c3
-            .byte $00, $30, $c0
-            .byte $f0, $ff, $ff
-
-MazeEntry:  .byte $f0, $ff, $0f
-            .byte $00, $30, $00
-            .byte $f0, $30, $ff
-            .byte $00, $30, $c0
-            .byte $f0, $f3, $c0
-            .byte $00, $03, $c0
-            .byte $f0, $ff, $cc
-
-CastleDef:  .byte $f0, $fe, $15
-            .byte $30, $03, $1f
-            .byte $30, $03, $ff
-            .byte $30, $00, $ff
-            .byte $30, $00, $3f
-            .byte $30, $00, $00
-            .byte $f0, $ff, $0f
+TwoExitRoom:        twoexitroom_gfxpf_data
+BlueMazeTop:        bluemazetop_gfxpf_data
+BlueMaze1:          bluemaze1_gfxpf_data
+BlueMazeBottom:     bluemazebottom_gfxpf_data
+BlueMazeCenter:     bluemazecenter_gfxpf_data
+BlueMazeEntry:      bluemazeentry_gfxpf_data
+MazeMiddle:         mazemiddle_gfxpf_data orig
+MazeSide:           mazeside_gfxpf_data             ;line shared with above room
+MazeEntry:          mazeentry_gfxpf_data
+CastleDef:          castle_gfxpf_data
 
 PortMacro ,info
 SurroundMacro
 
-RedMaze1:   .byte $f0, $ff, $ff
-            .byte $00, $00, $00
-            .byte $f0, $ff, $0f
-            .byte $00, $00, $0c
-            .byte $f0, $ff, $0c
-            .byte $f0, $03, $cc
-
-RedMazeBottom:
-            .byte $f0, $33, $cf       ;line shared with room above
-            .byte $f0, $30, $00
-            .byte $f0, $33, $ff
-            .byte $00, $33, $00
-            .byte $f0, $ff, $00
-            .byte $00, $00, $00
-            .byte $f0, $ff, $0f
-
-RedMazeTop: .byte $f0, $ff, $ff
-            .byte $00, $00, $c0
-            .byte $f0, $ff, $cf
-            .byte $00, $00, $cc
-            .byte $f0, $33, $ff
-            .byte $f0, $33, $00
-
-WhiteCastleEntry:
-            .byte $f0, $3f, $0c       ;line shared with room above
-            .byte $f0, $00, $0c
-            .byte $f0, $ff, $0f
-            .byte $00, $30, $00
-            .byte $f0, $30, $00
-            .byte $00, $30, $00
-            .byte $f0, $ff, $0f
-
-TopEntryRoom:
-            .byte $f0, $ff, $0f
-            .byte $30, $00, $00
-            .byte $30, $00, $00
-            .byte $30, $00, $00
-            .byte $30, $00, $00
-            .byte $30, $00, $00
-            .byte $f0, $ff, $ff
-
-BlackMaze1: .byte $f0, $f0, $ff
-            .byte $00, $00, $03
-            .byte $f0, $ff, $03
-            .byte $00, $00, $00
-            .byte $30, $3f, $ff
-            .byte $00, $30, $00
-
-BlackMaze3: .byte $f0, $f0, $ff       ;line shared with room above; mirrored
-            .byte $30, $00, $00
-            .byte $30, $3f, $ff
-            .byte $00, $30, $00
-            .byte $f0, $f0, $ff
-            .byte $30, $00, $03
-            .byte $f0, $f0, $ff
-
-BlackMaze2: .byte $f0, $ff, $ff
-            .byte $00, $00, $c0
-            .byte $f0, $ff, $cf
-            .byte $00, $00, $0c
-            .byte $f0, $0f, $ff
-            .byte $00, $0f, $c0
-
-BlackMazeEntry:
-            .byte $30, $cf, $cc       ;line shared with room above; mirrored
-            .byte $00, $c0, $cc
-            .byte $f0, $ff, $0f
-            .byte $00, $00, $00
-            .byte $f0, $ff, $0f
-            .byte $00, $00, $00
-            .byte $f0, $ff, $0f
+RedMaze1:           redmaze1_gfxpf_data orig
+RedMazeBottom:      redmazebottom_gfxpf_data        ;line shared with room above
+RedMazeTop:         redmazetop_gfxpf_data orig
+WhiteCastleEntry:   whitecastleentry_gfxpf_data     ;line shared with room above
+TopEntryRoom:       topentryroom_gfxpf_data
+BlackMaze1:         blackmaze1_gfxpf_data orig
+BlackMaze3:         blackmaze3_gfxpf_data           ;line shared with room above
+BlackMaze2:         blackmaze2_gfxpf_data orig
+BlackMazeEntry:     blackmazeentry_gfxpf_data       ;line shared with room above
 
 BridgeMacro
 GfxNum1:    number1_gfxgr_data
@@ -1986,7 +1824,7 @@ DotMacro
 EasterEgg original
 ChaliceMacro
 NullMacro
-NumberMacro ,GfxNum1, GfxNum2, GfxNum3
+NumberMacro ,GfxNum1 ,GfxNum2 ,GfxNum3
 MagnetMacro
 
 RoomsMacro

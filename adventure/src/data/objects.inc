@@ -122,7 +122,7 @@
 .ifnblank zp
     BridgeInfo:        .tag ObjectInfoType
 .else
-BridgeCurr: .byte 0
+    BridgeCurr:        .byte 0
     BridgeStates:      .byte $ff
                        .word :+
     : bridge_gfxgr_data
