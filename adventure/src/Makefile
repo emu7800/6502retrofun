@@ -1,6 +1,6 @@
 .PHONY: all clean
 .DEFAULT_GOAL: all
-includes = data/*.inc data/gfx/*.inc
+includes = data/*.inc data/gfx/gr/*.inc #data/gfx/pf/*.inc
 
 
 all: ADVNTURE.BIN ADVeNTURE.BIN ADVeNTURE8k.BIN

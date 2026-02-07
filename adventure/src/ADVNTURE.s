@@ -1,4 +1,4 @@
-            .include "data/gfx/all.inc"
+            .include "data/gfx/gr/all.inc"
             .include "data/objects.inc"
             .include "data/rooms.inc"
 

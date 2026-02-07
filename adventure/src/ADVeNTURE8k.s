@@ -1,4 +1,4 @@
-            .include "data/gfx/all.inc"
+            .include "data/gfx/gr/all.inc"
             .include "data/objects.inc"
             .include "data/rooms.inc"
 
@@ -2000,9 +2000,11 @@ RoomDiffs:  .byte $10, $0f, $0f     ;down from room 01
             .segment "CODE0"
 
             .segment "VECTORS"
-            .word START
-            .word START
-            .word START
+                        ; fff8 bank 0
+                        ; fff9 bank 1
+            .word START ; fffa
+            .word START ; fffc
+            .word START ; fffe
 
             .segment "VECTORS0"
             .word START
