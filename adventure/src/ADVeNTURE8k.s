@@ -110,6 +110,7 @@ object_carried:                 .byte 0     ; object carried by the man
 objman_x_delta:                 .byte 0
 objman_y_delta:                 .byte 0
 curr_obj_number:                .byte 0
+GameObjectsWorkingArea:
 DotMacro zp
 Dragon1Macro
 Dragon2Macro
@@ -717,8 +718,8 @@ SetupRoomObjects:
             lda GameObjects+1,y   ;get the high pointer to object locations
             sta dr_ptr+1
             ldy #$30              ;copy all the objects dynamic information
-:           lda (dr_ptr),y        ; (the rooms and positions) into
-            sta $00a1,y           ; the working area
+:           lda (dr_ptr),y        ; (the rooms and positions) into the working area
+            sta a:GameObjectsWorkingArea,y
             dey
             bpl :-
             lda NumberCurrBase    ;get the level number
@@ -1681,7 +1682,7 @@ GameObjects:
 ; object locations (room and coordinate) for game 01
 Game1Objects:
             ;     Rm,  X,   Y,   Mvt, State
-            .byte $03, $51, $12           ;black dot (normally $15, but moved to $03 for game 01 for convenience)
+            .byte $15, $51, $12           ;black dot
             .byte $0e, $50, $20, $00, $00 ;red dragon
             .byte $01, $50, $20, $00, $00 ;yellow dragon
             .byte $1d, $50, $20, $00, $00 ;green dragon
@@ -1781,30 +1782,6 @@ MagnetMatrix:
 
 JoystickMergeValues:
             .byte  $00, $c0, $30  ;no change, no horizontal, no vertical
-
-LeftOfName:         leftofname_gfxpf_data
-BelowYellowCastle:  belowyellowcastle_gfxpf_data
-SideCorridor:       sidecorridor_gfxpf_data
-NumberRoom:         numberroom_gfxpf_data
-TwoExitRoom:        twoexitroom_gfxpf_data
-BlueMazeTop:        bluemazetop_gfxpf_data
-BlueMaze1:          bluemaze1_gfxpf_data
-BlueMazeBottom:     bluemazebottom_gfxpf_data
-BlueMazeCenter:     bluemazecenter_gfxpf_data
-BlueMazeEntry:      bluemazeentry_gfxpf_data
-MazeMiddle:         mazemiddle_gfxpf_data
-MazeSide:           mazeside_gfxpf_data
-MazeEntry:          mazeentry_gfxpf_data
-CastleDef:          castle_gfxpf_data
-RedMaze1:           redmaze1_gfxpf_data
-RedMazeBottom:      redmazebottom_gfxpf_data
-RedMazeTop:         redmazetop_gfxpf_data
-WhiteCastleEntry:   whitecastleentry_gfxpf_data
-TopEntryRoom:       topentryroom_gfxpf_data
-BlackMaze1:         blackmaze1_gfxpf_data
-BlackMaze3:         blackmaze3_gfxpf_data
-BlackMaze2:         blackmaze2_gfxpf_data
-BlackMazeEntry:     blackmazeentry_gfxpf_data
 
 PortMacro , info ,states
 SurroundMacro

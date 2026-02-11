@@ -110,6 +110,7 @@ object_carried:                 .byte 0     ; object carried by the man
 objman_x_delta:                 .byte 0
 objman_y_delta:                 .byte 0
 curr_obj_number:                .byte 0
+GameObjectsWorkingArea:
 DotMacro zp
 Dragon1Macro
 Dragon2Macro
@@ -721,8 +722,8 @@ SetupRoomObjects:
             lda GameObjects+1,y   ;get the high pointer to object locations
             sta dr_ptr+1
             ldy #$30              ;copy all the objects dynamic information
-:           lda (dr_ptr),y           ; (the rooms and positions) into
-            sta $00a1,y           ; the working area
+:           lda (dr_ptr),y        ; (the rooms and positions) into the working area
+            sta a:GameObjectsWorkingArea,y
             dey
             bpl :-
             lda NumberCurrBase    ;get the level number
@@ -1780,7 +1781,7 @@ GetObjectNoise:
             lda sound_duration_counter
             jmp NoiseDropObject_2 ; and make same noise as drop
 
-LeftOfName:         leftofname_gfxpf_data orig
+LeftOfName:         leftofname_gfxpf_data original
 BelowYellowCastle:  belowyellowcastle_gfxpf_data    ;line shared with above room
 SideCorridor:       sidecorridor_gfxpf_data
 NumberRoom:         numberroom_gfxpf_data
@@ -1794,7 +1795,7 @@ BlueMaze1:          bluemaze1_gfxpf_data
 BlueMazeBottom:     bluemazebottom_gfxpf_data
 BlueMazeCenter:     bluemazecenter_gfxpf_data
 BlueMazeEntry:      bluemazeentry_gfxpf_data
-MazeMiddle:         mazemiddle_gfxpf_data orig
+MazeMiddle:         mazemiddle_gfxpf_data original
 MazeSide:           mazeside_gfxpf_data             ;line shared with above room
 MazeEntry:          mazeentry_gfxpf_data
 CastleDef:          castle_gfxpf_data
@@ -1802,14 +1803,14 @@ CastleDef:          castle_gfxpf_data
 PortMacro ,info
 SurroundMacro
 
-RedMaze1:           redmaze1_gfxpf_data orig
+RedMaze1:           redmaze1_gfxpf_data original
 RedMazeBottom:      redmazebottom_gfxpf_data        ;line shared with room above
-RedMazeTop:         redmazetop_gfxpf_data orig
+RedMazeTop:         redmazetop_gfxpf_data original
 WhiteCastleEntry:   whitecastleentry_gfxpf_data     ;line shared with room above
 TopEntryRoom:       topentryroom_gfxpf_data
-BlackMaze1:         blackmaze1_gfxpf_data orig
+BlackMaze1:         blackmaze1_gfxpf_data original
 BlackMaze3:         blackmaze3_gfxpf_data           ;line shared with room above
-BlackMaze2:         blackmaze2_gfxpf_data orig
+BlackMaze2:         blackmaze2_gfxpf_data original
 BlackMazeEntry:     blackmazeentry_gfxpf_data       ;line shared with room above
 
 BridgeMacro
@@ -1827,7 +1828,7 @@ NullMacro
 NumberMacro ,GfxNum1 ,GfxNum2 ,GfxNum3
 MagnetMacro
 
-RoomsMacro
+RoomsMacro original
 
 ; room differences for different levels (level 1, 2, 3)
 RoomDiffs:  .byte $10, $0f, $0f     ;down from room 01
