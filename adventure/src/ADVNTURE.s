@@ -287,6 +287,7 @@ PosSpriteX: ldy #2              ;start with 10 clock cycles (to avoid HBLANK)
             sty WSYNC           ;wait for horizontal blank
 :           dey                 ;count down the color cycles
             bpl :-              ; (these are 5 machine / 15 color cycles)
+            .assert (* >> 8) = (:- >> 8), error, "Last two instructions must be on same page."
             sta RESP0,x         ;reset the sprite, thus positioning it coarsely
             sta HMP0,x          ;set horizontal (fine) motion of sprite
             rts
