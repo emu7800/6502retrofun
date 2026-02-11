@@ -510,6 +510,7 @@ StoreCount: sty obj_counter       ;if so, store current count
 
 ; convert room number to address
 RoomNumToAddress:
+            .assert .sizeof(RoomDataEntry) = 9, error, "This subroutine assumes RoomDataEntry is 9 bytes long."
             sta tmp1              ;store room number wanted
             sta dr_ptr
             lda #0                ;zero the high byte of the
@@ -809,7 +810,7 @@ PlayerCollision:
 ; check going through the bridge
             lda man_x             ;get the man's X coordinate
             sec
-            sbc $bd               ;subtract the bridge's X coordinate
+            sbc BridgeInfo+1      ;subtract the bridge's X coordinate
             cmp #$0a              ;if less than $0A then forget it
             bcc ReadStick
             cmp #$17              ;if more than $17 then forget it
@@ -1726,15 +1727,15 @@ RedDragMatrix:
             .byte Dragon1Info, man_object    ;red dragon, man
             .byte Dragon1Info, ChaliceInfo   ;red dragon, chalice
             .byte Dragon1Info, WhiteKeyInfo  ;red dragon, white key
-            .byte $00
+            .byte 0
 
 ; yellow dragon's object matrix
 YelDragMatrix:
-            .byte  SwordInfo,     Dragon2Info  ;sword, yellow dragon
-            .byte  YellowKeyInfo, Dragon2Info  ;yellow key, yellow dragon
-            .byte  Dragon2Info,   man_object   ;yellow dragon, man
-            .byte  Dragon2Info,   ChaliceInfo  ;yellow dragon, chalice
-            .byte  $00
+            .byte SwordInfo,     Dragon2Info  ;sword, yellow dragon
+            .byte YellowKeyInfo, Dragon2Info  ;yellow key, yellow dragon
+            .byte Dragon2Info,   man_object   ;yellow dragon, man
+            .byte Dragon2Info,   ChaliceInfo  ;yellow dragon, chalice
+            .byte 0
 
 GreenDragMatrix:
             .byte SwordInfo,   Dragon3Info   ;sword, green dragon
@@ -1743,34 +1744,34 @@ GreenDragMatrix:
             .byte Dragon3Info, BridgeInfo    ;green dragon, bridge
             .byte Dragon3Info, MagnetInfo    ;green dragon, magnet
             .byte Dragon3Info, BlackKeyInfo  ;green dragon, black key
-            .byte $00
+            .byte 0
 
 ; dragon difficulty
-DragonDiff: .byte  $d0, $e8       ;level 1: Am, Pro
-            .byte  $f0, $f6       ;level 2: Am, Pro
-            .byte  $f0, $f6       ;level 3: Am, Pro
+DragonDiff: .byte $d0, $e8       ;level 1: Am, Pro
+            .byte $f0, $f6       ;level 2: Am, Pro
+            .byte $f0, $f6       ;level 3: Am, Pro
 
 ; bat object matrix
-BatMatrix:  .byte  BlackBatInfo, ChaliceInfo    ;bat, chalice
-            .byte  BlackBatInfo, SwordInfo      ;bat, sword
-            .byte  BlackBatInfo, BridgeInfo     ;bat, bridge
-            .byte  BlackBatInfo, YellowKeyInfo  ;bat, yellow key
-            .byte  BlackBatInfo, WhiteKeyInfo   ;bat, white key
-            .byte  BlackBatInfo, BlackKeyInfo   ;bat, black key
-            .byte  BlackBatInfo, Dragon1Info    ;bat, red dragon
-            .byte  BlackBatInfo, Dragon2Info    ;bat, yellow dragon
-            .byte  BlackBatInfo, Dragon3Info    ;bat, green dragon
-            .byte  BlackBatInfo, MagnetInfo     ;bat, magnet
-            .byte  0
+BatMatrix:  .byte BlackBatInfo, ChaliceInfo    ;bat, chalice
+            .byte BlackBatInfo, SwordInfo      ;bat, sword
+            .byte BlackBatInfo, BridgeInfo     ;bat, bridge
+            .byte BlackBatInfo, YellowKeyInfo  ;bat, yellow key
+            .byte BlackBatInfo, WhiteKeyInfo   ;bat, white key
+            .byte BlackBatInfo, BlackKeyInfo   ;bat, black key
+            .byte BlackBatInfo, Dragon1Info    ;bat, red dragon
+            .byte BlackBatInfo, Dragon2Info    ;bat, yellow dragon
+            .byte BlackBatInfo, Dragon3Info    ;bat, green dragon
+            .byte BlackBatInfo, MagnetInfo     ;bat, magnet
+            .byte 0
 
 PortOffsets:
-            .byte  $09, $12, $1b       ;portcullis #1, #2, #3
+            .byte $09, $12, $1b       ;portcullis #1, #2, #3
 
-KeyOffsets: .byte  $63, $6c, $75       ;keys (yellow, white, black)
+KeyOffsets: .byte $63, $6c, $75       ;keys (yellow, white, black)
 EntryRoomOffsets:
-            .byte  $12, $1a, $1b       ;castle entry rooms (yellow, white, black)
+            .byte $12, $1a, $1b       ;castle entry rooms (yellow, white, black)
 CastleRoomOffsets:
-            .byte  $11, $0f, $10       ;castle rooms (yellow, white, black)ffff
+            .byte $11, $0f, $10       ;castle rooms (yellow, white, black)ffff
 
 MagnetMatrix:
             .byte YellowKeyInfo, MagnetInfo   ;yellow key, magnet
@@ -1782,7 +1783,7 @@ MagnetMatrix:
             .byte 0
 
 JoystickMergeValues:
-            .byte  $00, $c0, $30  ;no change, no horizontal, no vertical
+            .byte $00, $c0, $30  ;no change, no horizontal, no vertical
 
 PortMacro , info ,states
 SurroundMacro
