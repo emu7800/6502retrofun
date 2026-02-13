@@ -133,7 +133,7 @@ tmp1:                           .byte 0
 SurroundMacro zp
 GetObjectState_Arg:             .byte 0
 NumberMacro zp
-is_game_active:                 .byte 0      ; $ff=no, 0=yes
+is_game_complete:               .byte 0      ; $ff=yes, 0=no
 sound_duration_counter:         .byte 0
 sound_type:                     .byte 0
 linked_obj_index:               .byte 0
@@ -614,18 +614,17 @@ MainGameLoop:
             jsr CheckGameStart    ;check for game start
             jsr MakeSound         ;make noise if necessary
             jsr CheckInput        ;check for input
-            lda is_game_active    ;is the game active?
-            bne NonActiveLoop     ;if not branch
-            lda ChaliceInfo       ;get the room the chalice is in
-            cmp #$12              ;is it in the yellow castle?
-            bne @MainGameLoop_2   ;if not branch
+            lda is_game_complete
+            bne NonActiveLoop
+            lda ChaliceInfo+ObjectInfoType::room_num  ;get the room the chalice is in
+            cmp #RoomNumbers_YellowCastleInterior     ;is it in the yellow castle?
+            bne :+                ;if not branch
             lda #$ff
             sta sound_duration_counter  ;set the note count to maximum
-            sta is_game_active    ;set the game to inactive
+            sta is_game_complete  ;complete the game since chalice is returned
             lda #0                ;set the noise type to end-noise
             sta sound_type
-@MainGameLoop_2:
-            ldy #0                ;allow joystick read - all movement
+:           ldy #0                ;allow joystick read - all movement
             jsr BallMovement      ;check ball collisions and move ball
             jsr MoveCarriedObject ;move the carried object
             jsr DoVSYNC           ;wait for VSYNC
@@ -672,17 +671,18 @@ CheckGameStart:
             eor #$ff              ;flip (as reset active low)
             and cached_swchb      ;compare with what was before
             and #1                ;and check only the reset switch
-            beq CheckReset        ;if no reset then branch
-            lda is_game_active    ;has the game started?
-            cmp #$ff              ;if not then branch
-            beq SetupRoomObjects
-            lda #$11              ;get the yellow castle room
+            beq NotReset          ;if no reset then branch
+            lda is_game_complete
+            bne SetupRoomObjects  ;branch since game has been completed
+
+ReincarnatePlayer:
+            lda #RoomNumbers_YellowCastle
             sta curr_room         ;make it the current room
             sta prev_room         ;make it the previous room
-            lda #$50              ;get the X coordinate
+            lda #80               ;get the X coordinate
             sta man_x             ;make it the current man X coordinate
             sta prev_man_x        ;make it the previous man X coordinate
-            lda #$20              ;get the Y coordinate
+            lda #32               ;get the Y coordinate
             sta man_y             ;make it the current man Y coordinate
             sta prev_man_y        ;make it the previous man Y coordinate
             lda #0
@@ -692,11 +692,11 @@ CheckGameStart:
             sta sound_duration_counter  ;set the note count to zero
             lda #$a2
             sta object_carried    ;set no object being carried
-CheckReset: lda SWCHB             ;get the console switches
+NotReset:   lda SWCHB             ;get the console switches
             eor #$ff              ;flip (as select active low)
             and cached_swchb      ;compare with what was before
             and #2                ;and check only the select switch
-            beq StoreSwitches     ;branch if select not being used
+            beq NotSelect         ;branch if select not being used
             lda curr_room         ;get the current room
             cmp #0                ;is it the "number" room?
             bne SetupRoomObjects  ;branch if not
@@ -732,10 +732,10 @@ SetupRoomObjects:
             jsr PrintDisplay      ;display rooms and objects
 SignalGameStart:
             lda #0                ;signal that the game has started
-            sta is_game_active
+            sta is_game_complete
             lda #$a2              ;set no object being carried
             sta object_carried
-StoreSwitches:
+NotSelect:
             lda SWCHB             ;store the current console switches
             sta cached_swchb
             rts
