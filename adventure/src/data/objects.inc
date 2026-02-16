@@ -1,7 +1,11 @@
-.struct ObjectInfoType
-    room_num      .byte
+.struct ObjectPosType
     xcoord        .byte
     ycoord        .byte
+.endstruct
+
+.struct ObjectInfoType
+    room_num      .byte
+    pos           .tag ObjectPosType
 .endstruct
 
 .struct LongObjectInfoType
@@ -14,8 +18,7 @@
 .endstruct
 .struct StateEntryType
     state         .tag StateType
-    xcoord        .byte
-    ycoord        .byte
+    pos           .tag ObjectPosType
 .endstruct
 
 .struct ObjectType

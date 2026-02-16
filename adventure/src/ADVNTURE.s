@@ -84,10 +84,10 @@ TIM64T      = $0296     ; W set 64 clock interval
             .zeropage   ; segment mapped to $80
 
 roomgfx_base:                   .word 0
-print_ptr:                      .word 0
-print2_ptr:                     .word 0
-print3_ptr:                     .word 0
-print4_ptr:                     .word 0
+p0gfx_base:                     .word 0
+p1gfx_base:                     .word 0
+player0pos:                     .tag ObjectPosType
+player1pos:                     .tag ObjectPosType
 curr_room:                      .byte 0     ; current room number
 man_x:                          .byte 0     ; man's x coordinate
 man_y:                          .byte 0     ; man's y coordinate
@@ -155,10 +155,10 @@ START:      jmp StartGame
 
 PrintDisplay:
             sta HMCLR       ;clear horizontal motion
-            lda print3_ptr  ;position Player00 sprite to
+            lda player0pos+ObjectPosType::xcoord  ;position Player00 sprite to
             ldx #0          ; the X coordinate of Object1
             jsr PosSpriteX
-            lda print4_ptr  ;position Player01 sprite to
+            lda player1pos+ObjectPosType::xcoord  ;position Player01 sprite to
             ldx #1          ; the X coordinate of Object2
             jsr PosSpriteX
             lda man_x       ;position ball sprite to
@@ -171,9 +171,8 @@ PrintDisplay:
             sec
             sbc #4          ;and adjust it (by four scan lines)
             sta man_y2      ; for printing (so Y coordinate specifies middle)
-@PrintDisplay_1:
-            lda INTIM                 ;wait for end of the
-            bne @PrintDisplay_1       ; current frame
+:           lda INTIM                 ;wait for end of the
+            bne :-                    ; current frame
             lda #0
             sta p0gfx_offset          ;set Player00 definition index
             sta p1gfx_offset          ;set Player01 definition index
@@ -203,12 +202,12 @@ PrintDisplay:
 ; print Player01 (Object2)
 PrintPlayer01:
             lda scan_line             ;get current scan line
-            sec                       ;have we reached Object2's
-            sbc print4_ptr+1          ; Y coordinate?
+            sec                       ;have we reached Object2's Y coordinate?
+            sbc player1pos+ObjectPosType::ycoord
             sta WSYNC                 ;wait for horizontal blank
             bpl PrintPlayer00         ;if not, branch
             ldy p1gfx_offset          ;get the Player01 definition index
-            lda (print2_ptr),y        ;get the next Player01 definition byte
+            lda (p1gfx_base),y        ;get the next Player01 definition byte
             sta GRP1                  ; and display
             beq PrintPlayer00         ;if zero then definition finished
             inc p1gfx_offset          ;goto next Player01 definition byte
@@ -216,11 +215,11 @@ PrintPlayer01:
 PrintPlayer00:
             ldx #0
             lda scan_line            ;get the current scan line
-            sec                      ;have we reached the Object1's
-            sbc print3_ptr+1         ; Y coordinate?
+            sec                      ;have we reached the Object1's Y coordinate?
+            sbc player0pos+ObjectPosType::ycoord
             bpl @PrintPlayer00_1     ;if not then branch
             ldy p0gfx_offset         ;get Player00 definition index
-            lda (print_ptr),y        ;get the next Player00 definition byte
+            lda (p0gfx_base),y       ;get the next Player00 definition byte
             tax
             beq @PrintPlayer00_1     ;if zero then definition finished
             inc p0gfx_offset         ;go to next Player00 definition byte
@@ -249,7 +248,7 @@ PrintPlayer00:
             lda (roomgfx_base),y     ;get last room definition byte
             sta PF2                  ; and display
             iny
-            sty roomgfx_offset        ;save for next time
+            sty roomgfx_offset       ;save for next time
 @PrintPlayer00_3:
             dec scan_line            ;goto next scan line
             lda scan_line            ;get the scan line
@@ -379,10 +378,10 @@ SetupObjectPrint:
             sta dr_ptr+1
             ldy #1
             lda (dr_ptr),y        ;get Object1's X coordinate
-            sta print3_ptr        ; and store for print
+            sta player0pos+ObjectPosType::xcoord  ; and store for print
             ldy #2
             lda (dr_ptr),y        ;get Object1's Y coordinate
-            sta print3_ptr+1      ; and store for print
+            sta player0pos+ObjectPosType::ycoord  ; and store for print
             lda a:Objects+ObjectType::currstate_ptr,x
             sta dr_ptr
             lda a:Objects+ObjectType::currstate_ptr+1,x
@@ -397,10 +396,10 @@ SetupObjectPrint:
             jsr GetObjectState    ;find current state in the state information
             iny                   ;index to the state's corresponding graphic pointer
             lda (dr_ptr),y        ;get Object1's low graphic address
-            sta print_ptr         ; and store for print
+            sta p0gfx_base        ; and store for print
             iny
             lda (dr_ptr),y        ;get Object1's high graphic address
-            sta print_ptr+1       ; and store for print
+            sta p0gfx_base+1      ; and store for print
 ; check B&W for Object01
             lda SWCHB             ;get console switches
             and #8                ;check B&W switches
@@ -427,12 +426,12 @@ ResizeObject:
             sta dr_ptr
             lda a:Objects+ObjectType::info_ptr+1,x
             sta dr_ptr+1
-            ldy #1
+            ldy #ObjectInfoType::pos+ObjectPosType::xcoord
             lda (dr_ptr),y        ;get Object2's X coordinate
-            sta print4_ptr        ; and store for print
-            ldy #2
+            sta player1pos+ObjectPosType::xcoord  ; and store for print
+            ldy #ObjectInfoType::pos+ObjectPosType::ycoord
             lda (dr_ptr),y        ;get Object2's Y coordinate
-            sta print4_ptr+1      ; and store for print
+            sta player1pos+ObjectPosType::ycoord  ; and store for print
             lda a:Objects+ObjectType::currstate_ptr,x
             sta dr_ptr
             lda a:Objects+ObjectType::currstate_ptr+1,x
@@ -447,10 +446,10 @@ ResizeObject:
             jsr GetObjectState    ;find the current state in the state information
             iny                   ;index to the state's corresponding graphic pointer
             lda (dr_ptr),y
-            sta print2_ptr        ;get Object2's low graphic address
+            sta p1gfx_base        ;get Object2's low graphic address
             iny
             lda (dr_ptr),y        ;get Object2's high graphic address
-            sta print2_ptr+1
+            sta p1gfx_base+1
 ; check B&W for Object2
             lda SWCHB             ;get console switches
             and #8                ;check B&W switch
@@ -879,7 +878,7 @@ PlayerCollision:
             bcc ReadStick
             cmp #$17              ;if more than $17 then forget it
             bcs ReadStick
-            lda z:BridgeInfo+ObjectInfoType::ycoord
+            lda z:BridgeInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             sec
             sbc man_y             ;subtract the man's Y coordinate
             cmp #$fc
@@ -1508,14 +1507,14 @@ MoveBat:    inc BlackBatCurrBase  ;put bat in the next state
 ; see if bat can pick up an object
             lda $01,x             ;get the object's X coordinate
             sec
-            sbc z:BlackBatInfo+ObjectInfoType::xcoord  ;find the difference with the Bat's X coordinate
+            sbc z:BlackBatInfo+ObjectInfoType::pos+ObjectPosType::xcoord  ;find the difference with the Bat's X coordinate
             clc
             adc #4                ;adjust so Bat in middle of object
             and #$f8              ;is Bat within seven pixels?
             bne @MoveBat_4        ;if not, no pickup possible
             lda $02,x             ;get the object's Y coordinate
             sec
-            sbc z:BlackBatInfo+ObjectInfoType::ycoord  ;find the difference with the Bat's
+            sbc z:BlackBatInfo+ObjectInfoType::pos+ObjectPosType::ycoord  ;find the difference with the Bat's
             clc                   ; Y coordinate
             adc #4                ;adjust
             and #$f8              ;is the Bat within seven pixels?
@@ -1528,11 +1527,11 @@ MoveBat:    inc BlackBatCurrBase  ;put bat in the next state
 @MoveBat_4: ldx BlackBatCarriedObject  ;get object being carried by Bat
             lda BlackBatInfo      ;get the Bat's room
             sta $00,x             ;store this as the object's room
-            lda z:BlackBatInfo+ObjectInfoType::xcoord
+            lda z:BlackBatInfo+ObjectInfoType::pos+ObjectPosType::xcoord
             clc
             adc #8                ;adjust to the right
             sta $01,x             ;make it the object's X coordinate
-            lda z:BlackBatInfo+ObjectInfoType::ycoord
+            lda z:BlackBatInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             sta $02,x             ;store is as the object's Y coordinate
             lda BlackBatCarriedObject  ;get the object being carried by the bat
             ldy object_carried
@@ -1623,10 +1622,10 @@ CastleRoomOffsets:
             .byte  $11, $0f, $10       ;castle rooms (yellow, white, black)
 
 ; deal with magnet
-Mag:        lda z:MagnetInfo+ObjectInfoType::ycoord
+Mag:        lda z:MagnetInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             sec
             sbc #8                ;adjust to its "poles"
-            sta z:MagnetInfo+ObjectInfoType::ycoord
+            sta z:MagnetInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             lda #0                ;con difficulty!
             sta MoveGameObjectArg_Difficulty
             lda #<MagnetMatrix    ;set low address of object store
@@ -1638,10 +1637,10 @@ Mag:        lda z:MagnetInfo+ObjectInfoType::ycoord
             beq @Mag_2            ;if none, then forget it
             ldy #1                ;set delta to one
             jsr MoveGroundObject  ;move object
-@Mag_2:     lda z:MagnetInfo+ObjectInfoType::ycoord  ;reset the magnet's Y coordinate
+@Mag_2:     lda z:MagnetInfo+ObjectInfoType::pos+ObjectPosType::ycoord  ;reset the magnet's Y coordinate
             clc
             adc #8
-            sta z:MagnetInfo+ObjectInfoType::ycoord
+            sta z:MagnetInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             rts
 
 ; magnet object matrix
@@ -1662,7 +1661,7 @@ Surround:   lda curr_room         ;set the current room
             cmp #8                ;is it invisible?
             beq @Surround_2       ;if so branch
             lda #0                ;if not, signal the invisible surround not wanted
-            sta z:SurroundInfo+ObjectInfoType::ycoord
+            sta z:SurroundInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             jmp @Surround_Done
 
 @Surround_2:
@@ -1671,23 +1670,23 @@ Surround:   lda curr_room         ;set the current room
             lda man_x             ;get the man's X coordinate
             sec
             sbc #$0e              ;adjust for surround,
-            sta z:SurroundInfo+ObjectInfoType::xcoord
+            sta z:SurroundInfo+ObjectInfoType::pos+ObjectPosType::xcoord
             lda man_y             ;get the man's Y coordinate
             clc
             adc #$0e              ;adjust for surround
-            sta z:SurroundInfo+ObjectInfoType::ycoord
-            lda z:SurroundInfo+ObjectInfoType::xcoord
+            sta z:SurroundInfo+ObjectInfoType::pos+ObjectPosType::ycoord
+            lda z:SurroundInfo+ObjectInfoType::pos+ObjectPosType::xcoord
             cmp #$f0              ;is it close to the right edge?
             bcc @Surround_3       ;branch if not
             lda #1                ;flick surround to the other side of the screen
-            sta z:SurroundInfo+ObjectInfoType::xcoord
+            sta z:SurroundInfo+ObjectInfoType::pos+ObjectPosType::xcoord
             jmp @Surround_Done
 
 @Surround_3:
             cmp #$82              ;???
             bcc @Surround_Done    ;???
             lda #$81              ;???
-            sta z:SurroundInfo+ObjectInfoType::xcoord ;???
+            sta z:SurroundInfo+ObjectInfoType::pos+ObjectPosType::xcoord ;???
 @Surround_Done:
             rts
 
