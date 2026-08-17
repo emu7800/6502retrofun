@@ -111,9 +111,9 @@ objman_x_delta:                 .byte 0
 objman_y_delta:                 .byte 0
 curr_obj_number:                .byte 0
 DotMacro zp
-Dragon1Macro
-Dragon2Macro
-Dragon3Macro
+RedDragonMacro
+YellowDragonMacro
+GreenDragonMacro
 MagnetMacro zp
 SwordMacro zp
 ChaliceMacro zp
@@ -683,9 +683,9 @@ CheckGameStart:
             sta man_y             ;make it the current man Y coordinate
             sta prev_man_y        ;make it the previous man Y coordinate
             lda #0
-            sta Dragon1CurrBase   ;set the red dragon's state to OK
-            sta Dragon2CurrBase   ;set the yellow dragon's state to OK
-            sta Dragon3CurrBase   ;set the green dragon's state to OK
+            sta RedDragonCurrBase   ;set the red dragon's state to OK
+            sta YellowDragonCurrBase   ;set the yellow dragon's state to OK
+            sta GreenDragonCurrBase   ;set the green dragon's state to OK
             sta sound_duration_counter  ;set the note count to zero
             lda #$a2
             sta object_carried    ;set no object being carried
@@ -1657,21 +1657,19 @@ GetObjectNoise:
 
             .rodata
 
-; Room bounds data.
-;
-; e.g. the chalice can only exist in room range [$13, $1a] for level 3.
+; Object randomization room bounds data for level 3.
 Lvl3ObjRoomBounds:
-            .byte ChaliceInfo,   $13, $1a     ;chalice
-            .byte Dragon1Info,   $01, $1d     ;red dragon
-            .byte Dragon2Info,   $01, $1d     ;yellow dragon
-            .byte Dragon3Info,   $01, $1d     ;green dragon
-            .byte SwordInfo,     $01, $1d     ;sword
-            .byte BridgeInfo,    $01, $1d     ;bridge
-            .byte YellowKeyInfo, $01, $1d     ;yellow key
-            .byte WhiteKeyInfo,  $01, $16     ;white key
-            .byte BlackKeyInfo,  $01, $12     ;black key
-            .byte BlackBatInfo,  $01, $1d     ;bat
-            .byte MagnetInfo,    $01, $1d     ;magnet
+            .byte ChaliceInfo,      roomrange_chalice_start,      roomrange_chalice_end
+            .byte RedDragonInfo,    roomrange_reddragon_start,    roomrange_reddragon_end
+            .byte YellowDragonInfo, roomrange_yellowdragon_start, roomrange_yellowdragon_end
+            .byte GreenDragonInfo,  roomrange_greendragon_start,  roomrange_greendragon_end
+            .byte SwordInfo,        roomrange_sword_start,        roomrange_sword_end
+            .byte BridgeInfo,       roomrange_bridge_start,       roomrange_bridge_end
+            .byte YellowKeyInfo,    roomrange_yellowkey_start,    roomrange_yellowkey_end
+            .byte WhiteKeyInfo,     roomrange_whitekey_start,     roomrange_whitekey_end
+            .byte BlackKeyInfo,     roomrange_blackkey_start,     roomrange_blackkey_end
+            .byte BlackBatInfo,     roomrange_bat_start,          roomrange_bat_end
+            .byte MagnetInfo,       roomrange_magnet_start,       roomrange_magnet_end
 
 GameObjects:
             .word Game1Objects      ;pointer to object locations for game 01
@@ -1680,67 +1678,68 @@ GameObjects:
 
 ; object locations (room and coordinate) for game 01
 Game1Objects:
-            ;     Rm,  X,   Y,   Mvt, State
-            .byte $03, $51, $12           ;black dot (normally $15, but moved to $03 for game 01 for convenience)
-            .byte $0e, $50, $20, $00, $00 ;red dragon
-            .byte $01, $50, $20, $00, $00 ;yellow dragon
-            .byte $1d, $50, $20, $00, $00 ;green dragon
-            .byte $1b, $80, $20           ;magnet
-            .byte $12, $20, $20           ;sword
-            .byte $1c, $30, $20           ;chalice
-            .byte $04, $29, $37           ;bridge
-            .byte $11, $20, $40           ;yellow key
-            .byte $0e, $20, $40           ;white key
-            .byte $1d, $20, $40           ;black key
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $1a, $20, $20, $00, $00 ;bat
-            .byte $78, $00                ;bat (carrying, fed-up)
+;                 Rm,                                    X,   Y,   Mvt, State
+            .byte roomnum_BlackMaze3,                    $51, $12           ;black dot
+            .byte roomnum_TopEntryRoom1,                 $50, $20, $00, $00 ;red dragon
+            .byte roomnum_BelowYellowCastleLeftThinWall, $50, $20, $00, $00 ;yellow dragon
+            .byte roomnum_TopEntryRoom2,                 $50, $20, $00, $00 ;green dragon
+            .byte roomnum_BlackCastleEntry,              $80, $20           ;magnet
+            .byte roomnum_YellowCastleEntry,             $20, $20           ;sword
+            .byte roomnum_OtherPurpleRoom,               $30, $20           ;chalice
+            .byte roomnum_BlueMazeTop,                   $29, $37           ;bridge
+            .byte roomnum_YellowCastle,                  $20, $40           ;yellow key
+            .byte roomnum_TopEntryRoom1,                 $20, $40           ;white key
+            .byte roomnum_TopEntryRoom2,                 $20, $40           ;black key
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_WhiteCastleEntry,              $20, $20, $00, $00 ;bat
+            .byte $78, $00                                                  ;bat (carrying, fed-up)
 
 ; object locations (room and coordinate) for games 02 and 03
 Game2Objects:
             ;     Rm,  X,   Y,   Mvt, State
-            .byte $15, $51, $12           ;black dot
-            .byte $14, $50, $20, $a0, $00 ;red dragon
-            .byte $19, $50, $20, $a0, $00 ;yellow dragon
-            .byte $04, $50, $20, $a0, $00 ;green dragon
-            .byte $0e, $80, $20           ;magnet
-            .byte $11, $20, $20           ;sword
-            .byte $14, $30, $20           ;chalice
-            .byte $0b, $40, $40           ;bridge
-            .byte $09, $20, $40           ;yellow key
-            .byte $06, $20, $40           ;white key
-            .byte $19, $20, $40           ;black key
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $02, $20, $20, $90, $00 ;bat
-            .byte $78, $00                ;bat (carrying, fed-up)
+            .byte roomnum_BlackMaze3,                    $51, $12           ;black dot
+            .byte roomnum_BlackMaze2,                    $50, $20, $a0, $00 ;red dragon
+            .byte roomnum_RedMazeBottom,                 $50, $20, $a0, $00 ;yellow dragon
+            .byte roomnum_BlueMazeTop,                   $50, $20, $a0, $00 ;green dragon
+            .byte roomnum_TopEntryRoom1,                 $80, $20           ;magnet
+            .byte roomnum_YellowCastle,                  $20, $20           ;sword
+            .byte roomnum_BlackMaze2,                    $30, $20           ;chalice
+            .byte roomnum_MazeSide,                      $40, $40           ;bridge
+            .byte roomnum_MazeMiddle,                    $20, $40           ;yellow key
+            .byte roomnum_BlueMazeBottom,                $20, $40           ;white key
+            .byte roomnum_RedMazeBottom,                 $20, $40           ;black key
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_BelowYellowCastle,        $20, $20, $90, $00 ;bat
+            .byte $78, $00                                                  ;bat (carrying, fed-up)
+
 
 ; red dragon's object matrix
 RedDragMatrix:
-            .byte SwordInfo,   Dragon1Info   ;sword, red dragon
-            .byte Dragon1Info, man_object    ;red dragon, man
-            .byte Dragon1Info, ChaliceInfo   ;red dragon, chalice
-            .byte Dragon1Info, WhiteKeyInfo  ;red dragon, white key
+            .byte SwordInfo,   RedDragonInfo   ;sword, red dragon
+            .byte RedDragonInfo, man_object    ;red dragon, man
+            .byte RedDragonInfo, ChaliceInfo   ;red dragon, chalice
+            .byte RedDragonInfo, WhiteKeyInfo  ;red dragon, white key
             .byte $00
 
 ; yellow dragon's object matrix
 YelDragMatrix:
-            .byte  SwordInfo,     Dragon2Info  ;sword, yellow dragon
-            .byte  YellowKeyInfo, Dragon2Info  ;yellow key, yellow dragon
-            .byte  Dragon2Info,   man_object   ;yellow dragon, man
-            .byte  Dragon2Info,   ChaliceInfo  ;yellow dragon, chalice
+            .byte  SwordInfo,     YellowDragonInfo  ;sword, yellow dragon
+            .byte  YellowKeyInfo, YellowDragonInfo  ;yellow key, yellow dragon
+            .byte  YellowDragonInfo,   man_object   ;yellow dragon, man
+            .byte  YellowDragonInfo,   ChaliceInfo  ;yellow dragon, chalice
             .byte  $00
 
 GreenDragMatrix:
-            .byte SwordInfo,   Dragon3Info   ;sword, green dragon
-            .byte Dragon3Info, man_object    ;green dragon, man
-            .byte Dragon3Info, ChaliceInfo   ;green dragon, chalice
-            .byte Dragon3Info, BridgeInfo    ;green dragon, bridge
-            .byte Dragon3Info, MagnetInfo    ;green dragon, magnet
-            .byte Dragon3Info, BlackKeyInfo  ;green dragon, black key
+            .byte SwordInfo,   GreenDragonInfo   ;sword, green dragon
+            .byte GreenDragonInfo, man_object    ;green dragon, man
+            .byte GreenDragonInfo, ChaliceInfo   ;green dragon, chalice
+            .byte GreenDragonInfo, BridgeInfo    ;green dragon, bridge
+            .byte GreenDragonInfo, MagnetInfo    ;green dragon, magnet
+            .byte GreenDragonInfo, BlackKeyInfo  ;green dragon, black key
             .byte $00
 
 ; dragon difficulty
@@ -1755,9 +1754,9 @@ BatMatrix:  .byte  BlackBatInfo, ChaliceInfo    ;bat, chalice
             .byte  BlackBatInfo, YellowKeyInfo  ;bat, yellow key
             .byte  BlackBatInfo, WhiteKeyInfo   ;bat, white key
             .byte  BlackBatInfo, BlackKeyInfo   ;bat, black key
-            .byte  BlackBatInfo, Dragon1Info    ;bat, red dragon
-            .byte  BlackBatInfo, Dragon2Info    ;bat, yellow dragon
-            .byte  BlackBatInfo, Dragon3Info    ;bat, green dragon
+            .byte  BlackBatInfo, RedDragonInfo    ;bat, red dragon
+            .byte  BlackBatInfo, YellowDragonInfo    ;bat, yellow dragon
+            .byte  BlackBatInfo, GreenDragonInfo    ;bat, green dragon
             .byte  BlackBatInfo, MagnetInfo     ;bat, magnet
             .byte  0
 
@@ -1766,9 +1765,9 @@ PortOffsets:
 
 KeyOffsets: .byte  $63, $6c, $75       ;keys (yellow, white, black)
 EntryRoomOffsets:
-            .byte  $12, $1a, $1b       ;castle entry rooms (yellow, white, black)
+            .byte  roomnum_YellowCastleEntry, roomnum_WhiteCastleEntry, roomnum_BlackCastleEntry
 CastleRoomOffsets:
-            .byte  $11, $0f, $10       ;castle rooms (yellow, white, black)ffff
+            .byte  roomnum_YellowCastle, roomnum_WhiteCastle, roomnum_BlackCastle
 
 MagnetMatrix:
             .byte YellowKeyInfo, MagnetInfo   ;yellow key, magnet
@@ -1822,15 +1821,7 @@ MagnetMacro
 
 ObjectsMacro
 
-RoomsMacro
-
-; room differences for different levels (level 1, 2, 3)
-RoomDiffs:  .byte $10, $0f, $0f     ;down from room 01
-            .byte $05, $11, $11     ;down from room 02
-            .byte $1d, $0a, $0a     ;down from room 03
-            .byte $1c, $16, $16     ;U/L/R/D from room 1b (black castle room)
-            .byte $1b, $0c, $0c     ;down from room 1c
-            .byte $03, $0c, $0c     ;up from room 1d (top entry room)
+RoomsTableMacro
 
 
             .segment "CODE0"

@@ -6,7 +6,7 @@
 
 .struct LongObjectInfoType
     .tag ObjectInfoType
-    move          .byte  ; optional, not all objects use
+    move          .byte
 .endstruct
 
 .struct StateType
@@ -70,19 +70,19 @@
 .endif
 .endmacro
 
-.macro Dragon1Macro
-    Dragon1Info:       .tag LongObjectInfoType
-    Dragon1CurrBase:   .byte 0
+.macro RedDragonMacro
+    RedDragonInfo:        .tag LongObjectInfoType
+    RedDragonCurrBase:    .byte 0
 .endmacro
 
-.macro Dragon2Macro
-    Dragon2Info:       .tag LongObjectInfoType
-    Dragon2CurrBase:   .byte 0
+.macro YellowDragonMacro
+    YellowDragonInfo:     .tag LongObjectInfoType
+    YellowDragonCurrBase: .byte 0
 .endmacro
 
-.macro Dragon3Macro
-    Dragon3Info:       .tag LongObjectInfoType
-    Dragon3CurrBase:   .byte 0
+.macro GreenDragonMacro
+    GreenDragonInfo:      .tag LongObjectInfoType
+    GreenDragonCurrBase:  .byte 0
 .endmacro
 
 .macro MagnetMacro zp
@@ -320,22 +320,22 @@
     .byte 0
 
 ; 06 dragon #1 (aka, "Rhindle")
-    .word Dragon1Info
-    .word Dragon1CurrBase
+    .word RedDragonInfo
+    .word RedDragonCurrBase
     .word DragonStates
     .byte $36, $0e ; red
     .byte 0
 
 ; 07 dragon #2 (aka, "Yorgle")
-    .word Dragon2Info
-    .word Dragon2CurrBase
+    .word YellowDragonInfo
+    .word YellowDragonCurrBase
     .word DragonStates
     .byte $1a, $06 ; yellow
     .byte 0
 
 ; 08 dragon #3 (aka,"Grundle")
-    .word Dragon3Info
-    .word Dragon3CurrBase
+    .word GreenDragonInfo
+    .word GreenDragonCurrBase
     .word DragonStates
     .byte $c8, 0 ; green
     .byte 0
