@@ -1,373 +1,270 @@
-.struct RoomDataEntry
-    gfx_ptr     .word  ; room graphics data
+color_black       = $00
+color_invisible   = $08
+color_white       = $0c
+color_yellow      = $1a
+color_red         = $36
+color_purple      = $66
+color_blue        = $86
+color_lightblue   = $98
+color_turquoise   = $a8
+color_lightgreen  = $b8
+color_green       = $c8
+color_darkgreen   = $d8
+color_darkyellow  = $e8
+
+bw_color_0        = $02
+bw_color_1        = $08
+bw_color_2        = $0a
+bw_color_3        = $0c
+
+pf_control_leftthinwall  = %10000000
+pf_control_rightthinwall = %01000000
+pf_control_4bl           = %00100000
+pf_control_pfp           = %00000100
+pf_control_ref           = %00000001
+
+.struct RoomTableEntry
+    gfx_ptr     .word
     color       .byte
     bw_color    .byte
-    pf_control  .byte  ; 7=if left thin wall wanted, 6=if right thin wall wanted, 5-0=playfield control
+    pf_control  .byte
     room_up     .byte
     room_right  .byte
     room_down   .byte
     room_left   .byte
 .endstruct
 
-.enum ColorNTSC
-    Grey        = %00000000
-    Gold        = %00010000
-    Orange      = %00100000
-    RedOrange   = %00110000
-    Pink        = %01000000
-    Purple      = %01010000
-    PurpleBlue  = %01100000
-    Blue2       = %01110000
-    Blue        = %10000000
-    LightBlue   = %10010000
-    Turquoise   = %10100000
-    GreenBlue   = %10110000
-    Green       = %11000000
-    YellowGreen = %11010000
-    OrangeGreen = %11100000
-    LightOrange = %11110000
-.endenum
+.macro RoomsTableMacro
 
-.macro RoomsMacro original
-    Rooms:
+Rooms:
+roomnum_NumberRoom = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word NumberRoom
+    .byte color_purple, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_NumberRoom, roomnum_NumberRoom, roomnum_NumberRoom, roomnum_NumberRoom
 
-    RoomNumbers_NumberRoom1 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word NumberRoom                        ; 00 game select
-    .byte ColorNTSC::PurpleBlue | 6
-    .byte ColorNTSC::Grey       | 10
-    .byte %00100001
-    .byte RoomNumbers_NumberRoom1           ; up
-    .byte RoomNumbers_NumberRoom1           ; right
-    .byte RoomNumbers_NumberRoom1           ; down
-    .byte RoomNumbers_NumberRoom1           ; left
+roomnum_BelowYellowCastleLeftThinWall = (* - Rooms) / .sizeof(RoomTableEntry)
+roomrange_reddragon_start    = roomnum_BelowYellowCastleLeftThinWall
+roomrange_yellowdragon_start = roomnum_BelowYellowCastleLeftThinWall
+roomrange_greendragon_start  = roomnum_BelowYellowCastleLeftThinWall
+roomrange_sword_start        = roomnum_BelowYellowCastleLeftThinWall
+roomrange_bridge_start       = roomnum_BelowYellowCastleLeftThinWall
+roomrange_yellowkey_start    = roomnum_BelowYellowCastleLeftThinWall
+roomrange_whitekey_start     = roomnum_BelowYellowCastleLeftThinWall
+roomrange_blackkey_start     = roomnum_BelowYellowCastleLeftThinWall
+roomrange_bat_start          = roomnum_BelowYellowCastleLeftThinWall
+roomrange_magnet_start       = roomnum_BelowYellowCastleLeftThinWall
+    .word BelowYellowCastle
+    .byte color_darkgreen, bw_color_2
+    .byte pf_control_leftthinwall | pf_control_4bl | pf_control_ref
+    .byte roomnum_BlueMazeEntry, roomnum_BelowYellowCastle, roomnum_downfrom_BelowYellowCastleLeftThinWall, roomnum_BelowYellowCastleRightThinWall
 
-    RoomNumbers_BelowYellowCastle1 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BelowYellowCastle                 ; 01
-    .byte ColorNTSC::YellowGreen | 8
-    .byte ColorNTSC::Grey        | 10
-    .byte %10100001                         ; left thin wall
-    .byte RoomNumbers_BlueMazeEntry         ; up
-    .byte RoomNumbers_BelowYellowCastle2    ; right
-    .byte $80 + RoomNumbers_NumberRoom1     ; down
-    .byte RoomNumbers_LeftOfName            ; left
+roomnum_BelowYellowCastle = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word BelowYellowCastle
+    .byte color_green, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_YellowCastle, roomnum_BelowYellowCastleRightThinWall, roomnum_downfrom_BelowYellowCastleGreen, roomnum_BelowYellowCastleLeftThinWall
 
-    RoomNumbers_BelowYellowCastle2 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BelowYellowCastle                 ; 02
-    .byte ColorNTSC::Green | 8
-    .byte ColorNTSC::Grey  | 10
-    .byte %00100001
-    .byte RoomNumbers_YellowCastle          ; up
-    .byte RoomNumbers_LeftOfName            ; right
-    .byte $80 + RoomNumbers_LeftOfName      ; down
-    .byte RoomNumbers_BelowYellowCastle1    ; left
+roomnum_BelowYellowCastleRightThinWall = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word LeftOfName
+    .byte color_darkyellow, bw_color_2
+    .byte pf_control_rightthinwall | pf_control_4bl | pf_control_ref
+    .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleLeftThinWall, roomnum_downfrom_BelowYellowCastleRightThinWall, roomnum_BelowYellowCastle
 
-    RoomNumbers_LeftOfName = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word LeftOfName                        ; 03 left of name
-    .byte ColorNTSC::OrangeGreen | 8
-    .byte ColorNTSC::Grey        | 10
-    .byte %01100001                         ; right thin wall
-    .byte RoomNumbers_BlueMazeBottom        ; up
-    .byte RoomNumbers_BelowYellowCastle1    ; right
-    .byte $80 + RoomNumbers_BlueMazeBottom  ; down
-    .byte RoomNumbers_BelowYellowCastle2    ; left
+roomnum_BlueMazeTop = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word BlueMazeTop
+    .byte color_blue, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_BlackCastle, roomnum_BlueMaze1, roomnum_BlueMazeCenter, roomnum_BlueMazeBottom
 
-     RoomNumbers_BlueMazeTop = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BlueMazeTop                       ; 04 top of blue maze
-    .byte ColorNTSC::Blue | 6
-    .byte ColorNTSC::Grey | 10
-    .byte %00100001
-    .byte RoomNumbers_BlackCastle           ; up
-    .byte RoomNumbers_BlueMaze1             ; right
-    .byte RoomNumbers_BlueMazeCenter        ; down
-    .byte RoomNumbers_BlueMazeBottom        ; left
+roomnum_BlueMaze1 = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word BlueMaze1
+    .byte color_blue, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_TopEntryRoom2, roomnum_BlueMazeBottom, roomnum_BlueMazeEntry, roomnum_BlueMazeTop
 
-    RoomNumbers_BlueMaze1 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BlueMaze1                         ; 05 blue maze #1
-    .byte ColorNTSC::Blue | 6
-    .byte ColorNTSC::Grey | 10
-    .byte %00100001
-    .byte RoomNumbers_TopEntryRoom2         ; up
-    .byte RoomNumbers_BlueMazeBottom        ; right
-    .byte RoomNumbers_BlueMazeEntry         ; down
-    .byte RoomNumbers_BlueMazeTop           ; left
+roomnum_BlueMazeBottom = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word BlueMazeBottom
+    .byte color_blue, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_BlueMazeCenter, roomnum_BlueMazeTop, roomnum_BelowYellowCastleRightThinWall, roomnum_BlueMaze1
 
-    RoomNumbers_BlueMazeBottom = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BlueMazeBottom                    ; 06 bottom of blue maze
-    .byte ColorNTSC::Blue | 6
-    .byte ColorNTSC::Grey | 10
-    .byte %00100001
-    .byte RoomNumbers_BlueMazeCenter        ; up
-    .byte RoomNumbers_BlueMazeTop           ; right
-    .byte RoomNumbers_LeftOfName            ; down
-    .byte RoomNumbers_BlueMaze1             ; left
+roomnum_BlueMazeCenter = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word BlueMazeCenter
+    .byte color_blue, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_BlueMazeTop, roomnum_BlueMazeEntry, roomnum_BlueMazeBottom, roomnum_BlueMazeEntry
 
-    RoomNumbers_BlueMazeCenter = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BlueMazeCenter                    ; 07 center of blue maze
-    .byte ColorNTSC::Blue | 6
-    .byte ColorNTSC::Grey | 10
-    .byte %00100001
-    .byte RoomNumbers_BlueMazeTop           ; up
-    .byte RoomNumbers_BlueMazeEntry         ; right
-    .byte RoomNumbers_BlueMazeBottom        ; down
-    .byte RoomNumbers_BlueMazeEntry         ; left
+roomnum_BlueMazeEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word BlueMazeEntry
+    .byte color_blue, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_BlueMaze1, roomnum_BlueMazeCenter, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeCenter
 
-     RoomNumbers_BlueMazeEntry = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BlueMazeEntry                     ; 08 blue maze entry
-    .byte ColorNTSC::Blue | 6
-    .byte ColorNTSC::Grey | 10
-    .byte %00100001
-    .byte RoomNumbers_BlueMaze1             ; up
-    .byte RoomNumbers_BlueMazeCenter        ; right
-    .byte RoomNumbers_BelowYellowCastle1    ; down
-    .byte RoomNumbers_BlueMazeCenter        ; left
+roomnum_MazeMiddle = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word MazeMiddle
+    .byte color_invisible, bw_color_1
+    .byte pf_control_4bl | pf_control_pfp | pf_control_ref
+    .byte roomnum_MazeEntry, roomnum_MazeEntry, roomnum_MazeSide, roomnum_MazeEntry
 
-     RoomNumbers_MazeMiddle = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word MazeMiddle                        ; 09 maze middle
-    .byte ColorNTSC::Grey | 8
-    .byte ColorNTSC::Grey | 8
-    .byte %00100101
-    .byte RoomNumbers_MazeEntry             ; up
-    .byte RoomNumbers_MazeEntry             ; right
-    .byte RoomNumbers_MazeSide              ; down
-    .byte RoomNumbers_MazeEntry             ; left
+roomnum_MazeEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word MazeEntry
+    .byte color_invisible, bw_color_1
+    .byte pf_control_4bl | pf_control_pfp | pf_control_ref
+    .byte roomnum_BelowYellowCastleRightThinWall, roomnum_MazeMiddle, roomnum_MazeMiddle, roomnum_MazeMiddle
 
-    RoomNumbers_MazeEntry = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word MazeEntry                         ; 0a maze entry
-    .byte ColorNTSC::Grey | 8
-    .byte ColorNTSC::Grey | 8
-    .byte %00100101
-    .byte RoomNumbers_LeftOfName            ; up
-    .byte RoomNumbers_MazeMiddle            ; right
-    .byte RoomNumbers_MazeMiddle            ; down
-    .byte RoomNumbers_MazeMiddle            ; left
+roomnum_MazeSide = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word MazeSide
+    .byte color_invisible, bw_color_1
+    .byte pf_control_4bl | pf_control_pfp | pf_control_ref
+    .byte roomnum_MazeMiddle, roomnum_SideCorridor1, roomnum_OtherPurpleRoom, roomnum_SideCorridor2
 
-    RoomNumbers_MazeSide = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word MazeSide                          ; 0b maze side
-    .byte ColorNTSC::Grey | 8
-    .byte ColorNTSC::Grey | 8
-    .byte %00100101
-    .byte RoomNumbers_MazeMiddle            ; up
-    .byte RoomNumbers_SideCorridor1         ; right
-    .byte RoomNumbers_NumberRoom3           ; down
-    .byte RoomNumbers_SideCorridor2         ; left
+roomnum_SideCorridor1 = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word SideCorridor
+    .byte color_lightblue, bw_color_2
+    .byte pf_control_rightthinwall | pf_control_4bl | pf_control_ref
+    .byte roomnum_OtherPurpleRoom, roomnum_SideCorridor2, roomnum_TopEntryRoom2, roomnum_MazeSide
 
-    RoomNumbers_SideCorridor1 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word SideCorridor                      ; 0c side corridor
-    .byte ColorNTSC::LightBlue | 8
-    .byte ColorNTSC::Grey      | 10
-    .byte %01100001
-    .byte RoomNumbers_NumberRoom3           ; up
-    .byte RoomNumbers_SideCorridor2         ; right
-    .byte RoomNumbers_TopEntryRoom2         ; down
-    .byte RoomNumbers_MazeSide              ; left
+roomnum_SideCorridor2 = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word SideCorridor
+    .byte color_lightgreen, bw_color_2
+    .byte pf_control_leftthinwall | pf_control_4bl | pf_control_ref
+    .byte roomnum_WhiteCastle, roomnum_MazeSide, roomnum_TopEntryRoom1, roomnum_SideCorridor1
 
-    RoomNumbers_SideCorridor2 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word SideCorridor                      ; 0d side corridor
-    .byte ColorNTSC::GreenBlue | 8
-    .byte ColorNTSC::Grey      | 10
-    .byte %10100001
-    .byte RoomNumbers_WhiteCastle           ; up
-    .byte RoomNumbers_MazeSide              ; right
-    .byte RoomNumbers_TopEntryRoom1         ; down
-    .byte RoomNumbers_SideCorridor1         ; left
+roomnum_TopEntryRoom1 = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word TopEntryRoom
+    .byte color_turquoise, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_SideCorridor2, roomnum_BlackCastle, roomnum_WhiteCastle, roomnum_BlackCastle
 
-    RoomNumbers_TopEntryRoom1 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word TopEntryRoom                      ; 0e top entry room
-    .byte ColorNTSC::Turquoise | 8
-    .byte ColorNTSC::Grey      | 10
-    .byte %00100001
-    .byte RoomNumbers_SideCorridor2         ; up
-    .byte RoomNumbers_BlackCastle           ; right
-    .byte RoomNumbers_WhiteCastle           ; down
-    .byte RoomNumbers_BlackCastle           ; left
+roomnum_WhiteCastle = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word CastleDef
+    .byte color_white, bw_color_3
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_TopEntryRoom1, roomnum_WhiteCastle, roomnum_SideCorridor2, roomnum_WhiteCastle
 
-    RoomNumbers_WhiteCastle = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word CastleDef                         ; 0f white castle
-    .byte ColorNTSC::Grey | 12 ; white
-    .byte ColorNTSC::Grey | 12 ; white
-    .byte %00100001
-    .byte RoomNumbers_TopEntryRoom1         ; up
-    .byte RoomNumbers_WhiteCastle           ; right
-    .byte RoomNumbers_SideCorridor2         ; down
-    .byte RoomNumbers_WhiteCastle           ; left
+roomnum_BlackCastle = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word CastleDef
+    .byte color_black, bw_color_0
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_BelowYellowCastleLeftThinWall, roomnum_OtherPurpleRoom, roomnum_BlueMazeTop, roomnum_OtherPurpleRoom
 
-    RoomNumbers_BlackCastle = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word CastleDef                         ; 10 black castle
-    .byte ColorNTSC::Grey;| 0
-    .byte ColorNTSC::Grey | 2 ; black
-    .byte %00100001
-    .byte RoomNumbers_BelowYellowCastle1    ; up
-    .byte RoomNumbers_NumberRoom3           ; right
-    .byte RoomNumbers_BlueMazeTop           ; down
-    .byte RoomNumbers_NumberRoom3           ; left
+roomnum_YellowCastle = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word CastleDef
+    .byte color_yellow, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleRightThinWall, roomnum_BelowYellowCastle, roomnum_BelowYellowCastleLeftThinWall
 
-    RoomNumbers_YellowCastle = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word CastleDef                         ; 11 yellow castle
-    .byte ColorNTSC::Gold | 10
-    .byte ColorNTSC::Grey | 10
-    .byte %00100001
-    .byte RoomNumbers_BlueMazeBottom        ; up
-    .byte RoomNumbers_LeftOfName            ; right
-    .byte RoomNumbers_BelowYellowCastle2    ; down
-    .byte RoomNumbers_BelowYellowCastle1    ; left
+roomnum_YellowCastleEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+roomrange_blackkey_end = roomnum_YellowCastleEntry
+    .word NumberRoom
+    .byte color_yellow, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_YellowCastleEntry, roomnum_YellowCastleEntry, roomnum_YellowCastleEntry, roomnum_YellowCastleEntry
 
-    RoomNumbers_YellowCastleInterior = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word NumberRoom                        ; 12 yellow castle interior
-    .byte ColorNTSC::Gold | 10
-    .byte ColorNTSC::Grey | 10
-    .byte %00100001
-    .byte RoomNumbers_YellowCastleInterior  ; up
-    .byte RoomNumbers_YellowCastleInterior  ; right
-    .byte RoomNumbers_YellowCastleInterior  ; down
-    .byte RoomNumbers_YellowCastleInterior  ; left
+roomnum_BlackMaze1 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomrange_chalice_start = roomnum_BlackMaze1
+    .word BlackMaze1
+    .byte color_invisible, bw_color_1
+    .byte pf_control_4bl | pf_control_pfp | pf_control_ref
+    .byte roomnum_BlackMaze3, roomnum_BlackMaze2, roomnum_BlackMaze3, roomnum_BlackMazeEntry
 
-    RoomNumbers_BlackMaze1 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BlackMaze1                        ; 13 black maze #1
-    .byte ColorNTSC::Grey | 8
-    .byte ColorNTSC::Grey | 8
-    .byte %00100101
-    .byte RoomNumbers_BlackMaze3            ; up
-    .byte RoomNumbers_BlackMaze2            ; right
-    .byte RoomNumbers_BlackMaze3            ; down
-    .byte RoomNumbers_BlackMazeEntry        ; left
+roomnum_BlackMaze2 = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word BlackMaze2
+    .byte color_invisible, bw_color_1
+    .byte pf_control_4bl | pf_control_pfp
+    .byte roomnum_BlackMazeEntry, roomnum_BlackMaze3, roomnum_BlackMazeEntry, roomnum_BlackMaze1
 
-    RoomNumbers_BlackMaze2 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BlackMaze2                        ; 14 black maze #2
-    .byte ColorNTSC::Grey | 8
-    .byte ColorNTSC::Grey | 8
-    .byte %00100100
-    .byte RoomNumbers_BlackMazeEntry        ; up
-    .byte RoomNumbers_BlackMaze3            ; right
-    .byte RoomNumbers_BlackMazeEntry        ; down
-    .byte RoomNumbers_BlackMaze1            ; left
+roomnum_BlackMaze3 = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word BlackMaze3
+    .byte color_invisible, bw_color_1
+    .byte pf_control_4bl | pf_control_pfp
+    .byte roomnum_BlackMaze1, roomnum_BlackMazeEntry, roomnum_BlackMaze1, roomnum_BlackMaze2
 
-    RoomNumbers_BlackMaze3 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BlackMaze3                        ; 15 black maze #3
-    .byte ColorNTSC::Grey | 8
-    .byte ColorNTSC::Grey | 8
-    .byte %00100100
-    .byte RoomNumbers_BlackMaze1            ; up
-    .byte RoomNumbers_BlackMazeEntry        ; right
-    .byte RoomNumbers_BlackMaze1            ; down
-    .byte RoomNumbers_BlackMaze2            ; left
+roomnum_BlackMazeEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+roomrange_whitekey_end = roomnum_BlackMazeEntry
+    .word BlackMazeEntry
+    .byte color_invisible, bw_color_1
+    .byte pf_control_4bl | pf_control_pfp | pf_control_ref
+    .byte roomnum_BlackMaze2, roomnum_BlackMaze1, roomnum_BlackCastleEntry, roomnum_BlackMaze3
 
-    RoomNumbers_BlackMazeEntry = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BlackMazeEntry                    ; 16 black maze entry
-    .byte ColorNTSC::Grey | 8
-    .byte ColorNTSC::Grey | 8
-    .byte %00100101
-    .byte RoomNumbers_BlackMaze2            ; up
-    .byte RoomNumbers_BlackMaze1            ; right
-    .byte RoomNumbers_TwoExitRoom           ; down
-    .byte RoomNumbers_BlackMaze3            ; left
+roomnum_RedMaze1 = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word RedMaze1
+    .byte color_red, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_RedMazeBottom, roomnum_RedMazeTop, roomnum_RedMazeBottom, roomnum_RedMazeTop
 
-    RoomNumbers_RedMaze1 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word RedMaze1                          ; 17 red maze #1
-    .byte ColorNTSC::RedOrange | 6
-    .byte ColorNTSC::Grey      | 10
-    .byte %00100001
-    .byte RoomNumbers_RedMazeBottom         ; up
-    .byte RoomNumbers_RedMazeTop            ; right
-    .byte RoomNumbers_RedMazeBottom         ; down
-    .byte RoomNumbers_RedMazeTop            ; left
+roomnum_RedMazeTop = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word RedMazeTop
+    .byte color_red, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_WhiteCastleEntry, roomnum_RedMaze1, roomnum_WhiteCastleEntry, roomnum_RedMaze1
 
-    RoomNumbers_RedMazeTop = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word RedMazeTop                        ; 18 top of red maze
-    .byte ColorNTSC::RedOrange | 6
-    .byte ColorNTSC::Grey      | 10
-    .byte %00100001
-    .byte RoomNumbers_WhiteCastleEntry      ; up
-    .byte RoomNumbers_RedMaze1              ; right
-    .byte RoomNumbers_WhiteCastleEntry      ; down
-    .byte RoomNumbers_RedMaze1              ; left
+roomnum_RedMazeBottom = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word RedMazeBottom
+    .byte color_red, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_RedMaze1, roomnum_WhiteCastleEntry, roomnum_RedMaze1, roomnum_WhiteCastleEntry
 
-    RoomNumbers_RedMazeBottom = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word RedMazeBottom                     ; 19 bottom of red maze
-    .byte ColorNTSC::RedOrange | 6
-    .byte ColorNTSC::Grey      | 10
-    .byte %00100001
-    .byte RoomNumbers_RedMaze1              ; up
-    .byte RoomNumbers_WhiteCastleEntry      ; right
-    .byte RoomNumbers_RedMaze1              ; down
-    .byte RoomNumbers_WhiteCastleEntry      ; left
+roomnum_WhiteCastleEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+roomrange_chalice_end = roomnum_WhiteCastleEntry
+    .word WhiteCastleEntry
+    .byte color_red, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_RedMazeTop, roomnum_RedMazeBottom, roomnum_RedMazeTop, roomnum_RedMazeBottom
 
-    RoomNumbers_WhiteCastleEntry = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word WhiteCastleEntry                  ; 1a white castle entry
-    .byte ColorNTSC::RedOrange | 6
-    .byte ColorNTSC::Grey      | 10
-    .byte %00100001
-    .byte RoomNumbers_RedMazeTop            ; up
-    .byte RoomNumbers_RedMazeBottom         ; right
-    .byte RoomNumbers_RedMazeTop            ; down
-    .byte RoomNumbers_RedMazeBottom         ; left
+roomnum_BlackCastleEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word TwoExitRoom
+    .byte color_red, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry
 
-    RoomNumbers_TwoExitRoom = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word TwoExitRoom                       ; 1b black castle entry
-    .byte ColorNTSC::RedOrange | 6
-    .byte ColorNTSC::Grey      | 10
-    .byte %00100001
-    .byte $80 + RoomNumbers_MazeMiddle      ; up
-    .byte $80 + RoomNumbers_MazeMiddle      ; right
-    .byte $80 + RoomNumbers_MazeMiddle      ; down
-    .byte $80 + RoomNumbers_MazeMiddle      ; left
+roomnum_OtherPurpleRoom = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word NumberRoom
+    .byte color_purple, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_TopEntryRoom2, roomnum_BlueMazeCenter, roomnum_downfrom_OtherPurpleRoom, roomnum_BlueMazeEntry
 
-    RoomNumbers_NumberRoom3 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word NumberRoom                        ; 1c other purple room
-    .byte ColorNTSC::PurpleBlue | 6
-    .byte ColorNTSC::Grey       | 10
-    .byte %00100001
-    .byte RoomNumbers_TopEntryRoom2         ; up
-    .byte RoomNumbers_BlueMazeCenter        ; right
-    .byte $80 + RoomNumbers_SideCorridor1   ; down
-    .byte RoomNumbers_BlueMazeEntry         ; left
+roomnum_TopEntryRoom2 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomrange_reddragon_end    = roomnum_TopEntryRoom2
+roomrange_yellowdragon_end = roomnum_TopEntryRoom2
+roomrange_greendragon_end  = roomnum_TopEntryRoom2
+roomrange_sword_end        = roomnum_TopEntryRoom2
+roomrange_bridge_end       = roomnum_TopEntryRoom2
+roomrange_yellowkey_end    = roomnum_TopEntryRoom2
+roomrange_bat_end          = roomnum_TopEntryRoom2
+roomrange_magnet_end       = roomnum_TopEntryRoom2
+    .word TopEntryRoom
+    .byte color_red, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_upfrom_TopEntryRoom, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlackCastle, roomnum_BelowYellowCastleRightThinWall
 
-    RoomNumbers_TopEntryRoom2 = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word TopEntryRoom                      ; 1d (top entry room)
-    .byte ColorNTSC::RedOrange | 6
-    .byte ColorNTSC::Grey      | 10
-    .byte %00100001
-    .byte $80 + RoomNumbers_WhiteCastle     ; up
-    .byte RoomNumbers_BelowYellowCastle1    ; right
-    .byte RoomNumbers_BlackCastle           ; down
-    .byte RoomNumbers_LeftOfName            ; left
+roomnum_SecretRoom = (* - Rooms) / .sizeof(RoomTableEntry)
+    .word BelowYellowCastle
+    .byte color_purple, bw_color_2
+    .byte pf_control_4bl | pf_control_ref
+    .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeBottom, roomnum_BelowYellowCastleRightThinWall
 
-    RoomNumbers_SecretRoom = (*-Rooms) / .sizeof(RoomDataEntry)
-    .word BelowYellowCastle                 ; 1e name/secret room
-    .byte ColorNTSC::PurpleBlue | 6
-    .byte ColorNTSC::Grey       | 10
-    .byte %00100001
-    .ifnblank original
-    .byte RoomNumbers_BlueMazeBottom        ; up
-    .else
-    .byte RoomNumbers_NumberRoom1           ; right
-    .endif
-    .byte RoomNumbers_BelowYellowCastle1    ; right
-    .byte RoomNumbers_BlueMazeBottom        ; down
-    .byte RoomNumbers_LeftOfName            ; left
+RoomDiffs:
+; room differences for different levels
+; level 1                                     level 2                 level 3
 
-    .ifblank original
-LeftOfName:         leftofname_gfxpf_data
-BelowYellowCastle:  belowyellowcastle_gfxpf_data
-SideCorridor:       sidecorridor_gfxpf_data
-NumberRoom:         numberroom_gfxpf_data
-TwoExitRoom:        twoexitroom_gfxpf_data
-BlueMazeTop:        bluemazetop_gfxpf_data
-BlueMaze1:          bluemaze1_gfxpf_data
-BlueMazeBottom:     bluemazebottom_gfxpf_data
-BlueMazeCenter:     bluemazecenter_gfxpf_data
-BlueMazeEntry:      bluemazeentry_gfxpf_data
-MazeMiddle:         mazemiddle_gfxpf_data
-MazeSide:           mazeside_gfxpf_data
-MazeEntry:          mazeentry_gfxpf_data
-CastleDef:          castle_gfxpf_data
-RedMaze1:           redmaze1_gfxpf_data
-RedMazeBottom:      redmazebottom_gfxpf_data
-RedMazeTop:         redmazetop_gfxpf_data
-WhiteCastleEntry:   whitecastleentry_gfxpf_data
-TopEntryRoom:       topentryroom_gfxpf_data
-BlackMaze1:         blackmaze1_gfxpf_data
-BlackMaze3:         blackmaze3_gfxpf_data
-BlackMaze2:         blackmaze2_gfxpf_data
-BlackMazeEntry:     blackmazeentry_gfxpf_data
-    .endif
+roomnum_downfrom_BelowYellowCastleLeftThinWall = (* - RoomDiffs) | $80
+.byte roomnum_BlackCastle,                    roomnum_WhiteCastle,    roomnum_WhiteCastle
+
+roomnum_downfrom_BelowYellowCastleGreen = (* - RoomDiffs) | $80
+.byte roomnum_BlueMaze1,                      roomnum_YellowCastle,   roomnum_YellowCastle
+
+roomnum_downfrom_BelowYellowCastleRightThinWall = (* - RoomDiffs) | $80
+.byte roomnum_TopEntryRoom2,                  roomnum_MazeEntry,      roomnum_MazeEntry
+
+roomnum_uprightdownleftfrom_BlackCastleEntry = (* - RoomDiffs) | $80
+.byte roomnum_OtherPurpleRoom,                roomnum_BlackMazeEntry, roomnum_BlackMazeEntry
+
+roomnum_downfrom_OtherPurpleRoom = (* - RoomDiffs) | $80
+.byte roomnum_BlackCastleEntry,               roomnum_SideCorridor1,  roomnum_SideCorridor1
+
+roomnum_upfrom_TopEntryRoom = (* - RoomDiffs) | $80
+.byte roomnum_BelowYellowCastleRightThinWall, roomnum_SideCorridor1,  roomnum_SideCorridor1
+
 .endmacro

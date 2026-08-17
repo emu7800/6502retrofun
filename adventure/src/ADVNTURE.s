@@ -80,17 +80,24 @@ SWCHB       = $0282     ; RW Port B data (console switches)
 INTIM       = $0284     ; R Timer output
 TIM64T      = $0296     ; W set 64 clock interval
 
+.enum NoiseType
+    gameover   = 0
+    dragonroar = 1
+    maneaten   = 2
+    dragondied = 3
+    dropitem   = 4
+    getitem    = 5
+.endenum
 
-            .zeropage   ; segment mapped to $80
+
+.zeropage   ; segment mapped to $80
 
 roomgfx_base:                   .word 0
 p0gfx_base:                     .word 0
 p1gfx_base:                     .word 0
 player0pos:                     .tag ObjectPosType
 player1pos:                     .tag ObjectPosType
-curr_room:                      .byte 0     ; current room number
-man_x:                          .byte 0     ; man's x coordinate
-man_y:                          .byte 0     ; man's y coordinate
+ManInfo:                        .tag ObjectInfoType
 man_y2:                         .byte 0     ; man's adjusted y coordinate?
 scan_line:                      .byte 0     ; current scan line
 roomgfx_offset:                 .byte 0     ; room graphics offset
@@ -111,42 +118,46 @@ objman_x_delta:                 .byte 0
 objman_y_delta:                 .byte 0
 curr_obj_number:                .byte 0
 GameObjectsWorkingArea:
-DotMacro zp
-Dragon1Macro
-Dragon2Macro
-Dragon3Macro
-MagnetMacro zp
-SwordMacro zp
-ChaliceMacro zp
-BridgeMacro zp
-YellowKeyMacro zp
-WhiteKeyMacro zp
-BlackKeyMacro zp
-PortMacro zp
-BlackBatMacro zp
+DotInfo:                        .tag ObjectInfoType
+RedDragonInfo:                  .tag LongObjectInfoType
+RedDragonCurrBase:              .byte 0
+YellowDragonInfo:               .tag LongObjectInfoType
+YellowDragonCurrBase:           .byte 0
+GreenDragonInfo:                .tag LongObjectInfoType
+GreenDragonCurrBase:            .byte 0
+MagnetInfo:                     .tag ObjectInfoType
+SwordInfo:                      .tag ObjectInfoType
+ChaliceInfo:                    .tag ObjectInfoType
+BridgeInfo:                     .tag ObjectInfoType
+YellowKeyInfo:                  .tag ObjectInfoType
+WhiteKeyInfo:                   .tag ObjectInfoType
+BlackKeyInfo:                   .tag ObjectInfoType
+PortCurrBase:                   .byte 0, 0, 0
+BlackBatInfo:                   .tag LongObjectInfoType
+BlackBatCurrBase:               .byte 0
+BlackBatCarriedObject:          .byte 0      ; object being carried by the Black Bat
+BlackBatFedUp:                  .byte 0
 objstore_ptr:                   .word 0
 objdelta:                       .byte 0
 MoveGameObjectArg_ObjNumber:    .byte 0      ; identifies the object to move (used by MoveGameObject)
 MoveGameObjectArg_Difficulty:   .byte 0      ; difficulty for MoveGameObject to use (used by MoveGameObject)
 joystick_record:                .byte 0
 tmp1:                           .byte 0
-SurroundMacro zp
+SurroundInfo:                   .tag ObjectInfoType
 GetObjectState_Arg:             .byte 0
-NumberMacro zp
+NumberCurrBase:                 .byte 0
 is_game_complete:               .byte 0      ; $ff=yes, 0=no
 sound_duration_counter:         .byte 0
-sound_type:                     .byte 0
+sound_type:                     .byte 0      ; .enum NoiseType
 linked_obj_index:               .byte 0
-prev_room:                      .byte 0
-prev_man_x:                     .byte 0
-prev_man_y:                     .byte 0
+PrevManInfo:                    .tag ObjectInfoType
 input_counter:                  .word 0
 
 stack_space:                    ; $e7-$ff (12 frames)
 
-man_object  = $8a
 
-            .code
+.code
+
 START:      jmp StartGame
 
             sei             ;setup for 6507, start with no
@@ -161,13 +172,13 @@ PrintDisplay:
             lda player1pos+ObjectPosType::xcoord  ;position Player01 sprite to
             ldx #1          ; the X coordinate of Object2
             jsr PosSpriteX
-            lda man_x       ;position ball sprite to
+            lda ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord     ;position ball sprite to
             ldx #4          ; the X coordinate of the Man
             jsr PosSpriteX
             sta WSYNC       ;wait for horizontal blank
             sta HMOVE       ;apply horizontal motion
             sta CXCLR       ;clear collision latches
-            lda man_y       ;get the Y coordinate of the Man
+            lda ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord     ;get the Y coordinate of the Man
             sec
             sbc #4          ;and adjust it (by four scan lines)
             sta man_y2      ; for printing (so Y coordinate specifies middle)
@@ -311,12 +322,12 @@ DoVSYNC:    lda INTIM           ;get timer output
 
 ; set up a room for print
 SetupRoomPrint:
-            lda curr_room         ;get current room number
+            lda ManInfo+ObjectInfoType::room_num         ;get current room number
             jsr RoomNumToAddress  ;convert it to an address
-            ldy #RoomDataEntry::gfx_ptr
+            ldy #RoomTableEntry::gfx_ptr
             lda (dr_ptr),y
             sta roomgfx_base
-            ldy #RoomDataEntry::gfx_ptr+1
+            ldy #RoomTableEntry::gfx_ptr+1
             lda (dr_ptr),y        ;get high pointer to room graphics
             sta roomgfx_base+1
 ; checdk B&W switch for room graphics
@@ -324,13 +335,13 @@ SetupRoomPrint:
             and #8                ;check black and white switch
             beq UseBW             ;branch if B&W
 ; use color
-            ldy #RoomDataEntry::color
+            ldy #RoomTableEntry::color
             lda (dr_ptr),y
             jsr ChangeColor       ;change if necessary
             sta COLUPF            ;put in playfield color register
             jmp UseColor
 
-UseBW:      ldy #RoomDataEntry::bw_color
+UseBW:      ldy #RoomTableEntry::bw_color
             lda (dr_ptr),y
             jsr ChangeColor       ;change if necessary
             sta COLUPF            ;put in the playfield color registerg
@@ -339,7 +350,7 @@ UseColor:   lda #8                ;get light grey background
             jsr ChangeColor       ;change if necessary
             sta COLUBK            ;put it in the background color register
 ; playfield control
-            ldy #RoomDataEntry::pf_control
+            ldy #RoomTableEntry::pf_control
             lda (dr_ptr),y
             sta CTRLPF            ; and put in the playfield control register
             and #$c0              ;get the "this wall" flag
@@ -493,7 +504,7 @@ GetObjectsInfo:
             sta dr_ptr+1
             ldx #0
             lda (dr_ptr,x)          ;get object's current room
-            cmp curr_room           ; is it in this room?
+            cmp ManInfo+ObjectInfoType::room_num           ; is it in this room?
             bne CheckForMoreObjects ;if not lets try next object (branch)
             lda object1             ;check first slot
             cmp #162              ;if not default (no-object)
@@ -513,7 +524,7 @@ StoreCount: sty obj_counter       ;if so, store current count
 
 ; convert room number to address
 RoomNumToAddress:
-            .assert .sizeof(RoomDataEntry) = 9, error, "This subroutine assumes RoomDataEntry is 9 bytes long."
+            .assert .sizeof(RoomTableEntry) = 9, error, "This subroutine assumes RoomTableEntry is 9 bytes long."
             sta tmp1              ;store room number wanted
             sta dr_ptr
             lda #0                ;zero the high byte of the
@@ -620,12 +631,12 @@ MainGameLoop:
             lda is_game_complete
             bne NonActiveLoop
             lda ChaliceInfo+ObjectInfoType::room_num  ;get the room the chalice is in
-            cmp #RoomNumbers_YellowCastleInterior     ;is it in the yellow castle?
+            cmp #roomnum_YellowCastleEntry  ;is it inside the yellow castle?
             bne :+                ;if not branch
             lda #$ff
             sta sound_duration_counter  ;set the note count to maximum
             sta is_game_complete  ;complete the game since chalice is returned
-            lda #0                ;set the noise type to end-noise
+            lda #NoiseType::gameover
             sta sound_type
 :           ldy #0                ;allow joystick read - all movement
             jsr BallMovement      ;check ball collisions and move ball
@@ -679,19 +690,19 @@ CheckGameStart:
             cmp #$ff
             beq SetupRoomObjects  ;branch since game has been completed
 ReincarnatePlayer:
-            lda #RoomNumbers_YellowCastle
-            sta curr_room         ;make it the current room
-            sta prev_room         ;make it the previous room
-            lda #80               ;get the X coordinate
-            sta man_x             ;make it the current man X coordinate
-            sta prev_man_x        ;make it the previous man X coordinate
-            lda #32               ;get the Y coordinate
-            sta man_y             ;make it the current man Y coordinate
-            sta prev_man_y        ;make it the previous man Y coordinate
+            lda #roomnum_YellowCastle
+            sta ManInfo+ObjectInfoType::room_num         ;make it the current room
+            sta PrevManInfo+ObjectInfoType::room_num     ;make it the previous room
+            lda #$50              ;get the X coordinate
+            sta ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord           ;make it the current man X coordinate
+            sta PrevManInfo+ObjectInfoType::pos+ObjectPosType::xcoord       ;make it the previous man X coordinate
+            lda #$20              ;get the Y coordinate
+            sta ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord           ;make it the current man Y coordinate
+            sta PrevManInfo+ObjectInfoType::pos+ObjectPosType::ycoord       ;make it the previous man Y coordinate
             lda #0
-            sta Dragon1CurrBase   ;set the red dragon's state to OK
-            sta Dragon2CurrBase   ;set the yellow dragon's state to OK
-            sta Dragon3CurrBase   ;set the green dragon's state to OK
+            sta RedDragonCurrBase       ;set the red dragon's state to OK
+            sta YellowDragonCurrBase    ;set the yellow dragon's state to OK
+            sta GreenDragonCurrBase     ;set the green dragon's state to OK
             sta sound_duration_counter  ;set the note count to zero
             lda #$a2
             sta object_carried    ;set no object being carried
@@ -700,7 +711,7 @@ NotReset:   lda SWCHB             ;get the console switches
             and cached_swchb      ;compare with what was before
             and #2                ;and check only the select switch
             beq NotSelect         ;branch if select not being used
-            lda curr_room         ;get the current room
+            lda ManInfo+ObjectInfoType::room_num  ;get the current room
             cmp #0                ;is it the "number" room?
             bne SetupRoomObjects  ;branch if not
             lda NumberCurrBase    ;increment the level
@@ -711,12 +722,12 @@ NotReset:   lda SWCHB             ;get the console switches
             lda #0                ;if yep then set back to zero
 ResetSetup: sta NumberCurrBase    ;store the new level number
 SetupRoomObjects:
-            lda #0                ;set the current room to the
-            sta curr_room         ; "number" room
-            sta prev_room         ;and the previous room
-            lda #0                ;set the man's Y coordinate to zero
-            sta man_y             ;and the previous Y coordinate
-            sta prev_man_y        ;(so can't be seen)
+            lda #0                                       ;set the current room to the
+            sta ManInfo+ObjectInfoType::room_num         ; "number" room
+            sta PrevManInfo+ObjectInfoType::room_num     ;and the previous room
+            lda #0                                       ;set the man's Y coordinate to zero
+            sta ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord           ;and the previous Y coordinate
+            sta PrevManInfo+ObjectInfoType::pos+ObjectPosType::ycoord       ;(so can't be seen)
             ldy NumberCurrBase    ;get the level number
             lda GameObjects,y     ;get the low pointer to object locations
             sta dr_ptr
@@ -769,66 +780,64 @@ RandomizeLevel3:
             bpl :--                    ;until all done
             rts
 
-; Room bounds data.
-;
-; e.g. the chalice can only exist in room range [$13, $1a] for level 3.
+; Object randomization room bounds data for level 3.
 Lvl3ObjRoomBounds:
-            .byte ChaliceInfo,   $13, $1a     ;chalice
-            .byte Dragon1Info,   $01, $1d     ;red dragon
-            .byte Dragon2Info,   $01, $1d     ;yellow dragon
-            .byte Dragon3Info,   $01, $1d     ;green dragon
-            .byte SwordInfo,     $01, $1d     ;sword
-            .byte BridgeInfo,    $01, $1d     ;bridge
-            .byte YellowKeyInfo, $01, $1d     ;yellow key
-            .byte WhiteKeyInfo,  $01, $16     ;white key
-            .byte BlackKeyInfo,  $01, $12     ;black key
-            .byte BlackBatInfo,  $01, $1d     ;bat
-            .byte MagnetInfo,    $01, $1d     ;magnet
+            .byte ChaliceInfo,      roomrange_chalice_start,      roomrange_chalice_end
+            .byte RedDragonInfo,    roomrange_reddragon_start,    roomrange_reddragon_end
+            .byte YellowDragonInfo, roomrange_yellowdragon_start, roomrange_yellowdragon_end
+            .byte GreenDragonInfo,  roomrange_greendragon_start,  roomrange_greendragon_end
+            .byte SwordInfo,        roomrange_sword_start,        roomrange_sword_end
+            .byte BridgeInfo,       roomrange_bridge_start,       roomrange_bridge_end
+            .byte YellowKeyInfo,    roomrange_yellowkey_start,    roomrange_yellowkey_end
+            .byte WhiteKeyInfo,     roomrange_whitekey_start,     roomrange_whitekey_end
+            .byte BlackKeyInfo,     roomrange_blackkey_start,     roomrange_blackkey_end
+            .byte BlackBatInfo,     roomrange_bat_start,          roomrange_bat_end
+            .byte MagnetInfo,       roomrange_magnet_start,       roomrange_magnet_end
 
 GameObjects:
-            .word Game1Objects      ;pointer to object locations for game 01
-            .word Game2Objects      ;pointer to object locations for game 02
-            .word Game2Objects      ;pointer to object locations for game 03
+            .word Game1Objects
+            .word Game2Objects
+            .word Game2Objects
 
 ; object locations (room and coordinate) for game 01
 Game1Objects:
-            ;     Rm,  X,   Y,   Mvt, State
-            .byte $15, $51, $12           ;black dot
-            .byte $0e, $50, $20, $00, $00 ;red dragon
-            .byte $01, $50, $20, $00, $00 ;yellow dragon
-            .byte $1d, $50, $20, $00, $00 ;green dragon
-            .byte $1b, $80, $20           ;magnet
-            .byte $12, $20, $20           ;sword
-            .byte $1c, $30, $20           ;chalice
-            .byte $04, $29, $37           ;bridge
-            .byte $11, $20, $40           ;yellow key
-            .byte $0e, $20, $40           ;white key
-            .byte $1d, $20, $40           ;black key
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $1a, $20, $20, $00, $00 ;bat
-            .byte $78, $00                ;bat (carrying, fed-up)
+;                 Rm,                                    X,   Y,   Mvt, State
+            .byte roomnum_BlackMaze3,                    $51, $12           ;black dot
+            .byte roomnum_TopEntryRoom1,                 $50, $20, $00, $00 ;red dragon
+            .byte roomnum_BelowYellowCastleLeftThinWall, $50, $20, $00, $00 ;yellow dragon
+            .byte roomnum_TopEntryRoom2,                 $50, $20, $00, $00 ;green dragon
+            .byte roomnum_BlackCastleEntry,              $80, $20           ;magnet
+            .byte roomnum_YellowCastleEntry,             $20, $20           ;sword
+            .byte roomnum_OtherPurpleRoom,               $30, $20           ;chalice
+            .byte roomnum_BlueMazeTop,                   $29, $37           ;bridge
+            .byte roomnum_YellowCastle,                  $20, $40           ;yellow key
+            .byte roomnum_TopEntryRoom1,                 $20, $40           ;white key
+            .byte roomnum_TopEntryRoom2,                 $20, $40           ;black key
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_WhiteCastleEntry,              $20, $20, $00, $00 ;bat
+            .byte $78, $00                                                  ;bat (carrying, fed-up)
 
 ; object locations (room and coordinate) for games 02 and 03
 Game2Objects:
             ;     Rm,  X,   Y,   Mvt, State
-            .byte $15, $51, $12           ;black dot
-            .byte $14, $50, $20, $a0, $00 ;red dragon
-            .byte $19, $50, $20, $a0, $00 ;yellow dragon
-            .byte $04, $50, $20, $a0, $00 ;green dragon
-            .byte $0e, $80, $20           ;magnet
-            .byte $11, $20, $20           ;sword
-            .byte $14, $30, $20           ;chalice
-            .byte $0b, $40, $40           ;bridge
-            .byte $09, $20, $40           ;yellow key
-            .byte $06, $20, $40           ;white key
-            .byte $19, $20, $40           ;black key
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $1c                     ;portcullis state
-            .byte $02, $20, $20, $90, $00 ;bat
-            .byte $78, $00                ;bat (carrying, fed-up)
+            .byte roomnum_BlackMaze3,                    $51, $12           ;black dot
+            .byte roomnum_BlackMaze2,                    $50, $20, $a0, $00 ;red dragon
+            .byte roomnum_RedMazeBottom,                 $50, $20, $a0, $00 ;yellow dragon
+            .byte roomnum_BlueMazeTop,                   $50, $20, $a0, $00 ;green dragon
+            .byte roomnum_TopEntryRoom1,                 $80, $20           ;magnet
+            .byte roomnum_YellowCastle,                  $20, $20           ;sword
+            .byte roomnum_BlackMaze2,                    $30, $20           ;chalice
+            .byte roomnum_MazeSide,                      $40, $40           ;bridge
+            .byte roomnum_MazeMiddle,                    $20, $40           ;yellow key
+            .byte roomnum_BlueMazeBottom,                $20, $40           ;white key
+            .byte roomnum_RedMazeBottom,                 $20, $40           ;black key
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
+            .byte roomnum_BelowYellowCastle,             $20, $20, $90, $00 ;bat
+            .byte $78, $00                                                  ;bat (carrying, fed-up)
 
 ; check ball collisions and move ball
 BallMovement:
@@ -867,11 +876,11 @@ PlayerCollision:
             lda object_carried
             cmp #$5a              ;branch if it is the bridge
             beq ReadStick
-            lda curr_room         ;get the current room
+            lda ManInfo+ObjectInfoType::room_num         ;get the current room
             cmp BridgeInfo        ;is the bridge in this room?
             bne ReadStick         ;if not branch
 ; check going through the bridge
-            lda man_x             ;get the man's X coordinate
+            lda ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord           ;get the man's X coordinate
             sec
             sbc BridgeInfo+1      ;subtract the bridge's X coordinate
             cmp #$0a              ;if less than $0A then forget it
@@ -880,7 +889,7 @@ PlayerCollision:
             bcs ReadStick
             lda z:BridgeInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             sec
-            sbc man_y             ;subtract the man's Y coordinate
+            sbc ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord           ;subtract the man's Y coordinate
             cmp #$fc
             bcs NoCollision       ;if more than $FC then going through bridge
             cmp #$19              ;if more than $19 then forget it
@@ -889,29 +898,29 @@ PlayerCollision:
 NoCollision:
             lda #$ff              ;reset the joystick input
             sta cached_joystick
-            lda curr_room         ;get the current room
-            sta prev_room         ; and store temporarily
-            lda man_x             ;get the man's X coordinate
-            sta prev_man_x        ; and store temporarily
-            lda man_y             ;get the man's Y coordinate
-            sta prev_man_y        ; and store temporarily
+            lda ManInfo+ObjectInfoType::room_num         ;get the current room
+            sta PrevManInfo+ObjectInfoType::room_num     ; and store temporarily
+            lda ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord           ;get the man's X coordinate
+            sta PrevManInfo+ObjectInfoType::pos+ObjectPosType::xcoord       ; and store temporarily
+            lda ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord           ;get the man's Y coordinate
+            sta PrevManInfo+ObjectInfoType::pos+ObjectPosType::ycoord       ; and store temporarily
 ; read sticks
 ReadStick:  cpy #0                ;???is game in first phase?
             bne @ReadStick_2      ;if not, don't bother with joystick read
             lda SWCHA             ;read joysticks
             sta cached_joystick
 @ReadStick_2:
-            lda prev_room         ;get temporary room
-            sta curr_room         ; and make it the current room
-            lda prev_man_x        ;get temporary X coordinate
-            sta man_x             ; and make it the man's X coordinate
-            lda prev_man_y        ;get temporary Y coordinate
-            sta man_y             ; and make it the man's Y coordinate
+            lda PrevManInfo+ObjectInfoType::room_num     ;get temporary room
+            sta ManInfo+ObjectInfoType::room_num         ; and make it the current room
+            lda PrevManInfo+ObjectInfoType::pos+ObjectPosType::xcoord       ;get temporary X coordinate
+            sta ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord           ; and make it the man's X coordinate
+            lda PrevManInfo+ObjectInfoType::pos+ObjectPosType::ycoord       ;get temporary Y coordinate
+            sta ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord           ; and make it the man's Y coordinate
             lda cached_joystick   ;get the joystick position
             ora JoystickMergeValues,y  ;merge out movement not allowed in this phase
             sta direction_wanted  ;and store cooked movement
             ldy #3                ;set the delta for the ball
-            ldx #man_object       ;point to man's coordinates
+            ldx #ManInfo          ;point to man's coordinates
             jsr MoveGroundObject  ;move the man
             rts
 
@@ -930,9 +939,9 @@ PickupPutdown:
             cmp object_carried    ;if nothing is being carried
             beq @PickupPutdown_2  ; then branch
             sta object_carried    ;drop object
-            lda #4                ;set noise type to four
+            lda #NoiseType::dropitem
             sta sound_type
-            lda #4                ;set noise count to four
+            lda #4
             sta sound_duration_counter
 @PickupPutdown_2:
             lda #$ff              ;????
@@ -965,12 +974,12 @@ CollisionDetected:
             bcc NoObject          ;if not, branch
             ldy #0
             lda (dr_ptr),y        ;get the object's room
-            cmp curr_room         ;is it in the current room?
+            cmp ManInfo+ObjectInfoType::room_num         ;is it in the current room?
             bne NoObject          ;if not, branch
             lda obj_collided_with
             cmp object_carried    ;is it the object being carried?
             beq PickupObject      ;if so, branch (and actually pick it up)
-            lda #5                ;set noise type to five
+            lda #NoiseType::getitem
             sta sound_type
             lda #4
             sta sound_duration_counter
@@ -984,12 +993,12 @@ PickupObject:
             ldy #1
             lda (dr_ptr),y        ;get the object's X coordinate
             sec
-            sbc man_x             ;subtract the man's X coordinate
+            sbc ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord             ;subtract the man's X coordinate
             sta objman_x_delta    ; and store the difference
             ldy #2
             lda (dr_ptr),y        ;get the object's Y coordinate
             sec
-            sbc man_y             ;subtract the man's Y coordinate
+            sbc ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord             ;subtract the man's Y coordinate
             sta objman_y_delta    ; and store the difference
 NoObject:   rts                   ; no collision
 
@@ -1000,15 +1009,15 @@ MoveCarriedObject:
             beq @MoveCarriedObject_2
             jsr GetObjectAddress  ;get its dynamic information
             ldy #0
-            lda curr_room         ;get the current room
+            lda ManInfo+ObjectInfoType::room_num         ;get the current room
             sta (dr_ptr),y        ; and store the object's current room
             ldy #$01
-            lda man_x             ;get the man's X coordinate
+            lda ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord             ;get the man's X coordinate
             clc
             adc objman_x_delta    ;add the X difference
             sta (dr_ptr),y        ; and store as the object's X coordinate
             ldy #2
-            lda man_y             ;get the man's Y coordinate
+            lda ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord             ;get the man's Y coordinate
             clc
             adc objman_y_delta    ;add the Y difference
             sta (dr_ptr),y        ; and store as the object's Y coordinate
@@ -1068,7 +1077,7 @@ DealWithLeft:
             jmp DealWithDown
 
 @DealWithLeft_2:
-            cpx #man_object       ;are we dealing with the man?
+            cpx #ManInfo          ;are we dealing with the man?
             beq @DealWithLeft_3   ;if so, branch
             lda #$9a              ;set new X coordinate for the others
             jmp @DealWithLeft_4
@@ -1077,7 +1086,7 @@ DealWithLeft:
             lda #$9e              ;set new X coordinate for the ball
 @DealWithLeft_4:
             sta $01,x             ;store the next X coordinate
-            ldy #RoomDataEntry::room_left
+            ldy #RoomTableEntry::room_left
             jmp GetNewRoom
 
 ; check and deal with Down
@@ -1087,13 +1096,13 @@ DealWithDown:
             bcs DealWithRight     ; branch
             lda #$69              ;set new Y coordinate
             sta $02,x
-            ldy #RoomDataEntry::room_down
+            ldy #RoomTableEntry::room_down
             jmp GetNewRoom
 
 ; check and deal with right
 DealWithRight:
             lda $01,x             ;get the object's X coordinate
-            cpx #man_object       ;are we dealing with the man?
+            cpx #ManInfo          ;are we dealing with the man?
             bne @DealWithRight_2  ;branch if not
             cmp #$9f              ;has the object reached the right?
             bcc MovementReturn    ;branch if not
@@ -1116,7 +1125,7 @@ DealWithRight:
 @DealWithRight_3:
             lda #3                ;set the next X coordinate
             sta $01,x
-            ldy #RoomDataEntry::room_right
+            ldy #RoomTableEntry::room_right
             jmp GetNewRoom
 
 ; get new room
@@ -1310,10 +1319,10 @@ MoveRedDragon:
 
 ; red dragon's object matrix
 RedDragMatrix:
-            .byte SwordInfo,   Dragon1Info   ;sword, red dragon
-            .byte Dragon1Info, man_object    ;red dragon, man
-            .byte Dragon1Info, ChaliceInfo   ;red dragon, chalice
-            .byte Dragon1Info, WhiteKeyInfo  ;red dragon, white key
+            .byte SwordInfo,     RedDragonInfo
+            .byte RedDragonInfo, ManInfo
+            .byte RedDragonInfo, ChaliceInfo
+            .byte RedDragonInfo, WhiteKeyInfo
             .byte 0
 
 ; move the yellow dragon
@@ -1330,10 +1339,10 @@ MoveYellowDragon:
 
 ; yellow dragon's object matrix
 YelDragMatrix:
-            .byte SwordInfo,     Dragon2Info  ;sword, yellow dragon
-            .byte YellowKeyInfo, Dragon2Info  ;yellow key, yellow dragon
-            .byte Dragon2Info,   man_object   ;yellow dragon, man
-            .byte Dragon2Info,   ChaliceInfo  ;yellow dragon, chalice
+            .byte SwordInfo,        YellowDragonInfo
+            .byte YellowKeyInfo,    YellowDragonInfo
+            .byte YellowDragonInfo, ManInfo
+            .byte YellowDragonInfo, ChaliceInfo
             .byte 0
 
 ; move the green dragon
@@ -1349,12 +1358,12 @@ MoveGreenDragon:
             rts
 
 GreenDragMatrix:
-            .byte SwordInfo,   Dragon3Info   ;sword, green dragon
-            .byte Dragon3Info, man_object    ;green dragon, man
-            .byte Dragon3Info, ChaliceInfo   ;green dragon, chalice
-            .byte Dragon3Info, BridgeInfo    ;green dragon, bridge
-            .byte Dragon3Info, MagnetInfo    ;green dragon, magnet
-            .byte Dragon3Info, BlackKeyInfo  ;green dragon, black key
+            .byte SwordInfo,       GreenDragonInfo
+            .byte GreenDragonInfo, ManInfo
+            .byte GreenDragonInfo, ChaliceInfo
+            .byte GreenDragonInfo, BridgeInfo
+            .byte GreenDragonInfo, MagnetInfo
+            .byte GreenDragonInfo, BlackKeyInfo
             .byte 0
 
 ; move a dragon
@@ -1389,14 +1398,14 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             tay                   ;create lookup
             lda DragonDiff,y      ;get new state
             sta $04,x             ;store as dragon's state (open mouthed)
-            lda prev_man_x
+            lda PrevManInfo+ObjectInfoType::pos+ObjectPosType::xcoord
             sta $01,x             ;get temp ball X coord and store as dragon's
-            lda prev_man_y
+            lda PrevManInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             sta $02,x             ;get temp ball Y coord and store as dragon's
-            lda #1
-            sta sound_type        ;set noise type to 01
+            lda #NoiseType::dragonroar
+            sta sound_type
             lda #$10
-            sta sound_duration_counter  ;set noise count to $10 i.e. make roar noise
+            sta sound_duration_counter
 @MoveDragon_4:
             stx portcullis_number
             ldx curr_obj_number   ;get the object number
@@ -1406,9 +1415,9 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             bne @MoveDragon_5     ;if not, branch
             lda #1                ;set the state to 01 (dead)
             sta $04,x
-            lda #3                ;set sound three
+            lda #NoiseType::dragondied
             sta sound_type
-            lda #$10              ;set a noise count of $10
+            lda #$10
             sta sound_duration_counter
 @MoveDragon_5:
             jmp @MoveDragon_9     ;jump to finish
@@ -1420,18 +1429,18 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             bne @MoveDragon_7     ;branch if not
 ; normal dragon state 2 (eaten ball)
             lda $00,x             ;get the dragon's current room
-            sta curr_room         ;store as the ball's current room
-            sta prev_room               ; and previous room
+            sta ManInfo+ObjectInfoType::room_num         ;store as the ball's current room
+            sta PrevManInfo+ObjectInfoType::room_num     ; and previous room
             lda $01,x             ;get the dragon's X coordinate
             clc
             adc #3                ;adjust
-            sta man_x             ; and store as the man's X coordinate
-            sta prev_man_x               ; and previous X coordinate
+            sta ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord           ; and store as the man's X coordinate
+            sta PrevManInfo+ObjectInfoType::pos+ObjectPosType::xcoord       ; and previous X coordinate
             lda $02,x             ;get the dragon's Y coordinate
             sec
             sbc #$0a              ;adjust
-            sta man_y             ; and store as the man's Y coordinate
-            sta prev_man_y        ; and the previous Y coordinate
+            sta ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord           ; and store as the man's Y coordinate
+            sta PrevManInfo+ObjectInfoType::pos+ObjectPosType::ycoord       ; and the previous Y coordinate
             jmp @MoveDragon_9
 
 ; dragon roaring
@@ -1445,9 +1454,9 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             beq @MoveDragon_9     ;if not, branch
             lda #2                ;set the state to state 02: eaten
             sta $04,x
-            lda #2                ;set noise two
+            lda #NoiseType::maneaten
             sta sound_type
-            lda #$10              ;set the count of noise to $10
+            lda #$10
             sta sound_duration_counter
             lda #$9b              ;get the maximum X coordinate
             cmp $01,x             ;compare with the dragon's X coordinate
@@ -1542,17 +1551,17 @@ MoveBat:    inc BlackBatCurrBase  ;put bat in the next state
 @MoveBat_5: rts
 
 ; bat object matrix
-BatMatrix:  .byte BlackBatInfo, ChaliceInfo    ;bat, chalice
-            .byte BlackBatInfo, SwordInfo      ;bat, sword
-            .byte BlackBatInfo, BridgeInfo     ;bat, bridge
-            .byte BlackBatInfo, YellowKeyInfo  ;bat, yellow key
-            .byte BlackBatInfo, WhiteKeyInfo   ;bat, white key
-            .byte BlackBatInfo, BlackKeyInfo   ;bat, black key
-            .byte BlackBatInfo, Dragon1Info    ;bat, red dragon
-            .byte BlackBatInfo, Dragon2Info    ;bat, yellow dragon
-            .byte BlackBatInfo, Dragon3Info    ;bat, green dragon
-            .byte BlackBatInfo, MagnetInfo     ;bat, magnet
-            .byte 0
+BatMatrix:  .byte  BlackBatInfo, ChaliceInfo
+            .byte  BlackBatInfo, SwordInfo
+            .byte  BlackBatInfo, BridgeInfo
+            .byte  BlackBatInfo, YellowKeyInfo
+            .byte  BlackBatInfo, WhiteKeyInfo
+            .byte  BlackBatInfo, BlackKeyInfo
+            .byte  BlackBatInfo, RedDragonInfo
+            .byte  BlackBatInfo, YellowDragonInfo
+            .byte  BlackBatInfo, GreenDragonInfo
+            .byte  BlackBatInfo, MagnetInfo
+            .byte  0
 
 ; deal with portcullis and collisions
 Portals:    ldy #2                ;for each portcullis
@@ -1574,7 +1583,7 @@ Portals:    ldy #2                ;for each portcullis
             beq @Portals_4        ;if not then branch
             lda #1                ;set the portcullis to closed
             sta PortCurrBase,x
-            ldx #man_object
+            ldx #ManInfo
             jmp @Portals_6        ;put the man in the castle
 
 @Portals_4: lda obj_collided_with ;get the object that hit the portcullis
@@ -1617,9 +1626,9 @@ PortOffsets:
 
 KeyOffsets: .byte  $63, $6c, $75       ;keys (yellow, white, black)
 EntryRoomOffsets:
-            .byte  $12, $1a, $1b       ;castle entry rooms (yellow, white, black)
+            .byte  roomnum_YellowCastleEntry, roomnum_WhiteCastleEntry, roomnum_BlackCastleEntry
 CastleRoomOffsets:
-            .byte  $11, $0f, $10       ;castle rooms (yellow, white, black)
+            .byte  roomnum_YellowCastle, roomnum_WhiteCastle, roomnum_BlackCastle
 
 ; deal with magnet
 Mag:        lda z:MagnetInfo+ObjectInfoType::pos+ObjectPosType::ycoord
@@ -1654,9 +1663,9 @@ MagnetMatrix:
             .byte 0
 
 ; deal with invisible surround moving
-Surround:   lda curr_room         ;set the current room
+Surround:   lda ManInfo+ObjectInfoType::room_num         ;set the current room
             jsr RoomNumToAddress  ;convert it to an address
-            ldy #RoomDataEntry::color
+            ldy #RoomTableEntry::color
             lda (dr_ptr),y
             cmp #8                ;is it invisible?
             beq @Surround_2       ;if so branch
@@ -1665,13 +1674,13 @@ Surround:   lda curr_room         ;set the current room
             jmp @Surround_Done
 
 @Surround_2:
-            lda curr_room         ;get the current room
+            lda ManInfo+ObjectInfoType::room_num         ;get the current room
             sta SurroundInfo      ;and store as the invisible surround
-            lda man_x             ;get the man's X coordinate
+            lda ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord           ;get the man's X coordinate
             sec
             sbc #$0e              ;adjust for surround,
             sta z:SurroundInfo+ObjectInfoType::pos+ObjectPosType::xcoord
-            lda man_y             ;get the man's Y coordinate
+            lda ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord           ;get the man's Y coordinate
             clc
             adc #$0e              ;adjust for surround
             sta z:SurroundInfo+ObjectInfoType::pos+ObjectPosType::ycoord
@@ -1701,15 +1710,15 @@ MakeSound:  lda sound_duration_counter  ;check noise count
             dec sound_duration_counter  ;go to the next note
             lda sound_type        ;get the noise type
             beq GameOverNoise     ;game over
-            cmp #1                ;roar
+            cmp #NoiseType::dragonroar
             beq RoarNoise
-            cmp #2                ;man eaten
+            cmp #NoiseType::maneaten
             beq EatenNoise
-            cmp #3                ;dying dragon
+            cmp #NoiseType::dragondied
             beq DragDieNoise
-            cmp #4                ;dropping object
+            cmp #NoiseType::dropitem
             beq DropObjectNoise
-            cmp #5                ;pickup up object
+            cmp #NoiseType::getitem
             beq GetObjectNoise
             rts
 
@@ -1802,7 +1811,11 @@ MazeEntry:          mazeentry_gfxpf_data
 CastleDef:          castle_gfxpf_data
 
 PortMacro ,info
-SurroundMacro
+
+SurroundCurr:       .byte 0
+SurroundStates:     .byte $ff
+                    .word :+
+:                   surround_gfxgr_data
 
 RedMaze1:           redmaze1_gfxpf_data original
 RedMazeBottom:      redmazebottom_gfxpf_data        ;line shared with room above
@@ -1814,33 +1827,63 @@ BlackMaze3:         blackmaze3_gfxpf_data           ;line shared with room above
 BlackMaze2:         blackmaze2_gfxpf_data original
 BlackMazeEntry:     blackmazeentry_gfxpf_data       ;line shared with room above
 
-BridgeMacro
-GfxNum1:    number1_gfxgr_data
-KeyMacro
-GfxNum2:    number2_gfxgr_data
-GfxNum3:    number3_gfxgr_data
+BridgeCurr:         .byte 0
+BridgeStates:       .byte $ff
+                    .word :+
+:                   bridge_gfxgr_data
+
+GfxNum1:            number1_gfxgr_data
+
+KeyCurr:            .byte 0
+KeyStates:          .byte $ff
+                    .word :+
+:                   key_gfxgr_data
+
+GfxNum2:            number2_gfxgr_data
+GfxNum3:            number3_gfxgr_data
+
 BlackBatMacro
+
 DragonMacro ,0
-SwordMacro ,0
-DotMacro
+
+SwordCurr:          .byte 0
+SwordStates:        .byte $ff
+                    .word :+
+:                   sword_gfxgr_data 0
+
+DotCurr:            .byte 0
+DotStates:          .byte $ff
+                    .word :+
+:                   dot_gfxgr_data
+
 EasterEgg original
-ChaliceMacro
-NullMacro
-NumberMacro ,GfxNum1 ,GfxNum2 ,GfxNum3
-MagnetMacro
 
-RoomsMacro original
+ChaliceCurr:        .byte 0
+ChaliceStates:      .byte $ff
+                    .word :+
+:                   chalice_gfxgr_data
 
-; room differences for different levels (level 1, 2, 3)
-RoomDiffs:  .byte $10, $0f, $0f     ;down from room 01
-            .byte $05, $11, $11     ;down from room 02
-            .byte $1d, $0a, $0a     ;down from room 03
-            .byte $1c, $16, $16     ;U/L/R/D from room 1b (black castle room)
-            .byte $1b, $0c, $0c     ;down from room 1c
-            .byte $03, $0c, $0c     ;up from room 1d (top entry room)
+NullCurr:           .byte 0
+NullStates:         .byte $ff
+                    .word :+
+:                   null_gfxgr_data
+
+NumberInfo:         .byte roomnum_NumberRoom, $50, $40
+NumberStates:       .byte $01
+                    .word GfxNum1
+                    .byte $03
+                    .word GfxNum2
+                    .byte $ff
+                    .word GfxNum3
+
+MagnetCurr:         .byte 0
+MagnetStates:       .byte $ff
+                    .word :+
+:                   magnet_gfxgr_data
+
+RoomsTableMacro
 
 ObjectsMacro
-
 
 ; 6502 vectors
             .segment "VECTORS"
