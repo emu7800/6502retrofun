@@ -33,52 +33,9 @@
 ; 1000-1fff ROM
 
 
-            .setcpu "6502"
-VSYNC       = $00       ; W 0000 00x0  Vertical Sync Set-Clear
-VBLANK      = $01       ; W xx00 00x0  Vertical Blank Set-Clear
-WSYNC       = $02       ; W ---- ----  Wait for Horizontal Blank
-NUSIZ0      = $04       ; W 00xx 0xxx  Number-Size player/missile 0
-NUSIZ1      = $05       ; W 00xx 0xxx  Number-Size player/missile 1
-COLUP0      = $06       ; W xxxx xxx0  Color-Luminance Player 0
-COLUP1      = $07       ; W xxxx xxx0  Color-Luminance Player 1
-COLUPF      = $08       ; W xxxx xxx0  Color-Luminance Playfield
-COLUBK      = $09       ; W xxxx xxx0  Color-Luminance Background
-CTRLPF      = $0a       ; W 00xx 0xxx  Control Playfield, Ball, Collisions
-PF0         = $0d       ; W xxxx 0000  Playfield Register Byte 0
-PF1         = $0e       ; W xxxx xxxx  Playfield Register Byte 1
-PF2         = $0f       ; W xxxx xxxx  Playfield Register Byte 2
-RESP0       = $10       ; W ---- ----  Reset Player 0
-AUDC0       = $15       ; W 0000 xxxx  Audio Control 0
-AUDF0       = $17       ; W 000x xxxx  Audio Frequency 0
-AUDV0       = $19       ; W 0000 xxxx  Audio Volume 0
-AUDV1       = $1a       ; W 0000 xxxx  Audio Volume 1
-GRP0        = $1b       ; W xxxx xxxx  Graphics Register Player 0
-GRP1        = $1c       ; W xxxx xxxx  Graphics Register Player 1
-ENAM0       = $1d       ; W 0000 00x0  Graphics Enable Missile 0
-ENAM1       = $1e       ; W 0000 00x0  Graphics Enable Missile 1
-ENABL       = $1f       ; W 0000 00x0  Graphics Enable Ball
-HMP0        = $20       ; W xxxx 0000  Horizontal Motion Player 0
-VDELP1      = $26       ; W 0000 000x  Vertical Delay Player 1
-HMOVE       = $2a       ; W ---- ----  Apply Horizontal Motion
-HMCLR       = $2b       ; W ---- ----  Clear Horizontal Move Registers
-CXCLR       = $2c       ; W ---- ----  Clear Collision Latches
+.setcpu "6502"
 
-                        ;                             D7    D6
-CXM0P       = $30       ; R xx00 0000  Read collision M0-P1 M0-P0 (unused)
-CXM1P       = $31       ; R xx00 0000  Read collision M1-P0 M1-P1 (unused)
-CXP0FB      = $32       ; R xx00 0000  Read Collision P0-PF P0-BL
-CXP1FB      = $33       ; R xx00 0000  Read Collision P1-PF P1-BL
-CXM0FB      = $34       ; R xx00 0000  Read Collision M0-PF M0-BL
-CXM1FB      = $35       ; R xx00 0000  Read Collision M1-PF M1-BL
-CXBLPF      = $36       ; R x000 0000  Read Collision BL-PF -----
-CXPPMM      = $37       ; R xx00 0000  Read Collision P0-P1 M0-M1
-
-INPT4       = $3c       ; R x000 0000  Read Input (Trigger) 0
-
-SWCHA       = $0280     ; RW Port A data register (joysticks...)
-SWCHB       = $0282     ; RW Port B data (console switches)
-INTIM       = $0284     ; R Timer output
-TIM64T      = $0296     ; W set 64 clock interval
+.include "vcs.inc"
 
 .enum NoiseType
     gameover   = 0
@@ -330,7 +287,7 @@ SetupRoomPrint:
             ldy #RoomTableEntry::gfx_ptr+1
             lda (dr_ptr),y        ;get high pointer to room graphics
             sta roomgfx_base+1
-; checdk B&W switch for room graphics
+; check B&W switch for room graphics
             lda SWCHB             ;get console switches
             and #8                ;check black and white switch
             beq UseBW             ;branch if B&W
@@ -344,7 +301,7 @@ SetupRoomPrint:
 UseBW:      ldy #RoomTableEntry::bw_color
             lda (dr_ptr),y
             jsr ChangeColor       ;change if necessary
-            sta COLUPF            ;put in the playfield color registerg
+            sta COLUPF            ;put in the playfield color register
 ; color background
 UseColor:   lda #8                ;get light grey background
             jsr ChangeColor       ;change if necessary
@@ -1011,7 +968,7 @@ MoveCarriedObject:
             ldy #0
             lda ManInfo+ObjectInfoType::room_num         ;get the current room
             sta (dr_ptr),y        ; and store the object's current room
-            ldy #$01
+            ldy #1
             lda ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord             ;get the man's X coordinate
             clc
             adc objman_x_delta    ;add the X difference
@@ -1797,7 +1754,41 @@ SideCorridor:       sidecorridor_gfxpf_data
 NumberRoom:         numberroom_gfxpf_data
 
 ; object #1 states (portcullis)
-PortMacro ,, states
+PortStates:         .byte $04                ;state 04 - open
+                    .word :+++++++
+                    .byte $08
+                    .word :++++++
+                    .byte $0c
+                    .word :+++++
+                    .byte $10
+                    .word :++++
+                    .byte $14
+                    .word :+++
+                    .byte $18
+                    .word :++
+                    .byte $1c                ;state 1C - closed
+                    .word :+
+                    .byte $20
+                    .word :++
+                    .byte $24
+                    .word :+++
+                    .byte $28
+                    .word :++++
+                    .byte $2c
+                    .word :+++++
+                    .byte $30
+                    .word :++++++
+                    .byte $ff                ;state FF - open
+                    .word :+++++++
+:                   port_gfxgr_data
+:                   port_gfxgr_data
+:                   port_gfxgr_data
+:                   port_gfxgr_data
+:                   port_gfxgr_data
+:                   port_gfxgr_data
+:                   port_gfxgr_data
+                    port_gfxgr_data
+                    .byte 0
 
 TwoExitRoom:        twoexitroom_gfxpf_data
 BlueMazeTop:        bluemazetop_gfxpf_data
@@ -1810,7 +1801,9 @@ MazeSide:           mazeside_gfxpf_data             ;line shared with above room
 MazeEntry:          mazeentry_gfxpf_data
 CastleDef:          castle_gfxpf_data
 
-PortMacro ,info
+PortInfo1:          .byte roomnum_YellowCastle, $4d, $31
+PortInfo2:          .byte roomnum_WhiteCastle,  $4d, $31
+PortInfo3:          .byte roomnum_BlackCastle,  $4d, $31
 
 SurroundCurr:       .byte 0
 SurroundStates:     .byte $ff
@@ -1842,9 +1835,24 @@ KeyStates:          .byte $ff
 GfxNum2:            number2_gfxgr_data
 GfxNum3:            number3_gfxgr_data
 
-BlackBatMacro
+BatStates:          .byte $03
+                    .word :+
+                    .byte $ff
+                    .word :++
+:                   bat1_gfxgr_data
+:                   bat2_gfxgr_data
 
-DragonMacro ,0
+DragonStates:       .byte $00
+                    .word :+
+                    .byte $01
+                    .word :+++
+                    .byte $02
+                    .word :+
+                    .byte $ff
+                    .word :++
+:                   dragonnormal_gfxgr_data 0
+:                   dragonroar_gfxgr_data   0
+:                   dragondead_gfxgr_data   0
 
 SwordCurr:          .byte 0
 SwordStates:        .byte $ff
@@ -1856,7 +1864,11 @@ DotStates:          .byte $ff
                     .word :+
 :                   dot_gfxgr_data
 
-EasterEgg original
+:                   easteregg_gfxgr_data norm
+EasterEggInfo:      .byte roomnum_SecretRoom, $50, $69
+EasterEggCurr:      .byte 0
+EasterEggStates:    .byte $ff
+                    .word :-
 
 ChaliceCurr:        .byte 0
 ChaliceStates:      .byte $ff
