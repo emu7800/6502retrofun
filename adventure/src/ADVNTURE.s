@@ -1729,15 +1729,13 @@ Surround:   lda ManInfo+ObjectInfoType::room_num         ;set the current room
 @Surround_Done:
             rts
 
-; make a noise
 MakeSound:  lda sound_duration_counter  ;check noise count
-            bne @MakeSound_2      ;branch if noise to be made
-            sta AUDV0             ;turn off the volume
+            bne :+                      ;branch if noise to be made
+            sta AUDV0                   ;turn off the volume
             sta AUDV1
             rts
 
-@MakeSound_2:
-            dec sound_duration_counter  ;go to the next note
+:           dec sound_duration_counter  ;go to the next note
             lda sound_type
             beq GameOverNoise
             cmp #NoiseType::dragonroar
@@ -1766,9 +1764,9 @@ GameOverNoise:
 RoarNoise:  lda sound_duration_counter
             lsr a
             lda #3                ;if it was even then
-            bcs SetVolume         ; branch
+            bcs :+                ; branch
             lda #8                ;get a different audio control value
-SetVolume:  sta AUDC0             ;set audio control 00
+:           sta AUDC0             ;set audio control 00
             lda sound_duration_counter  ;set the volume to the noise count
             sta AUDV0
             lsr a                 ;divide by four
@@ -1803,8 +1801,7 @@ DragDieNoise:
 DropObjectNoise:
             lda sound_duration_counter
             eor #3                ;reverse it as noise does up
-:
-            sta AUDF0             ;store in frequency for channel 00
+:           sta AUDF0             ;store in frequency for channel 00
             lda #5
             sta AUDV0             ;set volume on channel 00
             lda #6
@@ -2169,6 +2166,7 @@ roomnum_SecretRoom = (* - Rooms) / .sizeof(RoomTableEntry)
     .byte ColorType::purple, BWColorType::litegray
     .byte pf_control_4bl | pf_control_ref
     .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeBottom, roomnum_BelowYellowCastleRightThinWall
+
 
 RoomDiffs:
 ; room differences for different levels
