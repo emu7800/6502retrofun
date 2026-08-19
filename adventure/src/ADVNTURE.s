@@ -56,17 +56,37 @@
     darkergray  = $02
     darkgray    = $06
     invisible   = $08
-    litegray    = $0a
-    liteergray  = $0c
+    lightgray   = $0a
+    lightergray = $0c
     white       = $0e
 .endenum
 
-; bit combineable flags
-pf_control_leftthinwall  = %10000000
-pf_control_rightthinwall = %01000000
-pf_control_4bl           = %00100000 ; bl 4 size
-pf_control_pfp           = %00000100 ; pf priority
-pf_control_ref           = %00000001 ; pf reflect
+.enum RoomControlType  ; leftwall   rightwall   bl4 size    pfpriority  pfreflect
+    leftthinwall      = %10000000             | %00100000             | %00000001
+    rightthinwall     =             %01000000 | %00100000             | %00000001
+    pfref             =                         %00100000             | %00000001
+    pfrefpfp          =                         %00100000 | %00000100 | %00000001
+    pfp               =                         %00100000 | %00000100
+.endenum
+
+; Values are offsets against RESP0 and HMP0
+.enum SpriteType
+    object1       = 0 ; RESxx/HMxx P0
+    object2       = 1 ; RESxx/HMxx P1
+    leftthinwall  = 2 ; RESxx/HMxx M0
+    rightthinwall = 3 ; RESxx/HMxx M1
+    man           = 4 ; RESxx/HMxx BL
+.endenum
+
+; Values are dependent upon RIOT SWCHB
+.enum ConsoleSwitchType
+    reset           = %00000001
+    select          = %00000010
+    selectandreset  = %00000011
+    bw              = %00001000
+    leftdifficulty  = %01000000
+    rightdifficulty = %10000000
+.endenum
 
 .enum NoiseType
     gameover   = 0
@@ -77,7 +97,7 @@ pf_control_ref           = %00000001 ; pf reflect
     getitem    = 5
 .endenum
 
-.struct RoomTableEntry
+.struct RoomType
     gfx_ptr     .word
     color       .byte ; ColorType
     bw_color    .byte ; BWColorType
@@ -103,15 +123,15 @@ pf_control_ref           = %00000001 ; pf reflect
     move          .byte
 .endstruct
 
-.struct StateEntryType
+.struct StateType
     state_num     .byte
     pos           .tag ObjectPosType
 .endstruct
 
 .struct ObjectType
     info_ptr      .word  ; pointer to a ObjectInfoType
-    currstate_ptr .word  ; pointer to a StateEntryType
-    states_ptr    .word  ; pointer to list of StateEntryTypes
+    currstate_ptr .word  ; pointer to a StateType::state_num
+    states_ptr    .word  ; pointer to list of StateType
     color         .byte  ; ColorType
     bw_color      .byte  ; BWColorType
     size          .byte
@@ -194,14 +214,14 @@ START:      jmp StartGame
 
 PrintDisplay:
             sta HMCLR       ;clear horizontal motion
-            lda player0pos+ObjectPosType::xcoord  ;position Player00 sprite to
-            ldx #0          ; the X coordinate of Object1
+            lda player0pos+ObjectPosType::xcoord
+            ldx #SpriteType::object1
             jsr PosSpriteX
-            lda player1pos+ObjectPosType::xcoord  ;position Player01 sprite to
-            ldx #1          ; the X coordinate of Object2
+            lda player1pos+ObjectPosType::xcoord
+            ldx #SpriteType::object2
             jsr PosSpriteX
-            lda ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord  ;position ball sprite to
-            ldx #4          ; the X coordinate of the Man
+            lda ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord
+            ldx #SpriteType::man
             jsr PosSpriteX
             sta WSYNC       ;wait for horizontal blank
             sta HMOVE       ;apply horizontal motion
@@ -210,8 +230,8 @@ PrintDisplay:
             sec
             sbc #4                    ;and adjust it by four scan lines
             sta man_y2                ; for printing (so Y coordinate specifies middle)
-:           lda INTIM                 ;wait for end of the
-            bne :-                    ; current frame
+:           lda INTIM                 ;wait for end
+            bne :-                    ; of the current frame
             lda #0
             sta p0gfx_offset          ;set Player00 definition index
             sta p1gfx_offset          ;set Player01 definition index
@@ -220,8 +240,9 @@ PrintDisplay:
             lda #1
             sta VDELP1                ;vertically delay Player01
             lda #104
-            sta scan_line             ;set scan line count
-; print top line of room
+            sta scan_line             ;reset scan line counter
+
+; Print top line of room
             ldy roomgfx_offset        ;get room definition index
             lda (roomgfx_base),y      ;get first room definition byte
             sta PF0                   ; and display
@@ -236,45 +257,43 @@ PrintDisplay:
             sta WSYNC                 ;wait for horizontal blank
             lda #0
             sta VBLANK                ;clear any vertical blank
-            jmp PrintPlayer00
+            jmp PrintPlayer0
 
-; print Player01 (Object2)
-PrintPlayer01:
-            lda scan_line             ;get current scan line
+; Print Player1 (Object2)
+PrintPlayer1:
+            lda scan_line
             sec                       ;have we reached Object2's Y coordinate?
             sbc player1pos+ObjectPosType::ycoord
             sta WSYNC                 ;wait for horizontal blank
-            bpl PrintPlayer00         ;if not, branch
+            bpl PrintPlayer0          ;if not, branch
             ldy p1gfx_offset          ;get the Player01 definition index
             lda (p1gfx_base),y        ;get the next Player01 definition byte
             sta GRP1                  ; and display
-            beq PrintPlayer00         ;if zero then definition finished
+            beq PrintPlayer0          ;if zero then definition finished
             inc p1gfx_offset          ;goto next Player01 definition byte
 
-; print Player00 (Object1), Ball (Man), and Room
-PrintPlayer00:
+; Print Player0 (Object1), Ball (Man), and Room
+PrintPlayer0:
             ldx #0
-            lda scan_line            ;get the current scan line
+            lda scan_line
             sec                      ;have we reached the Object1's Y coordinate?
             sbc player0pos+ObjectPosType::ycoord
-            bpl @PrintPlayer00_1     ;if not then branch
+            bpl :+                   ;if not then branch
             ldy p0gfx_offset         ;get Player00 definition index
             lda (p0gfx_base),y       ;get the next Player00 definition byte
             tax
-            beq @PrintPlayer00_1     ;if zero then definition finished
+            beq :+                   ;if zero then definition finished
             inc p0gfx_offset         ;go to next Player00 definition byte
-@PrintPlayer00_1:
-            ldy #0                   ;disable Ball graphic
-            lda scan_line            ;get scan line count
+:           ldy #0                   ;disable Ball graphic
+            lda scan_line
             sec                      ;have we reached the Man's
             sbc man_y2               ; Y coordinate?
             and #$fc                 ;mask value to four either side (getting depth of 8)
-            bne @PrintPlayer00_2     ;if not, branch
+            bne :+                   ;if not, branch
             ldy #2                   ;enable Ball graphic
-@PrintPlayer00_2:
-            lda scan_line            ;get scan line count
-            and #$0f                 ;have we reached a sixteenth scan line?
-            bne @PrintPlayer00_4     ;if not, branch
+:           lda scan_line
+            and #15                  ;have we reached a sixteenth scan line?
+            bne :++                 ;if not, branch
             sta WSYNC                ;wait for horizontal blank
             sty ENABL                ;enable Ball (if wanted)
             stx GRP0                 ;display Player00 definition byte (if wanted)
@@ -289,63 +308,76 @@ PrintPlayer00:
             sta PF2                  ; and display
             iny
             sty roomgfx_offset       ;save for next time
-@PrintPlayer00_3:
-            dec scan_line            ;goto next scan line
-            lda scan_line            ;get the scan line
+:           dec scan_line            ;goto next scan line
+            lda scan_line
             cmp #8                   ;have we reached to within 8 scanlines of the bottom?
-            bpl PrintPlayer01        ;if not, branch
+            bpl PrintPlayer1         ;if not, branch
             sta VBLANK               ;turn on VBLANK
             jmp TidyUp
 
-; print Player00 (Object1) and Ball (Man)
-@PrintPlayer00_4:
-            sta WSYNC                ;wait for horizontal blank
+; Print Player0 (Object1) and Ball (Man)
+:           sta WSYNC                ;wait for horizontal blank
             sty ENABL                ;enable ball (if wanted)
-            stx GRP0                 ;display Player00 definition byte (if wanted)
-            jmp @PrintPlayer00_3
+            stx GRP0                 ;display Player0 definition byte (if wanted)
+            jmp :--
 
 TidyUp:     lda #0
-            sta GRP1                 ;clear any graphics for Player01
-            sta GRP0                 ;clear any graphics for Player00
-            lda #$20
-            sta TIM64T               ;start timing this frame using
-            rts                      ; the 64-bit counter
+            sta GRP1                 ;clear any graphics for Player1
+            sta GRP0                 ;clear any graphics for Player0
+            lda #32                  ;set clock interval to 32*(64*3)/228 = 26.9 scanlines
+            sta TIM64T
+            rts
 
-; position sprite X horizontally
-PosSpriteX: ldy #2              ;start with 10 clock cycles (to avoid HBLANK)
-            sec                 ;divide the coordinate wanted
-:           iny                 ; by fifteen, i.e. get coarse horizontal
-            sbc #$f             ; value (in multiples of 5 clock cycles
-            bcs :-              ; therefore giving 15 color cycles)
-            eor #$ff            ;flip remainder to positive value (inverted)
-            sbc #6              ;convert to left or right of current position
+; Position Sprite Horizontally
+; x=sprite, a=horizontal position
+;                                      2
+;         6       6       7            2
+; 0       0       8       5            8
+; |--...--|-------+-------|-------...--|
+;
+; 68 is the start of the visible scan line.
+; Minimum delay possible is 75: 4*15 + RESxx(15) = 5*15 = 75
+;
+PosSpriteX: ldy #2              ;start with 2*15=30 color clocks
+            sec
+:           iny                 ;add another 15 color clocks (45 total so far)
+            sbc #15             ;divide by 15 to get coarse position in a multiple of 15
+            bcs :-
+            eor #$ff            ;make remainder positive by flipping bits here
+            ;   +1                and adding 1 here
+            ;   -8               translate range [1,15] to hmove range [-7,7]
+            ;  ===                by subtracting 8
+            ;   -7
+            ;   +1               already subtracting 1 with cleared carry bit
+            ;  ===
+            sbc #6
+            asl a               ;move to high nybble for TIA horizontal motion
             asl a
             asl a
-            asl a               ;move to high nybble for TIA
-            asl a               ; horizontal motion
+            asl a
             sty WSYNC           ;wait for horizontal blank
-:           dey                 ;count down the color cycles
-            bpl :-              ; (these are 5 machine / 15 color cycles)
-            .assert .hibyte (*) = .hibyte (:-), error, "Last two instructions must be on same page."
-            sta RESP0,x         ;reset the sprite, thus positioning it coarsely
+:           dey                 ;count down (y+1)*15 color clocks
+            bpl :-
+            .assert .hibyte (* - 1) = .hibyte (:-), error, "Last two instructions must be on same page."
+            sta RESP0,x         ;reset sprite, positioning it coarsely (adds ~15 color clocks)
             sta HMP0,x          ;set horizontal (fine) motion of sprite
             rts
 
 DoVSYNC:    lda INTIM           ;get timer output
             bne DoVSYNC         ;wait for time-out
-            lda #2
+            lda #%10
             sta WSYNC           ;wait for horizontal blank
             sta VBLANK          ;start vertical blanking
             sta WSYNC
             sta WSYNC
             sta WSYNC
-            sta VSYNC
+            sta VSYNC           ;start vertical sync
             sta WSYNC
             sta WSYNC
             lda #0
             sta WSYNC           ;wait for horizontal blank
             sta VSYNC           ;end vertical sync
-            lda #$2a            ;set clock interval to
+            lda #42             ;set clock interval to 42*(64*3)/228 = 35.4 scanlines
             sta TIM64T          ; count down next frame
             rts
 
@@ -353,24 +385,24 @@ DoVSYNC:    lda INTIM           ;get timer output
 SetupRoomPrint:
             lda ManInfo+ObjectInfoType::room_num         ;get current room number
             jsr RoomNumToAddress  ;convert it to an address
-            ldy #RoomTableEntry::gfx_ptr
+            ldy #RoomType::gfx_ptr
             lda (dr_ptr),y
             sta roomgfx_base
-            ldy #RoomTableEntry::gfx_ptr+1
+            ldy #RoomType::gfx_ptr+1
             lda (dr_ptr),y        ;get high pointer to room graphics
             sta roomgfx_base+1
 ; check B&W switch for room graphics
             lda SWCHB             ;get console switches
-            and #8                ;check black and white switch
-            beq UseBW             ;branch if B&W
+            and #ConsoleSwitchType::bw
+            beq UseBW
 ; use color
-            ldy #RoomTableEntry::color
+            ldy #RoomType::color
             lda (dr_ptr),y
             jsr ChangeColor       ;change if necessary
             sta COLUPF            ;put in playfield color register
             jmp UseColor
 
-UseBW:      ldy #RoomTableEntry::bw_color
+UseBW:      ldy #RoomType::bw_color
             lda (dr_ptr),y
             jsr ChangeColor       ;change if necessary
             sta COLUPF            ;put in the playfield color register
@@ -379,7 +411,7 @@ UseColor:   lda #ColorType::invisible ;invisible = lightgray
             jsr ChangeColor       ;change if necessary
             sta COLUBK            ;background color register
 ; playfield control
-            ldy #RoomTableEntry::pf_control
+            ldy #RoomType::pf_control
             lda (dr_ptr),y
             sta CTRLPF            ;playfield control register
             and #$c0              ;get the wall flags
@@ -442,8 +474,8 @@ SetupObjectPrint:
             sta p0gfx_base+1      ; and store for print
 ; check B&W for Object01
             lda SWCHB             ;get console switches
-            and #8                ;check B&W switches
-            beq MakeObjectBW      ;branch if B&W
+            and #ConsoleSwitchType::bw
+            beq MakeObjectBW
 ; color
             lda a:Objects+ObjectType::color,x
             jsr ChangeColor       ;change if necessary
@@ -492,8 +524,8 @@ ResizeObject:
             sta p1gfx_base+1
 ; check B&W for Object2
             lda SWCHB             ;get console switches
-            and #8                ;check B&W switch
-            beq MakeObject2BW     ;if B&W then branch
+            and #ConsoleSwitchType::bw
+            beq MakeObject2BW
 ; color
             lda a:Objects+ObjectType::color,x
             jsr ChangeColor       ;change if necessary
@@ -553,7 +585,7 @@ StoreCount: sty obj_counter       ;if so, store current count
 
 ; convert room number to address
 RoomNumToAddress:
-            .assert .sizeof(RoomTableEntry) = 9, error, "This subroutine assumes RoomTableEntry is 9 bytes long."
+            .assert .sizeof(RoomType) = 9, error, "This subroutine assumes RoomType is 9 bytes long."
             sta tmp1              ;store room number wanted
             sta dr_ptr
             lda #0                ;zero the high byte of the
@@ -608,8 +640,8 @@ CheckInput: inc input_counter
             cmp #$ff              ;if any movement then branch
             bne :+
             lda SWCHB             ;get the console switches
-            and #3                ;mask for the reset/select switches
-            cmp #3                ;have either of them been used?
+            and #ConsoleSwitchType::selectandreset
+            cmp #ConsoleSwitchType::selectandreset ;have either of them been used?
             beq :++               ;if not branch
 :           lda #0                ;zero the high count of the
             sta input_counter+1   ; switches or joystick have been used
@@ -698,12 +730,11 @@ NonActiveLoop:
             jsr SetupRoomPrint    ;set up room and objects for display
             jmp MainGameLoop
 
-; position missiles to "thin wall" areas
-ThinWalls:  lda #$0d              ;position missile 00 to
-            ldx #2                ; (0d,00) - left thin wall
+ThinWalls:  lda #13
+            ldx #SpriteType::leftthinwall
             jsr PosSpriteX
-            lda #$96              ;position missile 01 to
-            ldx #3                ; (96,00) - right thin wall
+            lda #150
+            ldx #SpriteType::rightthinwall
             jsr PosSpriteX
             sta WSYNC             ;wait for horizontal blank
             sta HMOVE             ;apply the horizontal move
@@ -713,7 +744,7 @@ CheckGameStart:
             lda SWCHB             ;get the console switches
             eor #$ff              ;flip (as reset active low)
             and cached_swchb      ;compare with what was before
-            and #1                ;and check only the reset switch
+            and #ConsoleSwitchType::reset
             beq NotReset          ;if no reset then branch
             lda is_game_complete
             cmp #$ff
@@ -739,7 +770,7 @@ ReincarnatePlayer:
 NotReset:   lda SWCHB             ;get the console switches
             eor #$ff              ;flip (as select active low)
             and cached_swchb      ;compare with what was before
-            and #2                ;and check only the select switch
+            and #ConsoleSwitchType::select
             beq NotSelect         ;branch if select not being used
             lda ManInfo+ObjectInfoType::room_num  ;get the current room
             cmp #roomnum_NumberRoom
@@ -1116,7 +1147,7 @@ DealWithLeft:
             lda #$9e                ;set new X coordinate for the ball
 @DealWithLeft_4:
             sta $01,x               ;store the next X coordinate
-            ldy #RoomTableEntry::room_left
+            ldy #RoomType::room_left
             jmp GetNewRoom
 
 ; check and deal with Down
@@ -1126,7 +1157,7 @@ DealWithDown:
             bcs DealWithRight       ; branch
             lda #$69                ;set new Y coordinate
             sta $02,x
-            ldy #RoomTableEntry::room_down
+            ldy #RoomType::room_down
             jmp GetNewRoom
 
 ; check and deal with right
@@ -1155,7 +1186,7 @@ DealWithRight:
 @DealWithRight_3:
             lda #3                  ;set the next X coordinate
             sta $01,x
-            ldy #RoomTableEntry::room_right
+            ldy #RoomType::room_right
             jmp GetNewRoom
 
 ; get new room
@@ -1405,7 +1436,7 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             bne @MoveDragon_6     ;branch if not
 ; dragon normal (state 1)
             lda SWCHB             ;read console switches
-            and #$80              ;check for P1 difficulty
+            and #ConsoleSwitchType::rightdifficulty ;check for P1 difficulty
             beq @MoveDragon_2     ;if amateur branch
             lda #0                ;set hard - ignore nothing
             jmp @MoveDragon_3
@@ -1695,7 +1726,7 @@ MagnetMatrix:
 ; deal with invisible surround moving
 Surround:   lda ManInfo+ObjectInfoType::room_num         ;set the current room
             jsr RoomNumToAddress  ;convert it to an address
-            ldy #RoomTableEntry::color
+            ldy #RoomType::color
             lda (dr_ptr),y
             cmp #8                ;is it invisible?
             beq @Surround_2       ;if so branch
@@ -1959,13 +1990,13 @@ MagnetStates:       .byte $ff
 
 
 Rooms:
-roomnum_NumberRoom = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_NumberRoom = (* - Rooms) / .sizeof(RoomType)
     .word NumberRoom
-    .byte ColorType::purple, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::purple, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_NumberRoom, roomnum_NumberRoom, roomnum_NumberRoom, roomnum_NumberRoom
 
-roomnum_BelowYellowCastleLeftThinWall = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BelowYellowCastleLeftThinWall = (* - Rooms) / .sizeof(RoomType)
 roomrange_reddragon_start    = roomnum_BelowYellowCastleLeftThinWall
 roomrange_yellowdragon_start = roomnum_BelowYellowCastleLeftThinWall
 roomrange_greendragon_start  = roomnum_BelowYellowCastleLeftThinWall
@@ -1977,177 +2008,177 @@ roomrange_blackkey_start     = roomnum_BelowYellowCastleLeftThinWall
 roomrange_bat_start          = roomnum_BelowYellowCastleLeftThinWall
 roomrange_magnet_start       = roomnum_BelowYellowCastleLeftThinWall
     .word BelowYellowCastle
-    .byte ColorType::darkgreen, BWColorType::litegray
-    .byte pf_control_leftthinwall | pf_control_4bl | pf_control_ref
+    .byte ColorType::darkgreen, BWColorType::lightgray
+    .byte RoomControlType::leftthinwall
     .byte roomnum_BlueMazeEntry, roomnum_BelowYellowCastle, roomnum_downfrom_BelowYellowCastleLeftThinWall, roomnum_BelowYellowCastleRightThinWall
 
-roomnum_BelowYellowCastle = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BelowYellowCastle = (* - Rooms) / .sizeof(RoomType)
     .word BelowYellowCastle
-    .byte ColorType::green, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::green, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_YellowCastle, roomnum_BelowYellowCastleRightThinWall, roomnum_downfrom_BelowYellowCastleGreen, roomnum_BelowYellowCastleLeftThinWall
 
-roomnum_BelowYellowCastleRightThinWall = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BelowYellowCastleRightThinWall = (* - Rooms) / .sizeof(RoomType)
     .word LeftOfName
-    .byte ColorType::darkyellow, BWColorType::litegray
-    .byte pf_control_rightthinwall | pf_control_4bl | pf_control_ref
+    .byte ColorType::darkyellow, BWColorType::lightgray
+    .byte RoomControlType::rightthinwall
     .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleLeftThinWall, roomnum_downfrom_BelowYellowCastleRightThinWall, roomnum_BelowYellowCastle
 
-roomnum_BlueMazeTop = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlueMazeTop = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeTop
-    .byte ColorType::blue, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::blue, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_BlackCastle, roomnum_BlueMaze1, roomnum_BlueMazeCenter, roomnum_BlueMazeBottom
 
-roomnum_BlueMaze1 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlueMaze1 = (* - Rooms) / .sizeof(RoomType)
     .word BlueMaze1
-    .byte ColorType::blue, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::blue, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_TopEntryRoom2, roomnum_BlueMazeBottom, roomnum_BlueMazeEntry, roomnum_BlueMazeTop
 
-roomnum_BlueMazeBottom = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlueMazeBottom = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeBottom
-    .byte ColorType::blue, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::blue, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_BlueMazeCenter, roomnum_BlueMazeTop, roomnum_BelowYellowCastleRightThinWall, roomnum_BlueMaze1
 
-roomnum_BlueMazeCenter = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlueMazeCenter = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeCenter
-    .byte ColorType::blue, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::blue, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_BlueMazeTop, roomnum_BlueMazeEntry, roomnum_BlueMazeBottom, roomnum_BlueMazeEntry
 
-roomnum_BlueMazeEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlueMazeEntry = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeEntry
-    .byte ColorType::blue, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::blue, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_BlueMaze1, roomnum_BlueMazeCenter, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeCenter
 
-roomnum_MazeMiddle = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_MazeMiddle = (* - Rooms) / .sizeof(RoomType)
     .word MazeMiddle
     .byte ColorType::invisible, BWColorType::invisible
-    .byte pf_control_4bl | pf_control_pfp | pf_control_ref
+    .byte RoomControlType::pfrefpfp
     .byte roomnum_MazeEntry, roomnum_MazeEntry, roomnum_MazeSide, roomnum_MazeEntry
 
-roomnum_MazeEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_MazeEntry = (* - Rooms) / .sizeof(RoomType)
     .word MazeEntry
     .byte ColorType::invisible, BWColorType::invisible
-    .byte pf_control_4bl | pf_control_pfp | pf_control_ref
+    .byte RoomControlType::pfrefpfp
     .byte roomnum_BelowYellowCastleRightThinWall, roomnum_MazeMiddle, roomnum_MazeMiddle, roomnum_MazeMiddle
 
-roomnum_MazeSide = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_MazeSide = (* - Rooms) / .sizeof(RoomType)
     .word MazeSide
     .byte ColorType::invisible, BWColorType::invisible
-    .byte pf_control_4bl | pf_control_pfp | pf_control_ref
+    .byte RoomControlType::pfrefpfp
     .byte roomnum_MazeMiddle, roomnum_SideCorridor1, roomnum_OtherPurpleRoom, roomnum_SideCorridor2
 
-roomnum_SideCorridor1 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_SideCorridor1 = (* - Rooms) / .sizeof(RoomType)
     .word SideCorridor
-    .byte ColorType::lightblue, BWColorType::litegray
-    .byte pf_control_rightthinwall | pf_control_4bl | pf_control_ref
+    .byte ColorType::lightblue, BWColorType::lightgray
+    .byte RoomControlType::rightthinwall
     .byte roomnum_OtherPurpleRoom, roomnum_SideCorridor2, roomnum_TopEntryRoom2, roomnum_MazeSide
 
-roomnum_SideCorridor2 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_SideCorridor2 = (* - Rooms) / .sizeof(RoomType)
     .word SideCorridor
-    .byte ColorType::lightgreen, BWColorType::litegray
-    .byte pf_control_leftthinwall | pf_control_4bl | pf_control_ref
+    .byte ColorType::lightgreen, BWColorType::lightgray
+    .byte RoomControlType::leftthinwall
     .byte roomnum_WhiteCastle, roomnum_MazeSide, roomnum_TopEntryRoom1, roomnum_SideCorridor1
 
-roomnum_TopEntryRoom1 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_TopEntryRoom1 = (* - Rooms) / .sizeof(RoomType)
     .word TopEntryRoom
-    .byte ColorType::turquoise, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::turquoise, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_SideCorridor2, roomnum_BlackCastle, roomnum_WhiteCastle, roomnum_BlackCastle
 
-roomnum_WhiteCastle = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_WhiteCastle = (* - Rooms) / .sizeof(RoomType)
     .word CastleDef
-    .byte ColorType::darkwhite, BWColorType::liteergray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::darkwhite, BWColorType::lightergray
+    .byte RoomControlType::pfref
     .byte roomnum_TopEntryRoom1, roomnum_WhiteCastle, roomnum_SideCorridor2, roomnum_WhiteCastle
 
-roomnum_BlackCastle = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlackCastle = (* - Rooms) / .sizeof(RoomType)
     .word CastleDef
     .byte ColorType::black, BWColorType::darkergray
-    .byte pf_control_4bl | pf_control_ref
+    .byte RoomControlType::pfref
     .byte roomnum_BelowYellowCastleLeftThinWall, roomnum_OtherPurpleRoom, roomnum_BlueMazeTop, roomnum_OtherPurpleRoom
 
-roomnum_YellowCastle = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_YellowCastle = (* - Rooms) / .sizeof(RoomType)
     .word CastleDef
-    .byte ColorType::yellow, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::yellow, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleRightThinWall, roomnum_BelowYellowCastle, roomnum_BelowYellowCastleLeftThinWall
 
-roomnum_YellowCastleEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_YellowCastleEntry = (* - Rooms) / .sizeof(RoomType)
 roomrange_blackkey_end = roomnum_YellowCastleEntry
     .word NumberRoom
-    .byte ColorType::yellow, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::yellow, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_YellowCastleEntry, roomnum_YellowCastleEntry, roomnum_YellowCastleEntry, roomnum_YellowCastleEntry
 
-roomnum_BlackMaze1 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlackMaze1 = (* - Rooms) / .sizeof(RoomType)
 roomrange_chalice_start = roomnum_BlackMaze1
     .word BlackMaze1
     .byte ColorType::invisible, BWColorType::invisible
-    .byte pf_control_4bl | pf_control_pfp | pf_control_ref
+    .byte RoomControlType::pfrefpfp
     .byte roomnum_BlackMaze3, roomnum_BlackMaze2, roomnum_BlackMaze3, roomnum_BlackMazeEntry
 
-roomnum_BlackMaze2 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlackMaze2 = (* - Rooms) / .sizeof(RoomType)
     .word BlackMaze2
     .byte ColorType::invisible, BWColorType::invisible
-    .byte pf_control_4bl | pf_control_pfp
+    .byte RoomControlType::pfp
     .byte roomnum_BlackMazeEntry, roomnum_BlackMaze3, roomnum_BlackMazeEntry, roomnum_BlackMaze1
 
-roomnum_BlackMaze3 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlackMaze3 = (* - Rooms) / .sizeof(RoomType)
     .word BlackMaze3
     .byte ColorType::invisible, BWColorType::invisible
-    .byte pf_control_4bl | pf_control_pfp
+    .byte RoomControlType::pfp
     .byte roomnum_BlackMaze1, roomnum_BlackMazeEntry, roomnum_BlackMaze1, roomnum_BlackMaze2
 
-roomnum_BlackMazeEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlackMazeEntry = (* - Rooms) / .sizeof(RoomType)
 roomrange_whitekey_end = roomnum_BlackMazeEntry
     .word BlackMazeEntry
     .byte ColorType::invisible, BWColorType::invisible
-    .byte pf_control_4bl | pf_control_pfp | pf_control_ref
+    .byte RoomControlType::pfrefpfp
     .byte roomnum_BlackMaze2, roomnum_BlackMaze1, roomnum_BlackCastleEntry, roomnum_BlackMaze3
 
-roomnum_RedMaze1 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_RedMaze1 = (* - Rooms) / .sizeof(RoomType)
     .word RedMaze1
-    .byte ColorType::red, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::red, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_RedMazeBottom, roomnum_RedMazeTop, roomnum_RedMazeBottom, roomnum_RedMazeTop
 
-roomnum_RedMazeTop = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_RedMazeTop = (* - Rooms) / .sizeof(RoomType)
     .word RedMazeTop
-    .byte ColorType::red, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::red, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_WhiteCastleEntry, roomnum_RedMaze1, roomnum_WhiteCastleEntry, roomnum_RedMaze1
 
-roomnum_RedMazeBottom = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_RedMazeBottom = (* - Rooms) / .sizeof(RoomType)
     .word RedMazeBottom
-    .byte ColorType::red, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::red, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_RedMaze1, roomnum_WhiteCastleEntry, roomnum_RedMaze1, roomnum_WhiteCastleEntry
 
-roomnum_WhiteCastleEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_WhiteCastleEntry = (* - Rooms) / .sizeof(RoomType)
 roomrange_chalice_end = roomnum_WhiteCastleEntry
     .word WhiteCastleEntry
-    .byte ColorType::red, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::red, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_RedMazeTop, roomnum_RedMazeBottom, roomnum_RedMazeTop, roomnum_RedMazeBottom
 
-roomnum_BlackCastleEntry = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_BlackCastleEntry = (* - Rooms) / .sizeof(RoomType)
     .word TwoExitRoom
-    .byte ColorType::red, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::red, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry
 
-roomnum_OtherPurpleRoom = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_OtherPurpleRoom = (* - Rooms) / .sizeof(RoomType)
     .word NumberRoom
-    .byte ColorType::purple, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::purple, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_TopEntryRoom2, roomnum_BlueMazeCenter, roomnum_downfrom_OtherPurpleRoom, roomnum_BlueMazeEntry
 
-roomnum_TopEntryRoom2 = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_TopEntryRoom2 = (* - Rooms) / .sizeof(RoomType)
 roomrange_reddragon_end    = roomnum_TopEntryRoom2
 roomrange_yellowdragon_end = roomnum_TopEntryRoom2
 roomrange_greendragon_end  = roomnum_TopEntryRoom2
@@ -2157,14 +2188,14 @@ roomrange_yellowkey_end    = roomnum_TopEntryRoom2
 roomrange_bat_end          = roomnum_TopEntryRoom2
 roomrange_magnet_end       = roomnum_TopEntryRoom2
     .word TopEntryRoom
-    .byte ColorType::red, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::red, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_upfrom_TopEntryRoom, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlackCastle, roomnum_BelowYellowCastleRightThinWall
 
-roomnum_SecretRoom = (* - Rooms) / .sizeof(RoomTableEntry)
+roomnum_SecretRoom = (* - Rooms) / .sizeof(RoomType)
     .word BelowYellowCastle
-    .byte ColorType::purple, BWColorType::litegray
-    .byte pf_control_4bl | pf_control_ref
+    .byte ColorType::purple, BWColorType::lightgray
+    .byte RoomControlType::pfref
     .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeBottom, roomnum_BelowYellowCastleRightThinWall
 
 
@@ -2196,7 +2227,7 @@ Objects:
     .word SurroundInfo
     .word SurroundCurr
     .word SurroundStates
-    .byte ColorType::orange, BWColorType::liteergray
+    .byte ColorType::orange, BWColorType::lightergray
     .byte 7
 
 ; 01 portcullis #1
