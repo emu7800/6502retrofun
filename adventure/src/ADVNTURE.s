@@ -61,12 +61,12 @@
     white       = $0e
 .endenum
 
-.enum RoomControlType  ; leftwall   rightwall   bl4 size    pfpriority  pfreflect
-    leftthinwall      = %10000000             | %00100000             | %00000001
-    rightthinwall     =             %01000000 | %00100000             | %00000001
-    pfref             =                         %00100000             | %00000001
-    pfrefpfp          =                         %00100000 | %00000100 | %00000001
-    pfp               =                         %00100000 | %00000100
+.enum RoomControlType   ; leftwall    rightwall   bl4 size    pfpriority  pfreflect
+    leftthinwall_pfref  = %10000000             | %00100000             | %00000001
+    rightthinwall_pfref =             %01000000 | %00100000             | %00000001
+    pfref               =                         %00100000             | %00000001
+    pfref_pfp           =                         %00100000 | %00000100 | %00000001
+    pfp                 =                         %00100000 | %00000100
 .endenum
 
 ; Values are offsets against RESP0 and HMP0
@@ -80,21 +80,21 @@
 
 ; Values are dependent upon RIOT SWCHB
 .enum ConsoleSwitchType
-    reset           = %00000001
-    select          = %00000010
-    selectandreset  = %00000011
-    bw              = %00001000
-    leftdifficulty  = %01000000
-    rightdifficulty = %10000000
+    reset             = %00000001 ; 0=pressed
+    select            = %00000010 ; 0=pressed
+    select_and_reset  = %00000011
+    bw                = %00001000 ; 0=bw 1=color
+    leftdifficulty    = %01000000 ; 0=amateur (b) 1=pro (a)
+    rightdifficulty   = %10000000 ; 0=amateur (b) 1=pro (a)
 .endenum
 
 .enum NoiseType
-    gameover   = 0
-    dragonroar = 1
-    maneaten   = 2
-    dragondied = 3
-    dropitem   = 4
-    getitem    = 5
+    game_over   = 0
+    dragon_roar = 1
+    man_eaten   = 2
+    dragon_died = 3
+    drop_item   = 4
+    get_item    = 5
 .endenum
 
 .struct RoomType
@@ -130,7 +130,7 @@
 
 .struct ObjectType
     info_ptr      .word  ; pointer to a ObjectInfoType
-    currstate_ptr .word  ; pointer to a StateType::state_num
+    currstate_ptr .word  ; pointer to a state_num
     states_ptr    .word  ; pointer to list of StateType
     color         .byte  ; ColorType
     bw_color      .byte  ; BWColorType
@@ -194,7 +194,7 @@ joystick_record:                .byte 0
 tmp1:                           .byte 0
 SurroundInfo:                   .tag ObjectInfoType
 GetObjectState_Arg:             .byte 0
-NumberCurrBase:                 .byte 0
+NumberCurrState:                .byte 0
 is_game_complete:               .byte 0      ; $ff=yes, 0=no
 sound_duration_counter:         .byte 0
 sound_type:                     .byte 0      ; NoiseType
@@ -613,22 +613,18 @@ RoomNumToAddress:
             sta dr_ptr+1
             rts
 
-; get pointer to current state
+; Get pointer to current state, setting y
 GetObjectState:
             ldy #0
             lda GetObjectState_Arg
-@GetObjectState_1:
-            cmp (dr_ptr),y        ;have we found it in the list of states?
-            bcc @GetObjectState_2 ;if nearing it then found it and return
-            beq @GetObjectState_2 ;if found it then return
+:           cmp (dr_ptr),y        ;have we found it in the list of states?
+            bcc :+                ;if nearing it then found it and return
+            beq :+                ;if found it then return
             iny
             iny                   ;goto next state in list of states
             iny
-            jmp @GetObjectState_1
-
-@GetObjectState_2:
-            rts
-
+            jmp :-
+:           rts
 
 CheckInput: inc input_counter
             bne :+
@@ -640,8 +636,8 @@ CheckInput: inc input_counter
             cmp #$ff              ;if any movement then branch
             bne :+
             lda SWCHB             ;get the console switches
-            and #ConsoleSwitchType::selectandreset
-            cmp #ConsoleSwitchType::selectandreset ;have either of them been used?
+            and #ConsoleSwitchType::select_and_reset
+            cmp #ConsoleSwitchType::select_and_reset ;have either of them been used?
             beq :++               ;if not branch
 :           lda #0                ;zero the high count of the
             sta input_counter+1   ; switches or joystick have been used
@@ -649,17 +645,16 @@ CheckInput: inc input_counter
 
 ; change color if necessary
 ChangeColor:
+.assert $80 + (ColorType::flash >> 1) = input_counter && (ColorType::flash & 2) = 2, error, "ColorType::flash value and input_counter address invariant broken"
             lsr a                 ;if bit 0 of the color is set
-            bcc @ChangeColor2     ; then the room is to flash
-            tay                   ;use color as an index (usually E5 - the low counter)
-            lda $0080,y           ;get flash color (usually the low counter)
-@ChangeColor2:
-            ldy input_counter+1   ;get the input counter
-            bpl @ChangeColor3     ;if console/joystick moved recently then branch
-            eor input_counter+1   ;merge the high counter with the color wanted
-            and #$fb              ;keep this color bug merge down the luminance
-@ChangeColor3:
-            asl a                 ;and restore original color if necessary
+            bcc :+                ; then the room is to flash
+            tay                   ;these two instructions could be
+            lda $0080,y           ; replaced with lda input_counter
+:           ldy input_counter+1   ;get the input counter
+            bpl :+                ;if console/joystick moved recently then branch
+            eor input_counter+1   ;vary colors after a period of inactivty to limit CRT burn in
+            and #$fb              ; turn down the luminance
+:           asl a                 ; and restore original color if necessary
             rts
 
 ; get the address of the dynamic information for an object
@@ -675,13 +670,13 @@ StartGame:  sei                   ;disable interrupts
             cld
             ldx #$28              ;clear TIA registers
             lda #0                ; $04-$2c i.e. blank
-ResetAll:   sta NUSIZ0,x          ; everything and turn
+:           sta NUSIZ0,x          ; everything and turn
             dex                   ; everything off
-            bpl ResetAll
+            bpl :-
             txs                   ;reset stack to $ff
-SetupVars:  sta $00,x             ;clear $80 to $ff user vars
+:           sta $00,x             ;clear $80 to $ff user vars
             dex
-            bmi SetupVars
+            bmi :-
             jsr ThinWalls         ;position the thin walls (missiles)
             jsr SetupRoomObjects  ;set up objects rooms and positions
 
@@ -697,7 +692,7 @@ MainGameLoop:
             lda #$ff
             sta sound_duration_counter  ;set the note count to maximum
             sta is_game_complete  ;complete the game since chalice is returned
-            lda #NoiseType::gameover
+            lda #NoiseType::game_over
             sta sound_type
 :           ldy #0                ;allow joystick read - all movement
             jsr BallMovement      ;check ball collisions and move ball
@@ -775,13 +770,13 @@ NotReset:   lda SWCHB             ;get the console switches
             lda ManInfo+ObjectInfoType::room_num  ;get the current room
             cmp #roomnum_NumberRoom
             bne SetupRoomObjects  ;branch if not
-            lda NumberCurrBase    ;increment the level
+            lda NumberCurrState   ;increment the level
             clc                   ; number (by two)
             adc #2
             cmp #6                ;have we reached the maximum?
             bcc ResetSetup
             lda #0                ;if yep then set back to zero
-ResetSetup: sta NumberCurrBase    ;store the new level number
+ResetSetup: sta NumberCurrState    ;store the new level number
 SetupRoomObjects:
             lda #roomnum_NumberRoom
             sta ManInfo+ObjectInfoType::room_num
@@ -789,17 +784,17 @@ SetupRoomObjects:
             lda #0                ;set man ycoord to 0 so can't be seen
             sta ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             sta PrevManInfo+ObjectInfoType::pos+ObjectPosType::ycoord
-            ldy NumberCurrBase    ;get the level number
-            lda GameObjects,y     ;get the low pointer to object locations
+            ldy NumberCurrState    ;get the level number
+            lda GameObjectLocations,y     ;get the low pointer to object locations
             sta dr_ptr
-            lda GameObjects+1,y   ;get the high pointer to object locations
+            lda GameObjectLocations+1,y   ;get the high pointer to object locations
             sta dr_ptr+1
             ldy #$30              ;copy all the objects dynamic information
 :           lda (dr_ptr),y        ; (the rooms and positions) into the working area
             sta a:GameObjectsWorkingArea,y
             dey
             bpl :-
-            lda NumberCurrBase    ;get the level number
+            lda NumberCurrState   ;get the level number
             cmp #4                ;branch if level one
             bcc SignalGameStart   ;or two (where all objects are in defined areas)
             jsr RandomizeLevel3   ;put some objects in random rooms
@@ -855,13 +850,13 @@ Lvl3ObjRoomBounds:
             .byte BlackBatInfo,     roomrange_bat_start,          roomrange_bat_end
             .byte MagnetInfo,       roomrange_magnet_start,       roomrange_magnet_end
 
-GameObjects:
-            .word Game1Objects
-            .word Game2Objects
-            .word Game2Objects
+GameObjectLocations:
+            .word Game1ObjectLocations
+            .word Game2ObjectLocations
+            .word Game2ObjectLocations
 
 ; object locations (room and coordinate) for game 01
-Game1Objects:
+Game1ObjectLocations:
 ;                 Rm,                                    X,   Y,   Mvt, State
             .byte roomnum_BlackMaze3,                    $51, $12           ;black dot
             .byte roomnum_TopEntryRoom1,                 $50, $20, $00, $00 ;red dragon
@@ -881,7 +876,7 @@ Game1Objects:
             .byte $78, $00                                                  ;bat (carrying, fed-up)
 
 ; object locations (room and coordinate) for games 02 and 03
-Game2Objects:
+Game2ObjectLocations:
             ;     Rm,  X,   Y,   Mvt, State
             .byte roomnum_BlackMaze3,                    $51, $12           ;black dot
             .byte roomnum_BlackMaze2,                    $50, $20, $a0, $00 ;red dragon
@@ -995,37 +990,34 @@ PickupPutdown:
             lda joystick_record   ;get joystick record
             and #$c0              ;merge out previous presses
             cmp #$40              ;was it previously pressed?
-            bne @PickupPutdown_2  ;if not branch
+            bne :+                ;if not branch
             lda #$a2
             cmp object_carried    ;if nothing is being carried
-            beq @PickupPutdown_2  ; then branch
+            beq :+                ; then branch
             sta object_carried    ;drop object
-            lda #NoiseType::dropitem
+            lda #NoiseType::drop_item
             sta sound_type
             lda #4
             sta sound_duration_counter
-@PickupPutdown_2:
-            lda #$ff              ;????
-            sta unread1
+:           lda #$ff      ;these two instructions inject 5 clocks of critical delay
+            sta unread1   ; (need to learn exactly why)
 ; check for collision
             lda CXP0FB
-            and #$40              ;get Ball-Player00 collision
-            beq @PickupPutdown_3  ;if nothing occurred then branch
-; with Player00
-            lda object1           ;get type of Player00
+            and #$40              ;get Ball-Player0 collision
+            beq :+                ;if nothing occurred then branch
+; with Player0
+            lda object1           ;get type of Player0
             sta obj_collided_with
             jmp CollisionDetected ;deal with collision
 
-@PickupPutdown_3:
-            lda CXP1FB
+:           lda CXP1FB
             and #$40              ;get Ball-Player01 collision
-            beq @PickupPutdown_4  ;if nothing has happened, branch
+            beq :+                ;if nothing has happened, branch
             lda object2           ;get type of Player01
             sta obj_collided_with
             jmp CollisionDetected ;deal with collision
 
-@PickupPutdown_4:
-            jmp NoObject          ;deal with no collision (return)
+:           jmp NoObject          ;deal with no collision (return)
 
 CollisionDetected:
             ldx obj_collided_with
@@ -1040,7 +1032,7 @@ CollisionDetected:
             lda obj_collided_with
             cmp object_carried    ;is it the object being carried?
             beq PickupObject      ;if so, branch (and actually pick it up)
-            lda #NoiseType::getitem
+            lda #NoiseType::get_item
             sta sound_type
             lda #4
             sta sound_duration_counter
@@ -1236,7 +1228,7 @@ AdjustRoomLevel:
             sec
             sbc #$80                ;remove the $80 flag and
             sta tmp1                ; store the room number
-            lda NumberCurrBase      ;get the level number
+            lda NumberCurrState     ;get the level number
             lsr a                   ;divide it by two
             clc
             adc tmp1                ;add to the original room
@@ -1455,7 +1447,7 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             rol a                 ; bit 01 position
             rol a
             and #1                ;mask it out
-            ora NumberCurrBase    ;merge in the level number
+            ora NumberCurrState   ;merge in the level number
             tay                   ;create lookup
             lda DragonDiff,y      ;get new state
             sta $04,x             ;store as dragon's state (open mouthed)
@@ -1463,7 +1455,7 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             sta $01,x             ;get temp ball X coord and store as dragon's
             lda PrevManInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             sta $02,x             ;get temp ball Y coord and store as dragon's
-            lda #NoiseType::dragonroar
+            lda #NoiseType::dragon_roar
             sta sound_type
             lda #16
             sta sound_duration_counter
@@ -1476,7 +1468,7 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             bne @MoveDragon_5     ;if not, branch
             lda #1                ;set the state to 01 (dead)
             sta $04,x
-            lda #NoiseType::dragondied
+            lda #NoiseType::dragon_died
             sta sound_type
             lda #16
             sta sound_duration_counter
@@ -1515,7 +1507,7 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             beq @MoveDragon_9     ;if not, branch
             lda #2                ;set the state to state 02: eaten
             sta $04,x
-            lda #NoiseType::maneaten
+            lda #NoiseType::man_eaten
             sta sound_type
             lda #$10
             sta sound_duration_counter
@@ -1769,15 +1761,15 @@ MakeSound:  lda sound_duration_counter  ;check noise count
 :           dec sound_duration_counter  ;go to the next note
             lda sound_type
             beq GameOverNoise
-            cmp #NoiseType::dragonroar
+            cmp #NoiseType::dragon_roar
             beq RoarNoise
-            cmp #NoiseType::maneaten
+            cmp #NoiseType::man_eaten
             beq EatenNoise
-            cmp #NoiseType::dragondied
+            cmp #NoiseType::dragon_died
             beq DragDieNoise
-            cmp #NoiseType::dropitem
+            cmp #NoiseType::drop_item
             beq DropObjectNoise
-            cmp #NoiseType::getitem
+            cmp #NoiseType::get_item
             beq GetObjectNoise
             rts
 
@@ -1900,7 +1892,7 @@ PortInfo1:          .byte roomnum_YellowCastle, $4d, $31
 PortInfo2:          .byte roomnum_WhiteCastle,  $4d, $31
 PortInfo3:          .byte roomnum_BlackCastle,  $4d, $31
 
-SurroundCurr:       .byte 0
+SurroundCurrState:  .byte 0
 SurroundStates:     .byte $ff
                     .word :+
 :                   surround_gfxgr_data
@@ -1961,7 +1953,7 @@ DotStates:          .byte $ff
 
 :                   easteregg_gfxgr_data norm
 EasterEggInfo:      .byte roomnum_SecretRoom, $50, $69
-EasterEggCurr:      .byte 0
+EasterEggCurrState: .byte 0
 EasterEggStates:    .byte $ff
                     .word :-
 
@@ -2009,7 +2001,7 @@ roomrange_bat_start          = roomnum_BelowYellowCastleLeftThinWall
 roomrange_magnet_start       = roomnum_BelowYellowCastleLeftThinWall
     .word BelowYellowCastle
     .byte ColorType::darkgreen, BWColorType::lightgray
-    .byte RoomControlType::leftthinwall
+    .byte RoomControlType::leftthinwall_pfref
     .byte roomnum_BlueMazeEntry, roomnum_BelowYellowCastle, roomnum_downfrom_BelowYellowCastleLeftThinWall, roomnum_BelowYellowCastleRightThinWall
 
 roomnum_BelowYellowCastle = (* - Rooms) / .sizeof(RoomType)
@@ -2021,7 +2013,7 @@ roomnum_BelowYellowCastle = (* - Rooms) / .sizeof(RoomType)
 roomnum_BelowYellowCastleRightThinWall = (* - Rooms) / .sizeof(RoomType)
     .word LeftOfName
     .byte ColorType::darkyellow, BWColorType::lightgray
-    .byte RoomControlType::rightthinwall
+    .byte RoomControlType::rightthinwall_pfref
     .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleLeftThinWall, roomnum_downfrom_BelowYellowCastleRightThinWall, roomnum_BelowYellowCastle
 
 roomnum_BlueMazeTop = (* - Rooms) / .sizeof(RoomType)
@@ -2057,31 +2049,31 @@ roomnum_BlueMazeEntry = (* - Rooms) / .sizeof(RoomType)
 roomnum_MazeMiddle = (* - Rooms) / .sizeof(RoomType)
     .word MazeMiddle
     .byte ColorType::invisible, BWColorType::invisible
-    .byte RoomControlType::pfrefpfp
+    .byte RoomControlType::pfref_pfp
     .byte roomnum_MazeEntry, roomnum_MazeEntry, roomnum_MazeSide, roomnum_MazeEntry
 
 roomnum_MazeEntry = (* - Rooms) / .sizeof(RoomType)
     .word MazeEntry
     .byte ColorType::invisible, BWColorType::invisible
-    .byte RoomControlType::pfrefpfp
+    .byte RoomControlType::pfref_pfp
     .byte roomnum_BelowYellowCastleRightThinWall, roomnum_MazeMiddle, roomnum_MazeMiddle, roomnum_MazeMiddle
 
 roomnum_MazeSide = (* - Rooms) / .sizeof(RoomType)
     .word MazeSide
     .byte ColorType::invisible, BWColorType::invisible
-    .byte RoomControlType::pfrefpfp
+    .byte RoomControlType::pfref_pfp
     .byte roomnum_MazeMiddle, roomnum_SideCorridor1, roomnum_OtherPurpleRoom, roomnum_SideCorridor2
 
 roomnum_SideCorridor1 = (* - Rooms) / .sizeof(RoomType)
     .word SideCorridor
     .byte ColorType::lightblue, BWColorType::lightgray
-    .byte RoomControlType::rightthinwall
+    .byte RoomControlType::rightthinwall_pfref
     .byte roomnum_OtherPurpleRoom, roomnum_SideCorridor2, roomnum_TopEntryRoom2, roomnum_MazeSide
 
 roomnum_SideCorridor2 = (* - Rooms) / .sizeof(RoomType)
     .word SideCorridor
     .byte ColorType::lightgreen, BWColorType::lightgray
-    .byte RoomControlType::leftthinwall
+    .byte RoomControlType::leftthinwall_pfref
     .byte roomnum_WhiteCastle, roomnum_MazeSide, roomnum_TopEntryRoom1, roomnum_SideCorridor1
 
 roomnum_TopEntryRoom1 = (* - Rooms) / .sizeof(RoomType)
@@ -2119,7 +2111,7 @@ roomnum_BlackMaze1 = (* - Rooms) / .sizeof(RoomType)
 roomrange_chalice_start = roomnum_BlackMaze1
     .word BlackMaze1
     .byte ColorType::invisible, BWColorType::invisible
-    .byte RoomControlType::pfrefpfp
+    .byte RoomControlType::pfref_pfp
     .byte roomnum_BlackMaze3, roomnum_BlackMaze2, roomnum_BlackMaze3, roomnum_BlackMazeEntry
 
 roomnum_BlackMaze2 = (* - Rooms) / .sizeof(RoomType)
@@ -2138,7 +2130,7 @@ roomnum_BlackMazeEntry = (* - Rooms) / .sizeof(RoomType)
 roomrange_whitekey_end = roomnum_BlackMazeEntry
     .word BlackMazeEntry
     .byte ColorType::invisible, BWColorType::invisible
-    .byte RoomControlType::pfrefpfp
+    .byte RoomControlType::pfref_pfp
     .byte roomnum_BlackMaze2, roomnum_BlackMaze1, roomnum_BlackCastleEntry, roomnum_BlackMaze3
 
 roomnum_RedMaze1 = (* - Rooms) / .sizeof(RoomType)
@@ -2225,7 +2217,7 @@ roomnum_upfrom_TopEntryRoom = (* - RoomDiffs) | $80
 Objects:
 ; 00 invisible surround offsets
     .word SurroundInfo
-    .word SurroundCurr
+    .word SurroundCurrState
     .word SurroundStates
     .byte ColorType::orange, BWColorType::lightergray
     .byte 7
@@ -2253,14 +2245,14 @@ Objects:
 
 ; 04 name
     .word EasterEggInfo
-    .word EasterEggCurr
+    .word EasterEggCurrState
     .word EasterEggStates
     .byte ColorType::flash, BWColorType::black
     .byte 0
 
 ; 05 number
     .word NumberInfo
-    .word NumberCurrBase
+    .word NumberCurrState
     .word NumberStates
     .byte ColorType::green, BWColorType::black
     .byte 0
