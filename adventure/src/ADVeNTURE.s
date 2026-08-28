@@ -105,9 +105,11 @@ stack_space:                    ; $e7-$ff (12 frames)
 
 START:      jmp StartGame
 
-            sei             ;setup for 6507, start with no
-            cld             ; variable initialization
-            jmp MainGameLoop
+            nop
+            nop
+            nop
+            nop
+            nop
 
 PrintDisplay:
             sta HMCLR       ;clear horizontal motion
