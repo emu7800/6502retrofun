@@ -77,7 +77,7 @@ BridgeInfo:                     .tag ObjectInfoType
 YellowKeyInfo:                  .tag ObjectInfoType
 WhiteKeyInfo:                   .tag ObjectInfoType
 BlackKeyInfo:                   .tag ObjectInfoType
-PortCurrBase:                   .byte 0, 0, 0
+PortCurrStateBase:              .byte 0, 0, 0
 BlackBatInfo:                   .tag LongObjectInfoType
 BlackBatCurrBase:               .byte 0
 BlackBatCarriedObject:          .byte 0      ; object being carried by the Black Bat
@@ -545,7 +545,7 @@ MaintainInputCounter:
             lda SWCHB             ;get the console switches
             and #ConsoleSwitchType::select_and_reset
             cmp #ConsoleSwitchType::select_and_reset ;have either of them been used?
-            beq :++               ;if not branch
+            beq :++               ;if no usage then branch
 :           lda #0                ;zero the high input_counter if the
             sta input_counter+1   ; switches or joystick have been used
 :           rts
@@ -815,27 +815,25 @@ Game2ObjectLocationsEnd:
 ;; Check ball (man) collisions and move ball
 BallMovement:
             lda CXBLPF
-            and #$80              ;get ball-playfield collision
+            and #%10000000        ;get ball-playfield collision
             bne PlayerCollision   ;branch if collision (player-wall)
             lda CXM0FB
-            and #$40              ;get ball-missile00 collision
+            and #%01000000        ;get ball-missile0 collision
             bne PlayerCollision   ;branch if collision (player-left thin)
             lda CXM1FB
-            and #$40              ;get ball-missile01 collision
-            beq @BallMove_1       ;branch if no collision
+            and #%01000000        ;get ball-missile1 collision
+            beq :+                ;branch if no collision
             lda object2           ;if Object2 (to print) is
             cmp #$87              ; not the black dot then collide
             bne PlayerCollision
-@BallMove_1:
-            lda CXP0FB
-            and #$40              ;get ball-player00 collision
-            beq @BallMove_2       ;if no collision then branch
+:           lda CXP0FB
+            and #%01000000        ;get ball-player0 collision
+            beq :+                ;if no collision then branch
             lda object1           ;if Object1 (to print is)
             cmp #0                ; not the invisible surround then
             bne PlayerCollision   ; branch (collision)
-@BallMove_2:
-            lda CXP1FB
-            and #$40              ;get ball-player01 collision
+:           lda CXP1FB
+            and #%01000000        ;get ball-player1 collision
             beq NoCollision       ;if no collision then branch
             lda object2           ;if player 01 to print is
             cmp #0                ; not the invisible surround then
@@ -855,17 +853,17 @@ PlayerCollision:
 ; check going through the bridge
             lda ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord
             sec
-            sbc BridgeInfo+1      ;subtract the bridge's X coordinate
-            cmp #$0a              ;if less than $0A then forget it
+            sbc BridgeInfo+ObjectInfoType::pos+ObjectPosType::xcoord
+            cmp #10               ;if < 10 or > 23 then forget it
             bcc ReadStick
-            cmp #$17              ;if more than $17 then forget it
+            cmp #23
             bcs ReadStick
             lda z:BridgeInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             sec
             sbc ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord
-            cmp #$fc
-            bcs NoCollision       ;if more than $FC then going through bridge
-            cmp #$19              ;if more than $19 then forget it
+            cmp #252
+            bcs NoCollision       ;if < -4 then going through bridge
+            cmp #25               ;if > 25 then forget it
             bcs ReadStick
 ; no collision (and going through bridge)
 NoCollision:
@@ -877,13 +875,11 @@ NoCollision:
             sta PrevManInfo+ObjectInfoType::pos+ObjectPosType::xcoord
             lda ManInfo+ObjectInfoType::pos+ObjectPosType::ycoord
             sta PrevManInfo+ObjectInfoType::pos+ObjectPosType::ycoord
-; read sticks
-ReadStick:  cpy #0                ;???is game in first phase?
-            bne @ReadStick_2      ;if not, don't bother with joystick read
+ReadStick:  cpy #0                ;allow joystick read - all movement
+            bne :+                ;if not, don't bother with joystick read
             lda SWCHA             ;read joysticks
             sta cached_joystick
-@ReadStick_2:
-            lda PrevManInfo+ObjectInfoType::room_num
+:           lda PrevManInfo+ObjectInfoType::room_num
             sta ManInfo+ObjectInfoType::room_num
             lda PrevManInfo+ObjectInfoType::pos+ObjectPosType::xcoord
             sta ManInfo+ObjectInfoType::pos+ObjectPosType::xcoord
@@ -898,7 +894,8 @@ ReadStick:  cpy #0                ;???is game in first phase?
             rts
 
 JoystickMergeValues:
-            .byte $00, $c0, $30  ;no change, no horizontal, no vertical
+            ;     no change,  no horizontal, no vertical
+            .byte 0,          %11000000,     %00110000
 
 ;; Deal with object pickup and putdown
 PickupPutdown:
@@ -1001,108 +998,97 @@ MoveCarriedObject:
 MoveGroundObject:
             jsr MoveObjectDelta     ;move the object by delta
             ldy #2                  ;set to do the three
-MoveGroundObject_2:
-            sty portcullis_number
-            lda a:PortCurrBase,y    ;get the portal state
+:           sty portcullis_number
+            lda a:PortCurrStateBase,y    ;get the portal state
             cmp #$1c                ;is it in a closed state?
             beq GetPortal           ;if not, next portal
 ; deal with object moving out of a castle
             ldy portcullis_number
-            lda $00,x               ;get object's room number
+            lda ObjectInfoType::room_num,x  ;get object's room number
             cmp EntryRoomOffsets,y  ;is it in a castle entry room?
             bne GetPortal           ;if not, next portal
-            lda $02,x               ;get the object's Y coordinate
-            cmp #$0d                ;is it above $0D i.e. at the bottom?
+            lda ObjectInfoType::pos+ObjectPosType::ycoord,x  ;get the object's Y coordinate
+            cmp #13                 ;is it above 13 i.e. at the bottom?
             bpl GetPortal           ;if so then branch
             lda CastleRoomOffsets,y ;get the castle room
-            sta $00,x               ;and put the object in the castle room
-            lda #$50
-            sta $01,x               ;set the object's new X coordinate
-            lda #$2c
-            sta $02,x               ;set the new object's Y coordinate
+            sta ObjectInfoType::room_num,x  ;and put the object in the castle room
+            lda #80
+            sta ObjectInfoType::pos+ObjectPosType::xcoord,x  ;set the object's new X coordinate
+            lda #44
+            sta ObjectInfoType::pos+ObjectPosType::ycoord,x  ;set the new object's Y coordinate
             lda #1
-            sta a:PortCurrBase,y    ;set the portcullis state to 01
+            sta a:PortCurrStateBase,y    ;set the portcullis state to 01
             rts
 
 GetPortal:  ldy portcullis_number
             dey                     ; goto next,
-            bpl MoveGroundObject_2  ; and continue
-; check and deal with Up
-            lda $02,x               ;get the object's Y coordinate
-            cmp #$6a                ;has it reached above the top?
+            bpl :-                  ; and continue
+; DealWithUp
+            lda ObjectInfoType::pos+ObjectPosType::ycoord,x  ;get the object's Y coordinate
+            cmp #106                ;has it reached above the top?
             bmi DealWithLeft        ;if not, branch
-            lda #$0d                ;set new Y coordinate to bottom
-            sta $02,x
+            lda #13                 ;set new Y coordinate to bottom
+            sta ObjectInfoType::pos+ObjectPosType::ycoord,x
             ldy #5                  ;get the direction wanted
             jmp GetNewRoom          ;go and get new room
-
-; check and deal with left
 DealWithLeft:
-            lda $01,x               ;get the object's X coordinate
-            cmp #3                  ;is it three or less?
-            bcc @DealWithLeft_2     ;if so, branch (off to left)
-            cmp #$f0                ;is it $F0 or more?
-            bcs @DealWithLeft_2     ;if so, branch (off to right)
+            lda ObjectInfoType::pos+ObjectPosType::xcoord,x  ;get the object's X coordinate
+            cmp #3                  ;is it < 3?
+            bcc :+                  ;if so, branch (off to left)
+            cmp #240                ;is it > 240 ?
+            bcs :+                  ;if so, branch (off to right)
             jmp DealWithDown
+:           cpx #ManInfo            ;are we dealing with the man?
+            beq :+                  ;if so, branch
+            lda #154                ;set new X coordinate for the others
+            jmp :++
 
-@DealWithLeft_2:
-            cpx #ManInfo            ;are we dealing with the man?
-            beq @DealWithLeft_3     ;if so, branch
-            lda #$9a                ;set new X coordinate for the others
-            jmp @DealWithLeft_4
-
-@DealWithLeft_3:
-            lda #$9e                ;set new X coordinate for the ball
-@DealWithLeft_4:
-            sta $01,x               ;store the next X coordinate
+:           lda #158                ;set new X coordinate for the ball
+:           sta ObjectInfoType::pos+ObjectPosType::xcoord,x  ;store the next X coordinate
             ldy #RoomType::room_left
             jmp GetNewRoom
 
-; check and deal with Down
 DealWithDown:
-            lda $02,x               ;get object's Y coordinate
-            cmp #$0d                ;if it's greater than $0D then
+            lda ObjectInfoType::pos+ObjectPosType::ycoord,x  ;get object's Y coordinate
+            cmp #13                 ;if it's > 13 then
             bcs DealWithRight       ; branch
-            lda #$69                ;set new Y coordinate
-            sta $02,x
+            lda #105                ;set new Y coordinate
+            sta ObjectInfoType::pos+ObjectPosType::ycoord,x
             ldy #RoomType::room_down
             jmp GetNewRoom
 
-; check and deal with right
 DealWithRight:
-            lda $01,x               ;get the object's X coordinate
+            lda ObjectInfoType::pos+ObjectPosType::xcoord,x  ;get the object's X coordinate
             cpx #ManInfo            ;are we dealing with the man?
-            bne @DealWithRight_2    ;branch if not
-            cmp #$9f                ;has the object reached the right?
+            bne :+                  ;branch if not
+            cmp #159                ;has the object reached the right?
             bcc MovementReturn      ;branch if not
-            lda $00,x               ;get the Ball's room
-            cmp #3                  ;is it room #3 (right to secret room)
-            bne @DealWithRight_3    ;branch if not
+            lda ObjectInfoType::room_num,x ;get the Ball's room
+            cmp #roomnum_BelowYellowCastleRightThinWall  ; right of secret room
+            bne :++                 ;branch if not
             lda DotInfo+ObjectInfoType::room_num  ;check the room of the black dot
-            cmp #$15                ;is it in the hidden room area?
-            beq @DealWithRight_3    ;if so, branch
-; manually change to secret room
+            cmp #roomnum_BlackMaze3 ;is it in the hidden room area?
+            beq :++                 ;if so, branch
+; change to secret room
             lda #roomnum_SecretRoom
-            sta $00,x               ;and make it current
-            lda #3                  ;set the X coordinate
-            sta $01,x
-            jmp MovementReturn      ;and exit
+            sta ObjectInfoType::room_num,x  ;and make it current
+            lda #3                          ;set the X coordinate
+            sta ObjectInfoType::pos+ObjectPosType::xcoord,x
+            jmp MovementReturn              ;and exit
 
-@DealWithRight_2:
-            cmp #direction_wanted   ;has the object reached the right of the screen?
+:           cmp #direction_wanted   ;has the object reached the right of the screen?
             bcc MovementReturn      ;branch if not (no room change)
-@DealWithRight_3:
-            lda #3                  ;set the next X coordinate
-            sta $01,x
+:           lda #3                  ;set the next X coordinate
+            sta ObjectInfoType::pos+ObjectPosType::xcoord,x
             ldy #RoomType::room_right
             jmp GetNewRoom
 
 ; get new room
-GetNewRoom: lda $00,x               ;get the object's room
-            jsr RoomNumToAddress    ;convert it to an address
-            lda (dr_ptr),y          ;get the adjacent room
-            jsr AdjustRoomLevel     ;deal with the level differences
-            sta $00,x               ; and store as new object's room
+GetNewRoom: lda ObjectInfoType::room_num,x  ;get the object's room
+            jsr RoomNumToAddress            ;convert it to an address
+            lda (dr_ptr),y                  ;get the adjacent room
+            jsr AdjustRoomLevel             ;deal with the level differences
+            sta ObjectInfoType::room_num,x  ; and store as new object's room
 MovementReturn:
             rts
 
@@ -1533,17 +1519,17 @@ Portals:    ldy #2                ;for each portcullis
             bne @Portals_3        ;if not then branch
             tya                   ;get the portcullis number
             tax
-            inc PortCurrBase,x    ;change its state to open it
+            inc PortCurrStateBase,x  ;change its state to open it
 @Portals_3: tya                   ;get the portcullis number
             tax
-            lda PortCurrBase,x    ;get the state
+            lda PortCurrStateBase,x  ;get the state
             cmp #$1c              ;is it closed?
             beq @Portals_7        ;yes - then branch
             lda PortOffsets,y     ;get portcullis number
             jsr PBCollision       ;get the player-ball collision
             beq @Portals_4        ;if not then branch
             lda #1                ;set the portcullis to closed
-            sta PortCurrBase,x
+            sta PortCurrStateBase,x
             ldx #ManInfo
             jmp @Portals_6        ;put the man in the castle
 
@@ -1564,17 +1550,17 @@ Portals:    ldy #2                ;for each portcullis
             sta $02,x
 @Portals_7: tya                   ;get the portcullis number
             tax
-            lda PortCurrBase,x    ;get its state
+            lda PortCurrStateBase,x  ;get its state
             cmp #1                ;is it open?
             beq @Portals_8        ; branch if yes
             cmp #$1c              ;is it closed?
             beq @Portals_8        ; branch if yes
-            inc PortCurrBase,x    ;increment its state
-            lda PortCurrBase,x    ;get the state
+            inc PortCurrStateBase,x  ;increment its state
+            lda PortCurrStateBase,x  ;get the state
             cmp #$38              ;has it reached the maximum state?
             bne @Portals_8        ; branch if not
             lda #1                ;set to closed state
-            sta PortCurrBase,x
+            sta PortCurrStateBase,x
 @Portals_8: dey                   ;go to the next portcullis
             bmi @Portals_Done     ;branch if finished
             jmp @Portals_2        ;do next portcullis
@@ -2132,21 +2118,21 @@ Objects:
 
 ; 01 portcullis #1
     .word PortInfo1
-    .word PortCurrBase+0
+    .word PortCurrStateBase+0
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
 ; 02 portcullis #2
     .word PortInfo2
-    .word PortCurrBase+1
+    .word PortCurrStateBase+1
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
 ; 03 portcullis #3
     .word PortInfo3
-    .word PortCurrBase+2
+    .word PortCurrStateBase+2
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
