@@ -14,24 +14,24 @@
     ycoord        .byte
 .endstruct
 
-.struct ObjectInfoType
-    room_num      .byte
+.struct ObjectRoomPosType
+    room          .byte
     pos           .tag ObjectPosType
 .endstruct
 
-.struct LongObjectInfoType
-    .tag ObjectInfoType
+.struct ObjectRoomPosMoveType
+    roompos       .tag ObjectRoomPosType
     move          .byte
 .endstruct
 
 .struct StateType
-    state_num     .byte
+    state         .byte
     pos           .tag ObjectPosType
 .endstruct
 
 .struct ObjectType
-    info_ptr      .word  ; pointer to a ObjectInfoType
-    currstate_ptr .word  ; pointer to a state_num
+    roompos_ptr   .word  ; pointer to a ObjectRoomPosType
+    currstate_ptr .word  ; pointer to a state
     states_ptr    .word  ; pointer to list of StateType
     color         .byte  ; ColorType
     bw_color      .byte  ; BWColorType
