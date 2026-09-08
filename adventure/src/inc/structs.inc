@@ -16,21 +16,43 @@
 
 .struct ObjectRoomPosType
     room          .byte
-    pos           .tag ObjectPosType
-.endstruct
-
-.struct ObjectRoomPosMoveType
-    roompos       .tag ObjectRoomPosType
-    move          .byte
+    xcoord        .byte  ; ObjectPosType
+    ycoord        .byte  ;
 .endstruct
 
 .struct StateType
     state         .byte
-    pos           .tag ObjectPosType
+    xcoord        .byte  ; ObjectPosType
+    ycoord        .byte  ;
+.endstruct
+
+.struct ObjectRoomPosMoveType
+    room          .byte  ; ObjectRoomPosType
+    xcoord        .byte  ; ObjectPosType
+    ycoord        .byte  ;
+    move          .byte
+.endstruct
+
+.struct DragonDynamicType
+    room          .byte  ; ObjectRoomPosMoveType
+    xcoord        .byte  ;
+    ycoord        .byte  ;
+    move          .byte  ;
+    state         .byte
+.endstruct
+
+.struct BlackBatDynamicType
+    room          .byte  ; ObjectRoomPosMoveType
+    xcoord        .byte  ;
+    ycoord        .byte  ;
+    move          .byte  ;
+    state         .byte
+    carriedobject .byte
+    fedup         .byte
 .endstruct
 
 .struct ObjectType
-    roompos_ptr   .word  ; pointer to a ObjectRoomPosType
+    roompos_ptr   .word  ; pointer to a ObjectRoomPosType or DragonDynamicType
     currstate_ptr .word  ; pointer to a state
     states_ptr    .word  ; pointer to list of StateType
     color         .byte  ; ColorType
