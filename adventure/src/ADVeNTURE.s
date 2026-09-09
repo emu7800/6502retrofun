@@ -41,7 +41,7 @@ p0gfx_base:                     .word 0
 p1gfx_base:                     .word 0
 player0pos:                     .tag ObjectPosType
 player1pos:                     .tag ObjectPosType
-ManRoomPos:                     .tag ObjectRoomPosType
+ManDynamic:                     .tag ObjectDynamicType
 man_y2:                         .byte 0     ; man's adjusted y coordinate?
 scan_line:                      .byte 0     ; current scan line
 roomgfx_offset:                 .byte 0     ; room graphics offset
@@ -63,25 +63,19 @@ objman_y_delta:                 .byte 0
 curr_obj_number:                .byte 0
 
 GameObjectsWorkingArea:
-DotRoomPos:                     .tag ObjectRoomPosType
-RedDragonRoomPosMove:           .tag ObjectRoomPosMoveType
-RedDragonCurrState:             .byte 0
-YellowDragonRoomPosMove:        .tag ObjectRoomPosMoveType
-YellowDragonCurrState:          .byte 0
-GreenDragonRoomPosMove:         .tag ObjectRoomPosMoveType
-GreenDragonCurrState:           .byte 0
-MagnetRoomPos:                  .tag ObjectRoomPosType
-SwordRoomPos:                   .tag ObjectRoomPosType
-ChaliceRoomPos:                 .tag ObjectRoomPosType
-BridgeRoomPos:                  .tag ObjectRoomPosType
-YellowKeyRoomPos:               .tag ObjectRoomPosType
-WhiteKeyRoomPos:                .tag ObjectRoomPosType
-BlackKeyRoomPos:                .tag ObjectRoomPosType
+DotDynamic:                     .tag ObjectDynamicType
+RedDragonDynamic:               .tag DragonDynamicType
+YellowDragonDynamic:            .tag DragonDynamicType
+GreenDragonDynamic:             .tag DragonDynamicType
+MagnetDynamic:                  .tag ObjectDynamicType
+SwordDynamic:                   .tag ObjectDynamicType
+ChaliceDynamic:                 .tag ObjectDynamicType
+BridgeDynamic:                  .tag ObjectDynamicType
+YellowKeyDynamic:               .tag ObjectDynamicType
+WhiteKeyDynamic:                .tag ObjectDynamicType
+BlackKeyDynamic:                .tag ObjectDynamicType
 PortCurrStateBase:              .byte 0, 0, 0
-BlackBatRoomPosMove:            .tag ObjectRoomPosMoveType
-BlackBatCurrState:              .byte 0
-BlackBatCarriedObject:          .byte 0
-BlackBatFedUp:                  .byte 0
+BlackBatDynamic:                .tag BlackBatDynamicType
 
 objstore_ptr:                   .word 0
 objdelta:                       .byte 0
@@ -89,14 +83,14 @@ MoveGameObjectArg_ObjNumber:    .byte 0      ; identifies the object to move (us
 MoveGameObjectArg_Difficulty:   .byte 0      ; difficulty for MoveGameObject to use (used by MoveGameObject)
 joystick_record:                .byte 0
 tmp1:                           .byte 0
-SurroundRoomPos:                .tag ObjectRoomPosType
+SurroundDynamic:                .tag ObjectDynamicType
 GetObjectState_Arg:             .byte 0
 NumberCurrState:                .byte 0      ; 0=lvl1, 2=lvl2, 4=lvl3
 is_game_complete:               .byte 0      ; $ff=yes, 0=no
 sound_duration_counter:         .byte 0
 sound_type:                     .byte 0      ; NoiseType
 linked_obj_index:               .byte 0
-PrevManRoomPos:                 .tag ObjectRoomPosType
+PrevManDynamic:                 .tag ObjectDynamicType
 input_counter:                  .word 0
 
 stack_space:                    ; $e7-$ff (12 frames)
@@ -114,13 +108,13 @@ PrintDisplay:
             lda player1pos+ObjectPosType::xcoord
             ldx #SpriteType::object2
             jsr PosSpriteX
-            lda ManRoomPos+ObjectRoomPosType::xcoord
+            lda ManDynamic+ObjectDynamicType::xcoord
             ldx #SpriteType::man
             jsr PosSpriteX
             sta WSYNC       ;wait for horizontal blank
             sta HMOVE       ;apply horizontal motion
             sta CXCLR       ;clear collision latches
-            lda ManRoomPos+ObjectRoomPosType::ycoord
+            lda ManDynamic+ObjectDynamicType::ycoord
             sec
             sbc #4                    ;and adjust it by four scan lines
             sta man_y2                ; for printing (so Y coordinate specifies middle)
@@ -139,7 +133,7 @@ PrintDisplay:
             lda #104                  ;2 21   set counter (208 actual scanlines)
             sta scan_line             ;3 24
                                       ;  24*3=72 color clocks
-
+            sta WSYNC
             ; Good place for a WSYNC here? Spills over instead:
             ;  92 timer expiration occurs mid scanline (35.4 lines, .4*228=92)
             ; +36 max additional time needed to recognize expiration
@@ -234,8 +228,6 @@ PrintPlayer0:
             sta TIM64T
             rts
 
-.byte $ea, $ea, $ea, $ea
-
 ; Position Sprite Horizontally
 ; x=sprite, a=horizontal position
 ;                                      2
@@ -292,7 +284,7 @@ DoVSYNC:    lda INTIM           ;get timer output
 
 ;; Set up a room for print
 SetupRoomPrint:
-            lda ManRoomPos+ObjectRoomPosType::room
+            lda ManDynamic+ObjectDynamicType::room
             jsr RoomNumToAddress  ;convert to room address in dr_ptr
             ldy #RoomType::gfx_ptr
             lda (dr_ptr),y
@@ -357,10 +349,10 @@ SetupObjectPrint:
             sta dr_ptr
             lda a:Objects+ObjectType::roompos_ptr+1,x
             sta dr_ptr+1
-            ldy #ObjectRoomPosType::xcoord
+            ldy #ObjectDynamicType::xcoord
             lda (dr_ptr),y        ;get Object1's X coordinate
             sta player0pos+ObjectPosType::xcoord  ; and store for print
-            ldy #ObjectRoomPosType::ycoord
+            ldy #ObjectDynamicType::ycoord
             lda (dr_ptr),y        ;get Object1's Y coordinate
             sta player0pos+ObjectPosType::ycoord  ; and store for print
             lda a:Objects+ObjectType::currstate_ptr,x
@@ -404,10 +396,10 @@ SetupObjectPrint:
             sta dr_ptr
             lda a:Objects+ObjectType::roompos_ptr+1,x
             sta dr_ptr+1
-            ldy #ObjectRoomPosType::xcoord
+            ldy #ObjectDynamicType::xcoord
             lda (dr_ptr),y        ;get Object2's X coordinate
             sta player1pos+ObjectPosType::xcoord  ; and store for print
-            ldy #ObjectRoomPosType::ycoord
+            ldy #ObjectDynamicType::ycoord
             lda (dr_ptr),y        ;get Object2's Y coordinate
             sta player1pos+ObjectPosType::ycoord  ; and store for print
             lda a:Objects+ObjectType::currstate_ptr,x
@@ -468,7 +460,7 @@ GetObjectsInfo:
             sta dr_ptr+1
             ldx #0
             lda (dr_ptr,x)          ;get object's current room
-            cmp ManRoomPos+ObjectRoomPosType::room  ; is it in this room?
+            cmp ManDynamic+ObjectDynamicType::room  ; is it in this room?
             bne CheckForMoreObjects ;if not lets try next object (branch)
             lda object1             ;check first slot
             cmp #objnum_Null
@@ -594,7 +586,7 @@ MainGameLoop:
             jsr MaintainInputCounter
             lda is_game_complete  ;ff = yes
             bne NonActiveLoop
-            lda ChaliceRoomPos+ObjectRoomPosType::room  ;get the room the chalice is in
+            lda ChaliceDynamic+ObjectDynamicType::room  ;get the room the chalice is in
             cmp #roomnum_YellowCastleEntry  ;is it inside the yellow castle?
             bne :+                ;if not branch
             lda #$ff
@@ -659,18 +651,18 @@ CheckGameStart:
 
 ; Reincarnate player
             lda #roomnum_YellowCastle
-            sta ManRoomPos+ObjectRoomPosType::room         ;make it the current room
-            sta PrevManRoomPos+ObjectRoomPosType::room     ;make it the previous room
-            lda #80               ;get the X coordinate
-            sta ManRoomPos+ObjectRoomPosType::xcoord           ;make it the current man X coordinate
-            sta PrevManRoomPos+ObjectRoomPosType::xcoord       ;make it the previous man X coordinate
-            lda #32              ;get the Y coordinate
-            sta ManRoomPos+ObjectRoomPosType::ycoord           ;make it the current man Y coordinate
-            sta PrevManRoomPos+ObjectRoomPosType::ycoord       ;make it the previous man Y coordinate
+            sta ManDynamic+ObjectDynamicType::room              ;make it the current room
+            sta PrevManDynamic+ObjectDynamicType::room          ;make it the previous room
+            lda #80
+            sta ManDynamic+ObjectDynamicType::xcoord            ;make it the current man X coordinate
+            sta PrevManDynamic+ObjectDynamicType::xcoord        ;make it the previous man X coordinate
+            lda #32
+            sta ManDynamic+ObjectDynamicType::ycoord            ;make it the current man Y coordinate
+            sta PrevManDynamic+ObjectDynamicType::ycoord        ;make it the previous man Y coordinate
             lda #0
-            sta RedDragonCurrState       ;set the red dragon's state to OK
-            sta YellowDragonCurrState    ;set the yellow dragon's state to OK
-            sta GreenDragonCurrState     ;set the green dragon's state to OK
+            sta RedDragonDynamic+DragonDynamicType::state       ;set the red dragon's state to OK
+            sta YellowDragonDynamic+DragonDynamicType::state    ;set the yellow dragon's state to OK
+            sta GreenDragonDynamic+DragonDynamicType::state     ;set the green dragon's state to OK
             sta sound_duration_counter  ;set the note count to zero
             lda #objnum_Null
             sta object_carried
@@ -680,7 +672,7 @@ NotReset:   lda SWCHB             ;get the console switches
             and cached_swchb      ;compare with what was before
             and #ConsoleSwitchType::select
             beq NotSelect         ;branch if select not being used
-            lda ManRoomPos+ObjectRoomPosType::room  ;get the current room
+            lda ManDynamic+ObjectDynamicType::room  ;get the current room
             cmp #roomnum_NumberRoom
             bne SetupRoomObjects  ;branch if not
             lda NumberCurrState   ;increment the level
@@ -689,14 +681,14 @@ NotReset:   lda SWCHB             ;get the console switches
             cmp #6                ;have we reached the maximum?
             bcc ResetSetup
             lda #0                ;if yep then set back to zero
-ResetSetup: sta NumberCurrState    ;store the new level number
+ResetSetup: sta NumberCurrState   ;store the new level number
 SetupRoomObjects:
             lda #roomnum_NumberRoom
-            sta ManRoomPos+ObjectRoomPosType::room
-            sta PrevManRoomPos+ObjectRoomPosType::room
+            sta ManDynamic+ObjectDynamicType::room
+            sta PrevManDynamic+ObjectDynamicType::room
             lda #0                ;set man ycoord to 0 so can't be seen
-            sta ManRoomPos+ObjectRoomPosType::ycoord
-            sta PrevManRoomPos+ObjectRoomPosType::ycoord
+            sta ManDynamic+ObjectDynamicType::ycoord
+            sta PrevManDynamic+ObjectDynamicType::ycoord
             ldy NumberCurrState    ;get the level number
             lda GameObjectLocations,y     ;get the low pointer to object locations
             sta dr_ptr
@@ -741,7 +733,7 @@ RandomizeLevel3:
             beq :+                     ; less than the higher bound for object
             bcs :-                     ; then continue (branch if higher)
 :           ldx Lvl3ObjRoomBounds,y    ;get the object-room index value
-            sta ObjectRoomPosType::room,x  ;store the new room value
+            sta ObjectDynamicType::room,x  ;store the new room value
             dey
             dey                        ;goto the next object
             dey
@@ -750,17 +742,17 @@ RandomizeLevel3:
 
 ; Object randomization room bounds data for level 3.
 Lvl3ObjRoomBounds:
-            .byte ChaliceRoomPos,      roomrange_chalice_start,      roomrange_chalice_end
-            .byte RedDragonRoomPosMove,    roomrange_reddragon_start,    roomrange_reddragon_end
-            .byte YellowDragonRoomPosMove, roomrange_yellowdragon_start, roomrange_yellowdragon_end
-            .byte GreenDragonRoomPosMove,  roomrange_greendragon_start,  roomrange_greendragon_end
-            .byte SwordRoomPos,        roomrange_sword_start,        roomrange_sword_end
-            .byte BridgeRoomPos,       roomrange_bridge_start,       roomrange_bridge_end
-            .byte YellowKeyRoomPos,    roomrange_yellowkey_start,    roomrange_yellowkey_end
-            .byte WhiteKeyRoomPos,     roomrange_whitekey_start,     roomrange_whitekey_end
-            .byte BlackKeyRoomPos,     roomrange_blackkey_start,     roomrange_blackkey_end
-            .byte BlackBatRoomPosMove,     roomrange_bat_start,          roomrange_bat_end
-            .byte MagnetRoomPos,       roomrange_magnet_start,       roomrange_magnet_end
+            .byte ChaliceDynamic,      roomrange_chalice_start,      roomrange_chalice_end
+            .byte RedDragonDynamic,    roomrange_reddragon_start,    roomrange_reddragon_end
+            .byte YellowDragonDynamic, roomrange_yellowdragon_start, roomrange_yellowdragon_end
+            .byte GreenDragonDynamic,  roomrange_greendragon_start,  roomrange_greendragon_end
+            .byte SwordDynamic,        roomrange_sword_start,        roomrange_sword_end
+            .byte BridgeDynamic,       roomrange_bridge_start,       roomrange_bridge_end
+            .byte YellowKeyDynamic,    roomrange_yellowkey_start,    roomrange_yellowkey_end
+            .byte WhiteKeyDynamic,     roomrange_whitekey_start,     roomrange_whitekey_end
+            .byte BlackKeyDynamic,     roomrange_blackkey_start,     roomrange_blackkey_end
+            .byte BlackBatDynamic,     roomrange_bat_start,          roomrange_bat_end
+            .byte MagnetDynamic,       roomrange_magnet_start,       roomrange_magnet_end
 Lvl3ObjRoomBoundsEnd:
 
 GameObjectLocations:
@@ -848,20 +840,20 @@ PlayerCollision:
             lda object_carried
             cmp #objnum_Bridge
             beq ReadStick
-            lda ManRoomPos+ObjectRoomPosType::room
-            cmp BridgeRoomPos        ;is the bridge in this room?
+            lda ManDynamic+ObjectDynamicType::room
+            cmp BridgeDynamic     ;is the bridge in this room?
             bne ReadStick         ;if not branch
 ; check going through the bridge
-            lda ManRoomPos+ObjectRoomPosType::xcoord
+            lda ManDynamic+ObjectDynamicType::xcoord
             sec
-            sbc BridgeRoomPos+ObjectRoomPosType::xcoord
+            sbc BridgeDynamic+ObjectDynamicType::xcoord
             cmp #10               ;if < 10 or > 23 then forget it
             bcc ReadStick
             cmp #23
             bcs ReadStick
-            lda z:BridgeRoomPos+ObjectRoomPosType::ycoord
+            lda z:BridgeDynamic+ObjectDynamicType::ycoord
             sec
-            sbc ManRoomPos+ObjectRoomPosType::ycoord
+            sbc ManDynamic+ObjectDynamicType::ycoord
             cmp #252
             bcs NoCollision       ;if < -4 then going through bridge
             cmp #25               ;if > 25 then forget it
@@ -870,27 +862,27 @@ PlayerCollision:
 NoCollision:
             lda #$ff              ;reset the joystick input
             sta cached_joystick
-            lda ManRoomPos+ObjectRoomPosType::room
-            sta PrevManRoomPos+ObjectRoomPosType::room
-            lda ManRoomPos+ObjectRoomPosType::xcoord
-            sta PrevManRoomPos+ObjectRoomPosType::xcoord
-            lda ManRoomPos+ObjectRoomPosType::ycoord
-            sta PrevManRoomPos+ObjectRoomPosType::ycoord
+            lda ManDynamic+ObjectDynamicType::room
+            sta PrevManDynamic+ObjectDynamicType::room
+            lda ManDynamic+ObjectDynamicType::xcoord
+            sta PrevManDynamic+ObjectDynamicType::xcoord
+            lda ManDynamic+ObjectDynamicType::ycoord
+            sta PrevManDynamic+ObjectDynamicType::ycoord
 ReadStick:  cpy #0                ;allow joystick read - all movement
             bne :+                ;if not, don't bother with joystick read
             lda SWCHA             ;read joysticks
             sta cached_joystick
-:           lda PrevManRoomPos+ObjectRoomPosType::room
-            sta ManRoomPos+ObjectRoomPosType::room
-            lda PrevManRoomPos+ObjectRoomPosType::xcoord
-            sta ManRoomPos+ObjectRoomPosType::xcoord
-            lda PrevManRoomPos+ObjectRoomPosType::ycoord
-            sta ManRoomPos+ObjectRoomPosType::ycoord
+:           lda PrevManDynamic+ObjectDynamicType::room
+            sta ManDynamic+ObjectDynamicType::room
+            lda PrevManDynamic+ObjectDynamicType::xcoord
+            sta ManDynamic+ObjectDynamicType::xcoord
+            lda PrevManDynamic+ObjectDynamicType::ycoord
+            sta ManDynamic+ObjectDynamicType::ycoord
             lda cached_joystick        ;get the joystick position
             ora JoystickMergeValues,y  ;merge out movement not allowed in this phase
             sta direction_wanted       ;and store cooked movement
             ldy #3                     ;set the delta for the ball
-            ldx #ManRoomPos            ;point to man's coordinates
+            ldx #ManDynamic            ;point to man's coordinates
             jsr MoveGroundObject       ;move the man
             rts
 
@@ -938,9 +930,9 @@ CollisionDetected:
             lda obj_collided_with
             cmp #$51              ;is it carriable?
             bcc NoObject          ;if not, branch
-            ldy #ObjectRoomPosType::room
+            ldy #ObjectDynamicType::room
             lda (dr_ptr),y        ;get the object's room
-            cmp ManRoomPos+ObjectRoomPosType::room
+            cmp ManDynamic+ObjectDynamicType::room
             bne NoObject          ;if not, branch
             lda obj_collided_with
             cmp object_carried
@@ -956,15 +948,15 @@ PickupObject:
             ldy #6                ;move 6 steps in the direction specified
             lda cached_joystick   ; by joystick
             jsr MoveObjectDelta
-            ldy #ObjectRoomPosType::xcoord
+            ldy #ObjectDynamicType::xcoord
             lda (dr_ptr),y        ;get the object's X coordinate
             sec
-            sbc ManRoomPos+ObjectRoomPosType::xcoord
+            sbc ManDynamic+ObjectDynamicType::xcoord
             sta objman_x_delta    ; and store the difference
-            ldy #ObjectRoomPosType::ycoord
+            ldy #ObjectDynamicType::ycoord
             lda (dr_ptr),y        ;get the object's Y coordinate
             sec
-            sbc ManRoomPos+ObjectRoomPosType::ycoord
+            sbc ManDynamic+ObjectDynamicType::ycoord
             sta objman_y_delta    ; and store the difference
 NoObject:   rts                   ; no collision
 
@@ -974,16 +966,16 @@ MoveCarriedObject:
             cpx #objnum_Null
             beq :+
             jsr GetObjectAddress  ;get its roompos information in dr_ptr using x
-            ldy #ObjectRoomPosType::room
-            lda ManRoomPos+ObjectRoomPosType::room         ;get the current room
+            ldy #ObjectDynamicType::room
+            lda ManDynamic+ObjectDynamicType::room  ;get the current room
             sta (dr_ptr),y        ; and store the object's current room
-            ldy #ObjectRoomPosType::xcoord
-            lda ManRoomPos+ObjectRoomPosType::xcoord
+            ldy #ObjectDynamicType::xcoord
+            lda ManDynamic+ObjectDynamicType::xcoord
             clc
             adc objman_x_delta    ;add the X difference
             sta (dr_ptr),y        ; and store as the object's X coordinate
-            ldy #ObjectRoomPosType::ycoord
-            lda ManRoomPos+ObjectRoomPosType::ycoord
+            ldy #ObjectDynamicType::ycoord
+            lda ManDynamic+ObjectDynamicType::ycoord
             clc
             adc objman_y_delta    ;add the Y difference
             sta (dr_ptr),y        ; and store as the object's Y coordinate
@@ -997,96 +989,96 @@ MoveGroundObject:
             jsr MoveObjectDelta     ;move the object by delta
             ldy #2                  ;set to do the three
 :           sty portcullis_number
-            lda a:PortCurrStateBase,y    ;get the portal state
+            lda a:PortCurrStateBase,y  ;get the portal state
             cmp #$1c                ;is it in a closed state?
             beq GetPortal           ;if not, next portal
 ; deal with object moving out of a castle
             ldy portcullis_number
-            lda ObjectRoomPosType::room,x  ;get object's room number
+            lda ObjectDynamicType::room,x  ;get object's room number
             cmp EntryRoomOffsets,y  ;is it in a castle entry room?
             bne GetPortal           ;if not, next portal
-            lda ObjectRoomPosType::ycoord,x  ;get the object's Y coordinate
+            lda ObjectDynamicType::ycoord,x
             cmp #13                 ;is it above 13 i.e. at the bottom?
             bpl GetPortal           ;if so then branch
             lda CastleRoomOffsets,y ;get the castle room
-            sta ObjectRoomPosType::room,x  ;and put the object in the castle room
+            sta ObjectDynamicType::room,x  ;and put the object in the castle room
             lda #80
-            sta ObjectRoomPosType::xcoord,x  ;set the object's new X coordinate
+            sta ObjectDynamicType::xcoord,x
             lda #44
-            sta ObjectRoomPosType::ycoord,x  ;set the new object's Y coordinate
+            sta ObjectDynamicType::ycoord,x
             lda #1
-            sta a:PortCurrStateBase,y    ;set the portcullis state to 01
+            sta a:PortCurrStateBase,y        ;set the portcullis state to 01
             rts
 
 GetPortal:  ldy portcullis_number
             dey                     ; goto next,
             bpl :-                  ; and continue
 ; DealWithUp
-            lda ObjectRoomPosType::ycoord,x  ;get the object's Y coordinate
+            lda ObjectDynamicType::ycoord,x
             cmp #106                ;has it reached above the top?
             bmi DealWithLeft        ;if not, branch
             lda #13                 ;set new Y coordinate to bottom
-            sta ObjectRoomPosType::ycoord,x
+            sta ObjectDynamicType::ycoord,x
             ldy #5                  ;get the direction wanted
             jmp GetNewRoom          ;go and get new room
 DealWithLeft:
-            lda ObjectRoomPosType::xcoord,x  ;get the object's X coordinate
+            lda ObjectDynamicType::xcoord,x
             cmp #3                  ;is it < 3?
             bcc :+                  ;if so, branch (off to left)
             cmp #240                ;is it > 240 ?
             bcs :+                  ;if so, branch (off to right)
             jmp DealWithDown
-:           cpx #ManRoomPos            ;are we dealing with the man?
+:           cpx #ManDynamic         ;are we dealing with the man?
             beq :+                  ;if so, branch
             lda #154                ;set new X coordinate for the others
             jmp :++
 
 :           lda #158                ;set new X coordinate for the ball
-:           sta ObjectRoomPosType::xcoord,x  ;store the next X coordinate
+:           sta ObjectDynamicType::xcoord,x
             ldy #RoomType::room_left
             jmp GetNewRoom
 
 DealWithDown:
-            lda ObjectRoomPosType::ycoord,x  ;get object's Y coordinate
+            lda ObjectDynamicType::ycoord,x
             cmp #13                 ;if it's > 13 then
             bcs DealWithRight       ; branch
             lda #105                ;set new Y coordinate
-            sta ObjectRoomPosType::ycoord,x
+            sta ObjectDynamicType::ycoord,x
             ldy #RoomType::room_down
             jmp GetNewRoom
 
 DealWithRight:
-            lda ObjectRoomPosType::xcoord,x  ;get the object's X coordinate
-            cpx #ManRoomPos            ;are we dealing with the man?
+            lda ObjectDynamicType::xcoord,x
+            cpx #ManDynamic         ;are we dealing with the man?
             bne :+                  ;branch if not
             cmp #159                ;has the object reached the right?
             bcc MovementReturn      ;branch if not
-            lda ObjectRoomPosType::room,x ;get the Ball's room
+            lda ObjectDynamicType::room,x ;get the Ball's room
             cmp #roomnum_BelowYellowCastleRightThinWall  ; right of secret room
             bne :++                 ;branch if not
-            lda DotRoomPos+ObjectRoomPosType::room  ;check the room of the black dot
+            lda DotDynamic+ObjectDynamicType::room  ;check the room of the black dot
             cmp #roomnum_BlackMaze3 ;is it in the hidden room area?
             beq :++                 ;if so, branch
 ; change to secret room
             lda #roomnum_SecretRoom
-            sta ObjectRoomPosType::room,x  ;and make it current
-            lda #3                          ;set the X coordinate
-            sta ObjectRoomPosType::xcoord,x
-            jmp MovementReturn              ;and exit
+            sta ObjectDynamicType::room,x  ;and make it current
+            lda #3                         ;set the X coordinate
+            sta ObjectDynamicType::xcoord,x
+            jmp MovementReturn             ;and exit
 
 :           cmp #direction_wanted   ;has the object reached the right of the screen?
             bcc MovementReturn      ;branch if not (no room change)
 :           lda #3                  ;set the next X coordinate
-            sta ObjectRoomPosType::xcoord,x
+            sta ObjectDynamicType::xcoord,x
             ldy #RoomType::room_right
             jmp GetNewRoom
 
 ; get new room
-GetNewRoom: lda ObjectRoomPosType::room,x
+GetNewRoom: lda ObjectDynamicType::room,x
             jsr RoomNumToAddress            ;convert to room address in dr_ptr
             lda (dr_ptr),y                  ;get the adjacent room
             jsr AdjustRoomLevel             ;deal with the level differences
-            sta ObjectRoomPosType::room,x  ; and store as new object's room
+            sta ObjectDynamicType::room,x  ; and store as new object's room
 MovementReturn:
             rts
 
@@ -1100,19 +1092,19 @@ MoveObjectOneStep:
             lda direction_wanted
             and #%10000000          ;check for right move
             bne :+                  ;if no move right then branch
-            inc ObjectRoomPosType::xcoord,x  ;increment the X coordinate
+            inc ObjectDynamicType::xcoord,x
 :           lda direction_wanted
             and #%01000000          ;check for left move
             bne :+                  ;if no move left then branch
-            dec ObjectRoomPosType::xcoord,x  ;decrement the X coordinate
+            dec ObjectDynamicType::xcoord,x
 :           lda direction_wanted
             and #%00010000          ;check for move up
             bne :+                  ;if no move up then branch
-            inc ObjectRoomPosType::ycoord,x  ;increment the Y coordinate
+            inc ObjectDynamicType::ycoord,x
 :           lda direction_wanted
             and #%00100000          ;check for move down
             bne :+                  ;if no move down then branch
-            dec ObjectRoomPosType::ycoord,x  ;decrement the Y coordinate
+            dec ObjectDynamicType::ycoord,x
 :           jmp MoveObjectOneStep   ;keep going until delta finished
 MoveObjectDone:
             rts
@@ -1164,15 +1156,14 @@ FindObjHit: lda CXPPMM              ;get player0-player1
 :           lda object1             ;therefore select the other
             rts
 
-; move object
+; move object (Dragon or BlackBat)
 MoveGameObject:
             jsr GetLinkedObject     ;get linked object and movement
             ldx MoveGameObjectArg_ObjNumber
             lda direction_wanted
-            bne @MoveGameObject_2   ;if movement then branch
-            lda $03,x               ;use old movement
-@MoveGameObject_2:
-            sta $03,x               ;store the new movement
+            bne :+                  ;if movement then branch
+            lda DragonDynamicType::move,x  ;use old movement
+:           sta DragonDynamicType::move,x  ;store the new movement
             ldy objdelta            ;get the object's delta
             jsr MoveGroundObject    ;move the object
             rts
@@ -1181,69 +1172,58 @@ MoveGameObject:
 GetLinkedObject:
             lda #0                  ;set index to zero
             sta linked_obj_index
-@GetLinkedObj_2:
-            ldy linked_obj_index
+:           ldy linked_obj_index
             lda (objstore_ptr),y    ;get first object
             tax
             iny
             lda (objstore_ptr),y    ;get second object
             tay
-            lda $00,x               ;get Object1's room
-            cmp $0000,y             ;compare the Object2's room
-            bne @GetLinkedObj_3     ;if not the same room then branch
+            lda z:ObjectDynamicType::room,x  ;compare Object1's room
+            cmp a:ObjectDynamicType::room,y  ; w/Object2's room
+            bne :+                  ;if not the same room then branch
             cpy MoveGameObjectArg_Difficulty  ;have we matched the second object
-            beq @GetLinkedObj_3     ; for difficulty (if so, carry on)
+            beq :+                  ; for difficulty (if so, carry on)
             cpx MoveGameObjectArg_Difficulty  ;have we matched the first object
-            beq @GetLinkedObj_3     ; for difficulty (if so, carry on)
-            jsr @GetLinkedObj_4     ;get object's movement
+            beq :+                  ; for difficulty (if so, carry on)
+            jsr :++                 ;get object's movement
             rts
-
-@GetLinkedObj_3:
-            inc linked_obj_index
+:           inc linked_obj_index
             inc linked_obj_index
             ldy linked_obj_index
             lda (objstore_ptr),y    ;check for end of sequence
-            bne @GetLinkedObj_2     ;if not branch
+            bne :--                 ;if not branch
             lda #0                  ;set no move if no
             sta direction_wanted
             rts
-
 ; work out object's movement
-@GetLinkedObj_4:
-            lda #$ff                ;set object movement to none
+:           lda #$ff                ;set object movement to none
             sta direction_wanted
-            lda $0000,y             ;get Object2's room
-            cmp $00,x               ;compare it with object's room
-            bne @GetLinkedObject_8  ;if not the same, forget it
-            lda $0001,y             ;get Object2's X coordinate
-            cmp $01,x               ;get Object1's X coordinate
-            bcc @GetLinkedObject_5  ;if Object2 to left of Object1 then branch
-            beq @GetLinkedObject_6  ;if Object2 on Object1 then branch
+            lda a:ObjectDynamicType::room,y  ;compare Object2's room
+            cmp z:ObjectDynamicType::room,x  ; w/ Object1's room
+            bne :++++               ;if not the same, forget it
+            lda a:ObjectDynamicType::xcoord,y  ;compare Object2's X coordinate
+            cmp z:ObjectDynamicType::xcoord,x  ; w/ Object1's X coordinate
+            bcc :+                  ;if Object2 to left of Object1 then branch
+            beq :++                 ;if Object2 on Object1 then branch
             lda direction_wanted
             and #$7f                ;signal a move right
             sta direction_wanted
-            jmp @GetLinkedObject_6  ;now try vertical
-
-@GetLinkedObject_5:
-            lda direction_wanted
+            jmp :++                 ;now try vertical
+:           lda direction_wanted
             and #$bf                ;signal a move left
             sta direction_wanted
-@GetLinkedObject_6:
-            lda $0002,y             ;get Object2's Y coordinate
-            cmp $02,x               ;get Object1's X coordinate
-            bcc @GetLinkedObject_7  ;if Object2 below Object1 then branch
-            beq @GetLinkedObject_8  ;if Object2 on Object1 then branch
+:           lda a:ObjectDynamicType::ycoord,y  ;compare Object2's Y coordinate
+            cmp z:ObjectDynamicType::ycoord,x  ; w/ Object1's X coordinate
+            bcc :+                  ;if Object2 below Object1 then branch
+            beq :++                 ;if Object2 on Object1 then branch
             lda direction_wanted
             and #$ef                ;signal a move up
             sta direction_wanted
-            jmp @GetLinkedObject_8  ;jump to finish
-
-@GetLinkedObject_7:
-            lda direction_wanted
+            jmp :++                 ;jump to finish
+:           lda direction_wanted
             and #sound_duration_counter  ;signal a move down
             sta direction_wanted
-@GetLinkedObject_8:
-            lda direction_wanted
+:           lda direction_wanted
             rts
 
 ;; Move the red dragon "Rhindle"
@@ -1259,10 +1239,10 @@ MoveRedDragon:
             rts
 
 RedDragMatrix:
-            .byte SwordRoomPos,         RedDragonRoomPosMove
-            .byte RedDragonRoomPosMove, ManRoomPos
-            .byte RedDragonRoomPosMove, ChaliceRoomPos
-            .byte RedDragonRoomPosMove, WhiteKeyRoomPos
+            .byte SwordDynamic,     RedDragonDynamic
+            .byte RedDragonDynamic, ManDynamic
+            .byte RedDragonDynamic, ChaliceDynamic
+            .byte RedDragonDynamic, WhiteKeyDynamic
             .byte 0
 
 ;; Move the yellow dragon "Yorgle"
@@ -1278,10 +1258,10 @@ MoveYellowDragon:
             rts
 
 YelDragMatrix:
-            .byte SwordRoomPos,            YellowDragonRoomPosMove
-            .byte YellowKeyRoomPos,        YellowDragonRoomPosMove
-            .byte YellowDragonRoomPosMove, ManRoomPos
-            .byte YellowDragonRoomPosMove, ChaliceRoomPos
+            .byte SwordDynamic,        YellowDragonDynamic
+            .byte YellowKeyDynamic,    YellowDragonDynamic
+            .byte YellowDragonDynamic, ManDynamic
+            .byte YellowDragonDynamic, ChaliceDynamic
             .byte 0
 
 ;; Move the green dragon "Grundle"
@@ -1297,12 +1277,12 @@ MoveGreenDragon:
             rts
 
 GreenDragMatrix:
-            .byte SwordRoomPos,           GreenDragonRoomPosMove
-            .byte GreenDragonRoomPosMove, ManRoomPos
-            .byte GreenDragonRoomPosMove, ChaliceRoomPos
-            .byte GreenDragonRoomPosMove, BridgeRoomPos
-            .byte GreenDragonRoomPosMove, MagnetRoomPos
-            .byte GreenDragonRoomPosMove, BlackKeyRoomPos
+            .byte SwordDynamic,       GreenDragonDynamic
+            .byte GreenDragonDynamic, ManDynamic
+            .byte GreenDragonDynamic, ChaliceDynamic
+            .byte GreenDragonDynamic, BridgeDynamic
+            .byte GreenDragonDynamic, MagnetDynamic
+            .byte GreenDragonDynamic, BlackKeyDynamic
             .byte 0
 
 ; Move a dragon
@@ -1319,7 +1299,7 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             lda #0                ;set hard - ignore nothing
             jmp @MoveDragon_3
 @MoveDragon_2:
-            lda #SwordRoomPos        ;set easy - ignore sword
+            lda #SwordDynamic     ;set easy - ignore sword
 @MoveDragon_3:
             sta MoveGameObjectArg_Difficulty
             stx MoveGameObjectArg_ObjNumber
@@ -1336,9 +1316,9 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             tay                   ;create lookup
             lda DragonDiff,y      ;get new state
             sta z:DragonDynamicType::state,x   ;store as dragon's state (open mouthed)
-            lda PrevManRoomPos+ObjectRoomPosType::xcoord
+            lda PrevManDynamic+ObjectDynamicType::xcoord
             sta z:DragonDynamicType::xcoord,x  ;get temp ball X coord and store as dragon's
-            lda PrevManRoomPos+ObjectRoomPosType::ycoord
+            lda PrevManDynamic+ObjectDynamicType::ycoord
             sta z:DragonDynamicType::ycoord,x  ;get temp ball Y coord and store as dragon's
             lda #NoiseType::dragon_roar
             sta sound_type
@@ -1365,19 +1345,19 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             cmp #2                ;is it in state 02 (normal #2)
             bne @MoveDragon_7     ;branch if not
 ; normal dragon state 2 (eaten ball)
-            lda z:DragonDynamicType::room,x    ;get the dragon's current room
-            sta ManRoomPos+ObjectRoomPosType::room
-            sta PrevManRoomPos+ObjectRoomPosType::room
-            lda z:DragonDynamicType::xcoord,x  ;get the dragon's X coordinate
+            lda z:DragonDynamicType::room,x
+            sta ManDynamic+ObjectDynamicType::room
+            sta PrevManDynamic+ObjectDynamicType::room
+            lda z:DragonDynamicType::xcoord,x
             clc
             adc #3                ;adjust
-            sta ManRoomPos+ObjectRoomPosType::xcoord
-            sta PrevManRoomPos+ObjectRoomPosType::xcoord
-            lda z:DragonDynamicType::ycoord,x  ;get the dragon's Y coordinate
+            sta ManDynamic+ObjectDynamicType::xcoord
+            sta PrevManDynamic+ObjectDynamicType::xcoord
+            lda z:DragonDynamicType::ycoord,x
             sec
             sbc #10               ;adjust
-            sta ManRoomPos+ObjectRoomPosType::ycoord
-            sta PrevManRoomPos+ObjectRoomPosType::ycoord
+            sta ManDynamic+ObjectDynamicType::ycoord
+            sta PrevManDynamic+ObjectDynamicType::ycoord
             jmp @MoveDragon_9
 
 ; dragon roaring
@@ -1414,89 +1394,90 @@ DragonDiff: .byte $d0, $e8       ;level 1: Am, Pro
             .byte $f0, $f6       ;level 3: Am, Pro
 
 ;; Move the bat
-MoveBat:    inc BlackBatCurrState ;put bat in the next state
-            lda BlackBatCurrState ;get the bat state
-            cmp #8                ;has it reached the maximum?
-            bne @MoveBat_2
-            lda #0                ;if so, reset the bat state
-            sta BlackBatCurrState
-@MoveBat_2: lda BlackBatFedUp     ;get the bat fed-up value
-            beq @MoveBat_3        ;if bat fed-up then branch
-            inc BlackBatFedUp     ;increment its value for next time
-            lda z:BlackBatRoomPosMove+ObjectRoomPosMoveType::move
-            ldx #BlackBatRoomPosMove     ;position to bat
-            ldy #3                ;get the bat's deltas
-            jsr MoveGroundObject  ;move the bat
-            jmp @MoveBat_4        ;update the bat's object
+MoveBat:    inc BlackBatDynamic+BlackBatDynamicType::state ;put bat in the next state
+            lda BlackBatDynamic+BlackBatDynamicType::state ;get the bat state
+            cmp #8                 ;has it reached the maximum?
+            bne :+
+            lda #0                 ;if so, reset the bat state
+            sta BlackBatDynamic+BlackBatDynamicType::state
+:           lda BlackBatDynamic+BlackBatDynamicType::fedup ;get the bat fed-up value
+            beq @BatFedup          ;if bat fed-up then branch
+            inc BlackBatDynamic+BlackBatDynamicType::fedup ;increment its value for next time
+            lda z:BlackBatDynamic+BlackBatDynamicType::move
+            ldx #BlackBatDynamic   ;position to bat
+            ldy #3                 ;get the bat's deltas
+            jsr MoveGroundObject   ;move the bat
+            jmp @MoveCarriedObject ;update the bat's object
 
 ; bat fed-up
-@MoveBat_3: lda #BlackBatRoomPosMove     ;store the bat's dynamic data address
+@BatFedup:  lda #BlackBatDynamic   ;store the bat's dynamic data address
             sta MoveGameObjectArg_ObjNumber
-            lda #3                ;set the bat's delta
+            lda #3                 ;set the bat's delta
             sta objdelta
-            lda #<BatMatrix       ;set the low address of object store
+            lda #<BatMatrix        ;set the low address of object store
             sta objstore_ptr
-            lda #>BatMatrix       ;set the high address of object store
+            lda #>BatMatrix        ;set the high address of object store
             sta objstore_ptr+1
-            lda BlackBatCarriedObject        ;get object being carried by Bat,
-            sta MoveGameObjectArg_Difficulty  ; and copy
-            jsr MoveGameObject    ;move the Bat
+            lda BlackBatDynamic+BlackBatDynamicType::carriedobject  ;copy object being carried by Bat
+            sta MoveGameObjectArg_Difficulty
+            jsr MoveGameObject     ;move the Bat
             ldy linked_obj_index
-            lda (objstore_ptr),y  ;look up the object found in the table
-            beq @MoveBat_4        ;if nothing found then forget it
+            lda (objstore_ptr),y   ;look up the object found in the table
+            beq @MoveCarriedObject ;if nothing found then forget it
             iny
-            lda (objstore_ptr),y  ;get the object wanted
+            lda (objstore_ptr),y   ;get the object wanted
             tax
-            lda z:ObjectRoomPosType::room,x
-            cmp BlackBatRoomPosMove      ;is it the same as the Bat's?
-            bne @MoveBat_4        ;if not forget it
+            lda z:ObjectDynamicType::room,x
+            cmp BlackBatDynamic    ;is it the same as the Bat's?
+            bne @MoveCarriedObject ;if not forget it
 ; see if bat can pick up an object
-            lda z:ObjectRoomPosType::xcoord,x
+            lda z:ObjectDynamicType::xcoord,x
             sec
-            sbc z:BlackBatRoomPosMove+ObjectRoomPosType::xcoord  ;find the difference with the Bat's X coordinate
+            sbc z:BlackBatDynamic+BlackBatDynamicType::xcoord  ;find the difference with the Bat's X coordinate
             clc
-            adc #4                ;adjust so Bat in middle of object
-            and #$f8              ;is Bat within seven pixels?
-            bne @MoveBat_4        ;if not, no pickup possible
-            lda z:ObjectRoomPosType::ycoord,x
+            adc #4                 ;adjust so Bat in middle of object
+            and #%11111000         ;is Bat within seven pixels?
+            bne @MoveCarriedObject ;if not, no pickup possible
+            lda z:ObjectDynamicType::ycoord,x
             sec
-            sbc z:BlackBatRoomPosMove+ObjectRoomPosType::ycoord  ;find the difference with the Bat's
-            clc                   ; Y coordinate
-            adc #4                ;adjust
-            and #$f8              ;is the Bat within seven pixels?
-            bne @MoveBat_4        ;if not, no pickup possible
+            sbc z:BlackBatDynamic+BlackBatDynamicType::ycoord  ;find the difference with the Bat's
+            clc                    ; Y coordinate
+            adc #4                 ;adjust
+            and #%11111000         ;is the Bat within seven pixels?
+            bne @MoveCarriedObject ;if not, no pickup possible
 ; get object
-            stx BlackBatCarriedObject  ;store object as being carried
+            stx BlackBatDynamic+BlackBatDynamicType::carriedobject  ;store object as being carried
             lda #16               ;reset the bat fed-up time
-            sta BlackBatFedUp
+            sta BlackBatDynamic+BlackBatDynamicType::fedup
 ; move object being carried by bat
-@MoveBat_4: ldx BlackBatCarriedObject  ;get object being carried by Bat
-            lda BlackBatRoomPosMove+ObjectRoomPosMoveType::room
-            sta z:ObjectRoomPosType::room,x
-            lda z:BlackBatRoomPosMove+ObjectRoomPosType::xcoord
+@MoveCarriedObject:
+            ldx BlackBatDynamic+BlackBatDynamicType::carriedobject  ;get object being carried by Bat
+            lda BlackBatDynamic+BlackBatDynamicType::room
+            sta z:ObjectDynamicType::room,x
+            lda z:BlackBatDynamic+BlackBatDynamicType::xcoord
             clc
             adc #8                ;adjust to the right
-            sta z:ObjectRoomPosType::xcoord,x
-            lda z:BlackBatRoomPosMove+ObjectRoomPosType::ycoord
-            sta z:ObjectRoomPosType::ycoord,x
-            lda BlackBatCarriedObject  ;get the object being carried by the bat
+            sta z:ObjectDynamicType::xcoord,x
+            lda z:BlackBatDynamic+BlackBatDynamicType::ycoord
+            sta z:ObjectDynamicType::ycoord,x
+            lda BlackBatDynamic+BlackBatDynamicType::carriedobject  ;get the object being carried by the bat
             ldy object_carried
             cmp Objects+ObjectType::roompos_ptr,y  ;are they the same?
-            bne @MoveBat_5        ;if not branch
+            bne :+               ;if not branch to exit
             lda #objnum_Null
             sta object_carried
-@MoveBat_5: rts
+:           rts
 
-BatMatrix:  .byte  BlackBatRoomPosMove, ChaliceRoomPos
-            .byte  BlackBatRoomPosMove, SwordRoomPos
-            .byte  BlackBatRoomPosMove, BridgeRoomPos
-            .byte  BlackBatRoomPosMove, YellowKeyRoomPos
-            .byte  BlackBatRoomPosMove, WhiteKeyRoomPos
-            .byte  BlackBatRoomPosMove, BlackKeyRoomPos
-            .byte  BlackBatRoomPosMove, RedDragonRoomPosMove
-            .byte  BlackBatRoomPosMove, YellowDragonRoomPosMove
-            .byte  BlackBatRoomPosMove, GreenDragonRoomPosMove
-            .byte  BlackBatRoomPosMove, MagnetRoomPos
+BatMatrix:  .byte  BlackBatDynamic, ChaliceDynamic
+            .byte  BlackBatDynamic, SwordDynamic
+            .byte  BlackBatDynamic, BridgeDynamic
+            .byte  BlackBatDynamic, YellowKeyDynamic
+            .byte  BlackBatDynamic, WhiteKeyDynamic
+            .byte  BlackBatDynamic, BlackKeyDynamic
+            .byte  BlackBatDynamic, RedDragonDynamic
+            .byte  BlackBatDynamic, YellowDragonDynamic
+            .byte  BlackBatDynamic, GreenDragonDynamic
+            .byte  BlackBatDynamic, MagnetDynamic
             .byte  0
 
 ;; Deal with portcullis and collisions
@@ -1519,7 +1500,7 @@ Portals:    ldy #2                ;for each portcullis
             beq @Portals_4        ;if not then branch
             lda #1                ;set the portcullis to closed
             sta PortCurrStateBase,x
-            ldx #ManRoomPos
+            ldx #ManDynamic
             jmp @Portals_6        ;put the man in the castle
 
 @Portals_4: lda obj_collided_with ;get the object that hit the portcullis
@@ -1567,10 +1548,10 @@ CastleRoomOffsets:
             .byte  roomnum_YellowCastle, roomnum_WhiteCastle, roomnum_BlackCastle
 
 ;; Deal with magnet
-Mag:        lda z:MagnetRoomPos+ObjectRoomPosType::ycoord
+Mag:        lda z:MagnetDynamic+ObjectDynamicType::ycoord
             sec
             sbc #8                ;adjust to its "poles"
-            sta z:MagnetRoomPos+ObjectRoomPosType::ycoord
+            sta z:MagnetDynamic+ObjectDynamicType::ycoord
             lda #0                ;con difficulty!
             sta MoveGameObjectArg_Difficulty
             lda #<MagnetMatrix    ;set low address of object store
@@ -1582,51 +1563,51 @@ Mag:        lda z:MagnetRoomPos+ObjectRoomPosType::ycoord
             beq :+                ;if none, then forget it
             ldy #1                ;set delta to one
             jsr MoveGroundObject  ;move object
-:           lda z:MagnetRoomPos+ObjectRoomPosType::ycoord  ;reset the magnet's Y coordinate
+:           lda z:MagnetDynamic+ObjectDynamicType::ycoord  ;reset the magnet's Y coordinate
             clc
             adc #8
-            sta z:MagnetRoomPos+ObjectRoomPosType::ycoord
+            sta z:MagnetDynamic+ObjectDynamicType::ycoord
             rts
 
 MagnetMatrix:
-            .byte YellowKeyRoomPos, MagnetRoomPos
-            .byte WhiteKeyRoomPos,  MagnetRoomPos
-            .byte BlackKeyRoomPos,  MagnetRoomPos
-            .byte SwordRoomPos,     MagnetRoomPos
-            .byte BridgeRoomPos,    MagnetRoomPos
-            .byte ChaliceRoomPos,   MagnetRoomPos
+            .byte YellowKeyDynamic, MagnetDynamic
+            .byte WhiteKeyDynamic,  MagnetDynamic
+            .byte BlackKeyDynamic,  MagnetDynamic
+            .byte SwordDynamic,     MagnetDynamic
+            .byte BridgeDynamic,    MagnetDynamic
+            .byte ChaliceDynamic,   MagnetDynamic
             .byte 0
 
 ;; Deal with invisible surround moving
-Surround:   lda ManRoomPos+ObjectRoomPosType::room
+Surround:   lda ManDynamic+ObjectDynamicType::room
             jsr RoomNumToAddress  ;convert to room address in dr_ptr
             ldy #RoomType::color
             lda (dr_ptr),y
             cmp #ColorType::invisible
             beq :+                ;branch if invisible
             lda #0                ;if not, signal the invisible surround not wanted
-            sta z:SurroundRoomPos+ObjectRoomPosType::ycoord
+            sta z:SurroundDynamic+ObjectDynamicType::ycoord
             jmp :+++
-:           lda ManRoomPos+ObjectRoomPosType::room
-            sta SurroundRoomPos
-            lda ManRoomPos+ObjectRoomPosType::xcoord
+:           lda ManDynamic+ObjectDynamicType::room
+            sta SurroundDynamic
+            lda ManDynamic+ObjectDynamicType::xcoord
             sec
             sbc #14               ;adjust for surround
-            sta z:SurroundRoomPos+ObjectRoomPosType::xcoord
-            lda ManRoomPos+ObjectRoomPosType::ycoord
+            sta z:SurroundDynamic+ObjectDynamicType::xcoord
+            lda ManDynamic+ObjectDynamicType::ycoord
             clc
             adc #14               ;adjust for surround
-            sta z:SurroundRoomPos+ObjectRoomPosType::ycoord
-            lda z:SurroundRoomPos+ObjectRoomPosType::xcoord
+            sta z:SurroundDynamic+ObjectDynamicType::ycoord
+            lda z:SurroundDynamic+ObjectDynamicType::xcoord
             cmp #240              ;is it close to the right edge?
             bcc :+                ;branch if not
             lda #1                ;flick surround to the other side of the screen
-            sta z:SurroundRoomPos+ObjectRoomPosType::xcoord
+            sta z:SurroundDynamic+ObjectDynamicType::xcoord
             jmp :++
 :           cmp #130              ;keep x < 130
             bcc :+
             lda #129
-            sta z:SurroundRoomPos+ObjectRoomPosType::xcoord
+            sta z:SurroundDynamic+ObjectDynamicType::xcoord
 :           rts
 
 ;; Make a sound
@@ -1766,9 +1747,9 @@ MazeSide:           mazeside_gfxpf_data             ;line shared with above room
 MazeEntry:          mazeentry_gfxpf_data
 CastleDef:          castle_gfxpf_data
 
-PortRoomPos1:       .byte roomnum_YellowCastle, 77, 49
-PortRoomPos2:       .byte roomnum_WhiteCastle,  77, 49
-PortRoomPos3:       .byte roomnum_BlackCastle,  77, 49
+PortDynamic1:       .byte roomnum_YellowCastle, 77, 49
+PortDynamic2:       .byte roomnum_WhiteCastle,  77, 49
+PortDynamic3:       .byte roomnum_BlackCastle,  77, 49
 
 SurroundCurrState:  .byte 0
 SurroundStates:     .byte $ff
@@ -1830,7 +1811,7 @@ DotStates:          .byte $ff
 :                   dot_gfxgr_data
 
 :                   easteregg_gfxgr_data norm
-EasterEggRoomPos:   .byte roomnum_SecretRoom, 80, 105
+EasterEggDynamic:   .byte roomnum_SecretRoom, 80, 105
 EasterEggCurrState: .byte 0
 EasterEggStates:    .byte $ff
                     .word :-
@@ -1845,7 +1826,7 @@ NullStates:         .byte $ff
                     .word :+
 :                   null_gfxgr_data
 
-NumberRoomPos:      .byte roomnum_NumberRoom, 80, 64
+NumberDynamic:      .byte roomnum_NumberRoom, 80, 64
 NumberStates:       .byte $01
                     .word GfxNum1
                     .byte $03
@@ -2094,133 +2075,133 @@ roomnum_upfrom_TopEntryRoom = (* - RoomDiffs) | $80
 
 Objects:
 objnum_InvisibleSurround := (* - Objects) ; 00
-    .word SurroundRoomPos
+    .word SurroundDynamic
     .word SurroundCurrState
     .word SurroundStates
     .byte ColorType::orange, BWColorType::lightergray
     .byte 7
 
 objnum_PortCullis1 := (* - Objects) ; 01
-    .word PortRoomPos1
+    .word PortDynamic1
     .word PortCurrStateBase+0
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
 objnum_PortCullis2 := (* - Objects) ; 02
-    .word PortRoomPos2
+    .word PortDynamic2
     .word PortCurrStateBase+1
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
 objnum_PortCullis3 := (* - Objects) ; 03
-    .word PortRoomPos3
+    .word PortDynamic3
     .word PortCurrStateBase+2
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
 objnum_EasterEgg := (* - Objects) ; 04
-    .word EasterEggRoomPos
+    .word EasterEggDynamic
     .word EasterEggCurrState
     .word EasterEggStates
     .byte ColorType::flash, BWColorType::black
     .byte 0
 
 objnum_Number := (* - Objects) ; 05
-    .word NumberRoomPos
+    .word NumberDynamic
     .word NumberCurrState
     .word NumberStates
     .byte ColorType::green, BWColorType::black
     .byte 0
 
 objnum_DragonRhindle := (* - Objects) ; 06
-    .word RedDragonRoomPosMove
-    .word RedDragonCurrState
+    .word RedDragonDynamic
+    .word RedDragonDynamic+DragonDynamicType::state
     .word DragonStates
     .byte ColorType::red, BWColorType::white
     .byte 0
 
 objnum_DragonYorgle := (* - Objects) ; 07
-    .word YellowDragonRoomPosMove
-    .word YellowDragonCurrState
+    .word YellowDragonDynamic
+    .word YellowDragonDynamic+DragonDynamicType::state
     .word DragonStates
     .byte ColorType::yellow, BWColorType::darkgray
     .byte 0
 
 objnum_DragonGrundle := (* - Objects) ; 08
-    .word GreenDragonRoomPosMove
-    .word GreenDragonCurrState
+    .word GreenDragonDynamic
+    .word GreenDragonDynamic+DragonDynamicType::state
     .word DragonStates
     .byte ColorType::green, BWColorType::black
     .byte 0
 
 objnum_Sword := (* - Objects) ; 09
-    .word SwordRoomPos
+    .word SwordDynamic
     .word SwordCurrState
     .word SwordStates
     .byte ColorType::yellow, BWColorType::darkgray
     .byte 0
 
 objnum_Bridge := (* - Objects) ; 0a
-    .word BridgeRoomPos
+    .word BridgeDynamic
     .word BridgeCurrState
     .word BridgeStates
     .byte ColorType::purple, BWColorType::darkergray
     .byte 7
 
 objnum_YellowKey := (* - Objects) ; 0b
-    .word YellowKeyRoomPos
+    .word YellowKeyDynamic
     .word KeyCurrState
     .word KeyStates
     .byte ColorType::yellow, BWColorType::darkgray
     .byte 0
 
 objnum_WhiteKey := (* - Objects) ; 0c
-    .word WhiteKeyRoomPos
+    .word WhiteKeyDynamic
     .word KeyCurrState
     .word KeyStates
     .byte ColorType::white, BWColorType::white
     .byte 0
 
 objnum_BlackKey := (* - Objects) ; 0d
-    .word BlackKeyRoomPos
+    .word BlackKeyDynamic
     .word KeyCurrState
     .word KeyStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
 objnum_BlackBatKnubberrub := (* - Objects) ; 0e
-    .word BlackBatRoomPosMove
-    .word BlackBatCurrState
+    .word BlackBatDynamic
+    .word BlackBatDynamic+BlackBatDynamicType::state
     .word BatStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
 objnum_BlackDot := (* - Objects) ; 0f
-    .word DotRoomPos
+    .word DotDynamic
     .word DotCurrState
     .word DotStates
     .byte ColorType::invisible, BWColorType::invisible
     .byte 0
 
 objnum_HolyGrail := (* - Objects) ; 10 enchanted chalice
-    .word ChaliceRoomPos
+    .word ChaliceDynamic
     .word ChaliceCurrState
     .word ChaliceStates
     .byte ColorType::flash, BWColorType::darkgray
     .byte 0
 
 objnum_Magnet := (* - Objects) ; 11
-    .word MagnetRoomPos
+    .word MagnetDynamic
     .word MagnetCurrState
     .word MagnetStates
     .byte ColorType::black, BWColorType::darkgray
     .byte 0
 
 objnum_Null := (* - Objects) ; 12
-    .word BridgeRoomPos
+    .word BridgeDynamic
     .word NullCurrState
     .word NullStates
     .byte ColorType::black, BWColorType::black

@@ -14,10 +14,28 @@
     ycoord        .byte
 .endstruct
 
-.struct ObjectRoomPosType
+.struct ObjectDynamicType
     room          .byte
     xcoord        .byte  ; ObjectPosType
     ycoord        .byte  ;
+.endstruct
+
+.struct DragonDynamicType
+    room          .byte  ; ObjectDynamicType
+    xcoord        .byte  ;
+    ycoord        .byte  ;
+    move          .byte
+    state         .byte
+.endstruct
+
+.struct BlackBatDynamicType
+    room          .byte  ; DragonDynamicType
+    xcoord        .byte  ;
+    ycoord        .byte  ;
+    move          .byte  ;
+    state         .byte  ;
+    carriedobject .byte
+    fedup         .byte
 .endstruct
 
 .struct StateType
@@ -26,35 +44,10 @@
     ycoord        .byte  ;
 .endstruct
 
-.struct ObjectRoomPosMoveType
-    room          .byte  ; ObjectRoomPosType
-    xcoord        .byte  ; ObjectPosType
-    ycoord        .byte  ;
-    move          .byte
-.endstruct
-
-.struct DragonDynamicType
-    room          .byte  ; ObjectRoomPosMoveType
-    xcoord        .byte  ;
-    ycoord        .byte  ;
-    move          .byte  ;
-    state         .byte
-.endstruct
-
-.struct BlackBatDynamicType
-    room          .byte  ; ObjectRoomPosMoveType
-    xcoord        .byte  ;
-    ycoord        .byte  ;
-    move          .byte  ;
-    state         .byte
-    carriedobject .byte
-    fedup         .byte
-.endstruct
-
 .struct ObjectType
-    roompos_ptr   .word  ; pointer to a ObjectRoomPosType or DragonDynamicType
-    currstate_ptr .word  ; pointer to a state
-    states_ptr    .word  ; pointer to list of StateType
+    roompos_ptr   .word  ; pointer to a DynamicType
+    currstate_ptr .word  ; pointer to a state byte
+    states_ptr    .word  ; pointer to array of StateType
     color         .byte  ; ColorType
     bw_color      .byte  ; BWColorType
     size          .byte
