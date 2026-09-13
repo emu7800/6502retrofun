@@ -1,17 +1,8 @@
 .PHONY: all clean
 .DEFAULT_GOAL: all
 
-all: bin obj
+all:
 	make -C src
-	cp src/*.BIN bin/
-	cp src/*.o src/*.txt obj/
-
-bin:
-	mkdir bin/
-
-obj:
-	mkdir obj/
 
 clean:
-	-rm -rf bin/ obj/
 	make clean -C src

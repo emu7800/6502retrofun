@@ -6,16 +6,19 @@ includes = inc/*.inc inc/gfx/gr/*.inc inc/gfx/pf/*.inc
 all: ADVNTURE.BIN ADVeNTURE.BIN #ADVeNTURE8k.BIN
 
 ADVNTURE.BIN: ADVNTURE.o $(includes)
-	ld65 -o ADVNTURE.BIN  -C ADVNTURE4k.cfg -m ADVNTURE.map.txt ADVNTURE.o
+	ld65 -o ADVNTURE.BIN  -C ADVNTURE4k.cfg -m ADVNTURE.map.txt -Ln ADVNTURE.labels.txt ADVNTURE.o
+	../convert_sym.py ADVNTURE.labels.txt ADVNTURE.sym
 
 ADVeNTURE.BIN: ADVeNTURE.o $(includes)
-	ld65 -o ADVeNTURE.BIN -C ADVNTURE4k.cfg -m ADVeNTURE.map.txt ADVeNTURE.o
-#
+	ld65 -o ADVeNTURE.BIN -C ADVNTURE4k.cfg -m ADVeNTURE.map.txt -Ln ADVeNTURE.labels.txt ADVeNTURE.o
+	../convert_sym.py ADVeNTURE.labels.txt ADVeNTURE.sym
+
 #ADVeNTURE8k.BIN: ADVeNTURE8k.o $(includes)
-#	ld65 -o ADVeNTURE8k.BIN -C ADVNTURE8k.cfg -m ADVeNTURE8k.map.txt ADVeNTURE8k.o
+#	ld65 -o ADVeNTURE8k.BIN -C ADVNTURE8k.cfg -m ADVeNTURE8k.map.txt -Ln ADVeNTURE8k.labels.txt ADVeNTURE8k.o
+#	../convert_sym.py ADVeNTURE8k.labels.txt ADVeNTURE8k.sym
 
 %.o: %.s
-	ca65 -o $@ -t c64 -I inc -l $*.listing.txt $<
+	ca65 -o $@ -t c64 -I inc -g -l $*.listing.txt $<
 
 clean:
-	-rm -f *.o *.prg *.listing.txt *.map.txt
+	-rm -f *.o *.BIN *.txt *.sym
