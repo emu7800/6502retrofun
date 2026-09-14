@@ -1,9 +1,5 @@
  .setcpu "6502"
  .include "vcs.inc"
- .include "enums.inc"
- .include "structs.inc"
- .include "gfx/gr/all.inc"
- .include "gfx/pf/all.inc"
 
 ;*******************************************************************************
 ;* Adventure for the Atari 2600, by Warren Robinett                            *
@@ -33,6 +29,141 @@
 ; 0284      PIA INTIM      R Timer output
 ; 0296      PIA TIM64T     W set 64 clock interval
 ; 1000-1fff ROM
+
+.enum ColorType
+    black       = $00
+    lightgray   = $08
+    invisible   = ColorType::lightgray
+    darkwhite   = $0c
+    white       = $0e
+    yellow      = $1a
+    orange      = $28
+    red         = $36
+    purple      = $66
+    blue        = $86
+    lightblue   = $98
+    turquoise   = $a8
+    lightgreen  = $b8
+    green       = $c8
+    flash       = $cb
+    darkgreen   = $d8
+    darkyellow  = $e8
+.endenum
+
+.enum BWColorType
+    black       = $00
+    darkergray  = $02
+    darkgray    = $06
+    invisible   = $08
+    lightgray   = $0a
+    lightergray = $0c
+    white       = $0e
+.endenum
+
+.enum RoomControlType   ; leftwall    rightwall   bl4 size    pfpriority  pfreflect
+    leftthinwall_pfref  = %10000000             | %00100000             | %00000001
+    rightthinwall_pfref =             %01000000 | %00100000             | %00000001
+    pfref               =                         %00100000             | %00000001
+    pfref_pfp           =                         %00100000 | %00000100 | %00000001
+    pfp                 =                         %00100000 | %00000100
+.endenum
+
+; Values are offsets against RESP0 and HMP0
+.enum SpriteType
+    object1       = 0 ; RESxx/HMxx P0
+    object2       = 1 ; RESxx/HMxx P1
+    leftthinwall  = 2 ; RESxx/HMxx M0
+    rightthinwall = 3 ; RESxx/HMxx M1
+    man           = 4 ; RESxx/HMxx BL
+.endenum
+
+; Values are dependent upon RIOT SWCHB
+.enum ConsoleSwitchType
+    reset             = %00000001 ; 0=pressed
+    select            = %00000010 ; 0=pressed
+    select_and_reset  = %00000011
+    bw                = %00001000 ; 0=bw 1=color
+    leftdifficulty    = %01000000 ; 0=amateur (b) 1=pro (a)
+    rightdifficulty   = %10000000 ; 0=amateur (b) 1=pro (a)
+.endenum
+
+.enum NoiseType
+    game_over   = 0
+    dragon_roar = 1
+    man_eaten   = 2
+    dragon_died = 3
+    drop_item   = 4
+    get_item    = 5
+.endenum
+
+.enum DragonState
+    normal   = 0
+    dead     = 1
+    ateman   = 2
+    roaring  = 255
+.endenum
+
+.enum PortState
+    open           = 1
+    closed         = 28
+    wraparound_max = 56
+.endenum
+
+.struct RoomType
+    gfx_ptr     .word
+    color       .byte ; ColorType enum
+    bw_color    .byte ; BWColorType enum
+    pf_control  .byte
+    room_up     .byte
+    room_right  .byte
+    room_down   .byte
+    room_left   .byte
+.endstruct
+
+.struct ObjectPosType
+    xcoord        .byte
+    ycoord        .byte
+.endstruct
+
+.struct ObjectDynamicType
+    room          .byte
+    xcoord        .byte  ; ObjectPosType
+    ycoord        .byte  ;
+.endstruct
+
+.struct DragonDynamicType
+    room          .byte  ; ObjectDynamicType
+    xcoord        .byte  ;
+    ycoord        .byte  ;
+    move          .byte
+    state         .byte
+.endstruct
+
+.struct BlackBatDynamicType
+    room          .byte  ; DragonDynamicType
+    xcoord        .byte  ;
+    ycoord        .byte  ;
+    move          .byte  ;
+    state         .byte  ;
+    carriedobject .byte
+    fedup         .byte
+.endstruct
+
+.struct StateType
+    state         .byte
+    xcoord        .byte  ; ObjectPosType
+    ycoord        .byte  ;
+.endstruct
+
+.struct ObjectType
+    dynamic_ptr   .word  ; pointer to a DynamicType
+    currstate_ptr .word  ; pointer to a state byte
+    states_ptr    .word  ; pointer to array of StateType
+    color         .byte  ; ColorType
+    bw_color      .byte  ; BWColorType
+    size          .byte
+.endstruct
+
 
 .zeropage   ; segment mapped to $80
 
@@ -350,9 +481,9 @@ SwapPrintObjects:
 ; setup Object1 to print
 SetupObjectPrint:
             ldx object1
-            lda a:Objects+ObjectType::dynamic_ptr,x
+            lda Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::dynamic_ptr+1,x
+            lda Objects+ObjectType::dynamic_ptr+1,x
             sta dr_ptr+1
             ldy #ObjectDynamicType::xcoord
             lda (dr_ptr),y        ;get Object1's X coordinate
@@ -360,16 +491,16 @@ SetupObjectPrint:
             ldy #ObjectDynamicType::ycoord
             lda (dr_ptr),y        ;get Object1's Y coordinate
             sta player0pos+ObjectPosType::ycoord  ; and store for print
-            lda a:Objects+ObjectType::currstate_ptr,x
+            lda Objects+ObjectType::currstate_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::currstate_ptr+1,x
+            lda Objects+ObjectType::currstate_ptr+1,x
             sta dr_ptr+1
             ldy #0
             lda (dr_ptr),y        ;retrieve Object1's current state
             sta GetObjectState_Arg
-            lda a:Objects+ObjectType::states_ptr,x
+            lda Objects+ObjectType::states_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::states_ptr+1,x
+            lda Objects+ObjectType::states_ptr+1,x
             sta dr_ptr+1
             jsr GetObjectState    ;find current state in the state information
             iny                   ;index to the state's corresponding graphic pointer
@@ -383,23 +514,23 @@ SetupObjectPrint:
             and #ConsoleSwitchType::bw
             beq :+
 ; color
-            lda a:Objects+ObjectType::color,x
+            lda Objects+ObjectType::color,x
             jsr ChangeColor       ;change if necessary
             sta COLUP0            ; and set color luminance00
             jmp :++
 ; B&W
-:           lda a:Objects+ObjectType::bw_color,x
+:           lda Objects+ObjectType::bw_color,x
             jsr ChangeColor       ;change if necessary
             sta COLUP0            ;set color luminance00
 ; Object1 resize
-:           lda a:Objects+ObjectType::size,x
+:           lda Objects+ObjectType::size,x
             ora #$10              ;and set to larger size if necessary
             sta NUSIZ0            ;(used by bridge and invisible surround)
 ; set up Object2 to print
             ldx object2
-            lda a:Objects+ObjectType::dynamic_ptr,x
+            lda Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::dynamic_ptr+1,x
+            lda Objects+ObjectType::dynamic_ptr+1,x
             sta dr_ptr+1
             ldy #ObjectDynamicType::xcoord
             lda (dr_ptr),y        ;get Object2's X coordinate
@@ -407,16 +538,16 @@ SetupObjectPrint:
             ldy #ObjectDynamicType::ycoord
             lda (dr_ptr),y        ;get Object2's Y coordinate
             sta player1pos+ObjectPosType::ycoord  ; and store for print
-            lda a:Objects+ObjectType::currstate_ptr,x
+            lda Objects+ObjectType::currstate_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::currstate_ptr+1,x
+            lda Objects+ObjectType::currstate_ptr+1,x
             sta dr_ptr+1
             ldy #0
             lda (dr_ptr),y        ;retrieve Object2's current state
             sta GetObjectState_Arg
-            lda a:Objects+ObjectType::states_ptr,x
+            lda Objects+ObjectType::states_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::states_ptr+1,x
+            lda Objects+ObjectType::states_ptr+1,x
             sta dr_ptr+1
             jsr GetObjectState    ;find the current state in the state information
             iny                   ;index to the state's corresponding graphic pointer
@@ -430,16 +561,16 @@ SetupObjectPrint:
             and #ConsoleSwitchType::bw
             beq :+
 ; color
-            lda a:Objects+ObjectType::color,x
+            lda Objects+ObjectType::color,x
             jsr ChangeColor       ;change if necessary
             sta COLUP1            ;and set color luminance01
             jmp :++
 ; B&W
-:           lda a:Objects+ObjectType::bw_color,x
+:           lda Objects+ObjectType::bw_color,x
             jsr ChangeColor       ;change if necessary
             sta COLUP1            ;and set color luminance01
 ; Object2 size
-:           lda a:Objects+ObjectType::size,x
+:           lda Objects+ObjectType::size,x
             ora #$10              ;and set to large size if necessary
             sta NUSIZ1            ;(used by bridge and invisible surround)
             rts
@@ -563,9 +694,9 @@ ChangeColor:
 
 ; get the address of the roompos information for an object
 GetObjectAddress:
-            lda a:Objects+ObjectType::dynamic_ptr,x
+            lda Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr            ;get and store the low address
-            lda a:Objects+ObjectType::dynamic_ptr+1,x
+            lda Objects+ObjectType::dynamic_ptr+1,x
             sta dr_ptr+1          ;get and store the high address
             rts
 
@@ -701,7 +832,7 @@ SetupRoomObjects:
             sta dr_ptr+1
             ldy #(Game1ObjectLocationsEnd - Game1ObjectLocations)  ;copy all the objects dynamic information
 :           lda (dr_ptr),y                ; (the rooms and positions) into the working area
-            sta a:GameObjectsWorkingArea,y
+            sta GameObjectsWorkingArea,y
             dey
             bpl :-
             lda NumberCurrState   ;get the level number
@@ -996,7 +1127,7 @@ MoveGroundObject:
             jsr MoveObjectDelta     ;move the object by delta
             ldy #2                  ;set to do the three
 :           sty portcullis_number
-            lda a:PortCurrStateBase,y  ;get the portal state
+            lda PortCurrStateBase,y  ;get the portal state
             cmp #$1c                ;is it in a closed state?
             beq GetPortal           ;if not, next portal
 ; deal with object moving out of a castle
@@ -1014,7 +1145,7 @@ MoveGroundObject:
             lda #44
             sta ObjectDynamicType::ycoord,x
             lda #1
-            sta a:PortCurrStateBase,y        ;set the portcullis state to 01
+            sta PortCurrStateBase,y        ;set the portcullis state to 01
             rts
 
 GetPortal:  ldy portcullis_number
@@ -1186,7 +1317,7 @@ GetLinkedObject:
             lda (objstore_ptr),y    ;get second object
             tay
             lda z:ObjectDynamicType::room,x  ;compare Object1's room
-            cmp a:ObjectDynamicType::room,y  ; w/Object2's room
+            cmp ObjectDynamicType::room,y    ; w/Object2's room
             bne :+                  ;if not the same room then branch
             cpy MoveGameObjectArg_Difficulty  ;have we matched the second object
             beq :+                  ; for difficulty (if so, carry on)
@@ -1205,10 +1336,10 @@ GetLinkedObject:
 ; work out object's movement
 :           lda #$ff                ;set object movement to none
             sta direction_wanted
-            lda a:ObjectDynamicType::room,y  ;compare Object2's room
+            lda ObjectDynamicType::room,y  ;compare Object2's room
             cmp z:ObjectDynamicType::room,x  ; w/ Object1's room
             bne :++++               ;if not the same, forget it
-            lda a:ObjectDynamicType::xcoord,y  ;compare Object2's X coordinate
+            lda ObjectDynamicType::xcoord,y  ;compare Object2's X coordinate
             cmp z:ObjectDynamicType::xcoord,x  ; w/ Object1's X coordinate
             bcc :+                  ;if Object2 to left of Object1 then branch
             beq :++                 ;if Object2 on Object1 then branch
@@ -1219,7 +1350,7 @@ GetLinkedObject:
 :           lda direction_wanted
             and #$bf                ;signal a move left
             sta direction_wanted
-:           lda a:ObjectDynamicType::ycoord,y  ;compare Object2's Y coordinate
+:           lda ObjectDynamicType::ycoord,y  ;compare Object2's Y coordinate
             cmp z:ObjectDynamicType::ycoord,x  ; w/ Object1's X coordinate
             bcc :+                  ;if Object2 below Object1 then branch
             beq :++                 ;if Object2 on Object1 then branch
@@ -1297,7 +1428,7 @@ GreenDragMatrix:
 ; objstore_ptr = dragon matrix
 ; objdelta     = move speed
 MoveDragon: stx curr_obj_number   ;save which dragon we're dealing with
-            lda a:Objects+ObjectType::dynamic_ptr,x
+            lda Objects+ObjectType::dynamic_ptr,x
             tax
             lda z:DragonDynamicType::state,x  ;get the dragon's state
             cmp #DragonState::normal
@@ -1691,10 +1822,47 @@ GetObjectNoise:
             lda sound_duration_counter
             jmp :-                ;make same noise as drop
 
-LeftOfName:         leftofname_gfxpf_data original
-BelowYellowCastle:  belowyellowcastle_gfxpf_data    ;line shared with above room
-SideCorridor:       sidecorridor_gfxpf_data
-NumberRoom:         numberroom_gfxpf_data
+; The alignment of sprites is carefully done to prevent crossing of page boundaries.
+.assert (* & $fff) = $aa0, error, "Sprites do not start at the expected offset."
+
+LeftOfName:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; 11.................. ..................11
+ ;byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111 ; uses next room's line
+BelowYellowCastle:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+SideCorridor:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+NumberRoom:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+
+.assert >(*-1) = >(LeftOfName), error, "Sprite(s) spans page."
 
 PortStates:         .byte 4                 ; open
                     .word PortGfx+12
@@ -1722,18 +1890,118 @@ PortStates:         .byte 4                 ; open
                     .word PortGfx+10
                     .byte $ff               ; open
                     .word PortGfx+12
-PortGfx:            port_gfxgr_data
+PortGfx:
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte 0
+ .assert >(*-1) = >(PortGfx), error, "Sprite spans page."
 
-TwoExitRoom:        twoexitroom_gfxpf_data
-BlueMazeTop:        bluemazetop_gfxpf_data
-BlueMaze1:          bluemaze1_gfxpf_data
-BlueMazeBottom:     bluemazebottom_gfxpf_data
-BlueMazeCenter:     bluemazecenter_gfxpf_data
-BlueMazeEntry:      bluemazeentry_gfxpf_data
-MazeMiddle:         mazemiddle_gfxpf_data original
-MazeSide:           mazeside_gfxpf_data             ;line shared with above room
-MazeEntry:          mazeentry_gfxpf_data
-CastleDef:          castle_gfxpf_data
+TwoExitRoom:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+BlueMazeTop:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $0c, $0c   ; ......11......11.... ....11......11......
+ .byte $f0, $0c, $3c   ; 1111..11......1111.. ..1111......11..1111
+ .byte $f0, $0c, $00   ; 1111..11............ ............11..1111
+ .byte $f0, $ff, $3f   ; 111111111111111111.. ..111111111111111111
+ .byte $00, $30, $30   ; ........11......11.. ..11......11........
+ .byte $f0, $33, $3f   ; 111111..11..111111.. ..111111..11..111111
+BlueMaze1:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $fc, $ff   ; 1111..11111111111111 11111111111111..1111
+ .byte $f0, $00, $c0   ; 1111..............11 11..............1111
+ .byte $f0, $3f, $cf   ; 1111111111..1111..11 11..1111..1111111111
+ .byte $00, $30, $cc   ; ........11....11..11 11..11....11........
+ .byte $f0, $f3, $cc   ; 111111..1111..11..11 11..11..1111..111111
+BlueMazeBottom:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $f3, $0c   ; 111111..1111..11.... ....11..1111..111111
+ .byte $00, $30, $0c   ; ........11....11.... ....11....11........
+ .byte $f0, $3f, $0f   ; 1111111111..1111.... ....1111..1111111111
+ .byte $f0, $00, $00   ; 1111................ ................1111
+ .byte $f0, $f0, $00   ; 1111....1111........ ........1111....1111
+ .byte $00, $30, $00   ; ........11.......... ..........11........
+ .byte $f0, $ff, $ff   ; 111111..1111..11..11 11..11..1111..111111
+BlueMazeCenter:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $33, $3f   ; 111111..11..111111.. ..111111..11..111111
+ .byte $00, $30, $3c   ; ........11....1111.. ..1111....11........
+ .byte $f0, $ff, $3c   ; 111111111111..1111.. ..1111..111111111111
+ .byte $00, $03, $3c   ; ....11........1111.. ..1111........11....
+ .byte $f0, $33, $3c   ; 111111..11....1111.. ..1111....11..111111
+ .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
+ .byte $f0, $f3, $0c   ; 111111..1111..11.... ....11..1111..111111
+BlueMazeEntry:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $f3, $cc   ; 111111..1111..11..11 11..11..1111..111111
+ .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
+ .byte $f0, $33, $fc   ; 111111..11....111111 111111....11..111111
+ .byte $00, $33, $00   ; ....11..11.......... ..........11..11....
+ .byte $f0, $f3, $ff   ; 111111..111111111111 111111111111..111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+MazeMiddle:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $cc   ; 111111111111..11..11 11..11..111111111111
+ .byte $00, $00, $cc   ; ..............11.11. 11..11..............
+ .byte $f0, $03, $cf   ; 111111......1111..11 11..1111......111111
+ .byte $00, $03, $00   ; ....11.............. ..............11....
+ .byte $f0, $f3, $fc   ; 111111..1111..111111 111111..1111..111111
+ .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
+ ;byte $f0, $33, $cc   ; 111111..11....11..11 11..11....11..111111 ; uses next room's line
+MazeSide:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $33, $cc   ; 111111..11....11..11 11..11....11..111111
+ .byte $00, $30, $cc   ; ........11....11..11 11..11....11........
+ .byte $00, $3f, $cf   ; ....111111..1111..11 11..1111..111111....
+ .byte $00, $00, $c0   ; ..................11 11..................
+ .byte $00, $3f, $c3   ; ....111111..11....11 11....11..111111....
+ .byte $00, $30, $c0   ; ........11........11 11........11........
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+MazeEntry:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $30, $00   ; ........11.......... ..........11........
+ .byte $f0, $30, $ff   ; 1111....11..11111111 11111111..11....1111
+ .byte $00, $30, $c0   ; ........11........11 11........11........
+ .byte $f0, $f3, $c0   ; 111111..1111......11 11......1111..111111
+ .byte $00, $03, $c0   ; ....11............11 11............11....
+ .byte $f0, $ff, $cc   ; 11111111111111111111 11111111111111111111
+CastleDef:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $fe, $15   ; 11111111111....1.1.1 1.1.1....11111111111
+ .byte $30, $03, $1f   ; 11........11...11111 11111...11........11
+ .byte $30, $03, $ff   ; 11........1111111111 1111111111........11
+ .byte $30, $00, $ff   ; 11..........11111111 11111111..........11
+ .byte $30, $00, $3f   ; 11......... 111111.. ..111111..........11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+
+.assert >(*-1) = >(TwoExitRoom), error, "Sprite(s) spans page."
 
 PortDynamic1:       .byte roomnum_YellowCastle, 77, 49
 PortDynamic2:       .byte roomnum_WhiteCastle,  77, 49
@@ -1742,63 +2010,562 @@ PortDynamic3:       .byte roomnum_BlackCastle,  77, 49
 SurroundCurrState:  .byte 0
 SurroundStates:     .byte $ff
                     .word SurroundGfx
-SurroundGfx:        surround_gfxgr_data
+SurroundGfx:
+ .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+ .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+ .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+ .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+ .byte 0
+ .assert >(*-1) = >(SurroundGfx), error, "Sprite spans page."
 
-RedMaze1:           redmaze1_gfxpf_data original
-RedMazeBottom:      redmazebottom_gfxpf_data        ;line shared with room above
-RedMazeTop:         redmazetop_gfxpf_data original
-WhiteCastleEntry:   whitecastleentry_gfxpf_data     ;line shared with room above
-TopEntryRoom:       topentryroom_gfxpf_data
-BlackMaze1:         blackmaze1_gfxpf_data original
-BlackMaze3:         blackmaze3_gfxpf_data           ;line shared with room above
-BlackMaze2:         blackmaze2_gfxpf_data original
-BlackMazeEntry:     blackmazeentry_gfxpf_data       ;line shared with room above
+RedMaze1:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $00, $0c   ; ..............11.... ....11..............
+ .byte $f0, $ff, $0c   ; 111111111111..11.... ....11..111111111111
+ .byte $f0, $03, $cc   ; 111111........11..11 11..11........111111
+ ;byte $f0, $33, $cf   ; 111111..11..1111..11 11..1111..11..111111 ; uses next room's line
+RedMazeBottom:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $33, $cf   ; 111111..11..1111..11 11..1111..11..111111
+ .byte $f0, $30, $00   ; 1111....11.......... ..........11....1111
+ .byte $f0, $33, $ff   ; 111111..11..11111111 11111111..11..111111
+ .byte $00, $33, $00   ; ....11..11.......... ..........11..11....
+ .byte $f0, $ff, $00   ; 111111111111........ ........111111111111
+ .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+RedMazeTop:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $00, $00, $c0   ; 1111..............11 11..............1111
+ .byte $f0, $ff, $cf   ; 1111111111111111..11 11..1111111111111111
+ .byte $00, $00, $cc   ; ..............11..11 11..11..............
+ .byte $f0, $33, $ff   ; 111111..11..11111111 11111111..11..111111
+ .byte $f0, $33, $00   ; 111111..11.......... ..........11..111111
+ ;byte $f0, $3f, $0c   ; 1111111111....11.... ....11....1111111111 ; uses next room's line
+WhiteCastleEntry:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $3f, $0c   ; 1111111111....11.... ....11....1111111111
+ .byte $f0, $00, $0c   ; 1111..........11.... ....11..........1111
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $30, $00   ; 1111....11.......... ..........11....1111
+ .byte $f0, $30, $00   ; 1111....11.......... ..........11....1111
+ .byte $00, $30, $00   ; ........11.......... ..........11........
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+TopEntryRoom:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+BlackMaze1:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $f0, $ff   ; 1111....111111111111 111111111111....1111
+ .byte $00, $00, $03   ; ............11...... ......11............
+ .byte $f0, $ff, $03   ; 11111111111111...... ......11111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $30, $3f, $ff   ; 11..111111..11111111 11111111..111111..11
+ .byte $00, $30, $00   ; ........11.......... ..........11........
+ ;byte $f0, $f0, $ff   ; 1111....111111111111 111111111111....1111 ; uses next room's line
+BlackMaze3:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF0hPF1-----PF2-----
+ .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
+ .byte $30, $00, $00   ; 11.................. 11..................
+ .byte $30, $3f, $ff   ; 11....11111111111111 11....11111111111111
+ .byte $00, $30, $00   ; ......11............ ......11............
+ .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
+ .byte $30, $00, $03   ; 11................11 11................11
+ .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
+BlackMaze2:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF0hPF1-----PF2-----
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $00, $00, $c0   ; ............11...... ............11......
+ .byte $f0, $ff, $cf   ; 11111111111111..1111 11111111111111..1111
+ .byte $00, $00, $0c   ; ..................11 ..................11
+ .byte $f0, $0f, $ff   ; 1111....111111111111 1111....111111111111
+ .byte $00, $0f, $c0   ; ........111111...... ........111111......
+ ;byte $30, $cf, $cc   ; 11..11..111111..11.. 11..11..111111..11.. ; uses next room's line
+BlackMazeEntry:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $30, $cf, $cc   ; 11..1111..11..11..11 11..11..11..1111..11
+ .byte $00, $c0, $cc   ; ..........11..11..11 11..11..11..........
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+
+.assert >(*-1) = >(RedMaze1), error, "Sprite(s) spans page."
 
 BridgeCurrState:    .byte 0
 BridgeStates:       .byte $ff
                     .word BridgeGfx
-BridgeGfx:          bridge_gfxgr_data
+BridgeGfx:
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte 0
+ .assert >(*-1) = >(BridgeGfx), error, "Sprite spans page."
 
-Number1Gfx:         number1_gfxgr_data
+Number1Gfx:
+ .byte %00000100 ;     X
+ .byte %00001100 ;    XX
+ .byte %00000100 ;     X
+ .byte %00000100 ;     X
+ .byte %00000100 ;     X
+ .byte %00000100 ;     X
+ .byte %00001110 ;    XXX
+ .byte 0
+ .assert >(*-1) = >(Number1Gfx), error, "Sprite spans page."
 
 KeyCurrState:       .byte 0
 KeyStates:          .byte $ff
                     .word KeyGfx
-KeyGfx:             key_gfxgr_data
+KeyGfx:
+ .byte %00000111 ;      XXX
+ .byte %11111101 ; XXXXXX X
+ .byte %10100111 ; X X  XXX
+ .byte 0
+ .assert >(*-1) = >(KeyGfx), error, "Sprite spans page."
 
-Number2Gfx:         number2_gfxgr_data
-Number3Gfx:         number3_gfxgr_data
+Number2Gfx:
+ .byte $0e  ; ....111.
+ .byte $11  ; ...1...1
+ .byte $01  ; .......1
+ .byte $02  ; ......1.
+ .byte $04  ; .....1..
+ .byte $08  ; ....1...
+ .byte $1f  ; ...11111
+ .byte 0
+ .assert >(*-1) = >(Number2Gfx), error, "Sprite spans page."
+Number3Gfx:
+ .byte $0e  ; ....111.
+ .byte $11  ; ...1...1
+ .byte $01  ; .......1
+ .byte $06  ; .....11.
+ .byte $01  ; .......1
+ .byte $11  ; ...1...1
+ .byte $0e  ; ....111.
+ .byte 0
+ .assert >(*-1) = >(Number3Gfx), error, "Sprite spans page."
 
 BatStates:          .byte 3
                     .word Bat1Gfx
                     .byte $ff
                     .word Bat2Gfx
-Bat1Gfx:            bat1_gfxgr_data
-Bat2Gfx:            bat2_gfxgr_data
+Bat1Gfx:
+ .byte $81  ; 1......1
+ .byte $81  ; 1......1
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $ff  ; 11111111
+ .byte $5a  ; .1.11.1.
+ .byte $66  ; .11..11.
+ .byte 0
+ .assert >(*-1) = >(Bat1Gfx), error, "Sprite spans page."
+Bat2Gfx:
+ .byte $01  ; .......1
+ .byte $80  ; 1.......
+ .byte $01  ; .......1
+ .byte $80  ; 1.......
+ .byte $3c  ; ..1111..
+ .byte $5a  ; .1.11.1.
+ .byte $66  ; .11..11.
+ .byte $c3  ; 11....11
+ .byte $81  ; 1......1
+ .byte $81  ; 1......1
+ .byte $81  ; 1......1
+ .byte 0
+ .assert >(*-1) = >(Bat2Gfx), error, "Sprite spans page."
 
 DragonStates:       .byte DragonState::normal
-                    .word DragonNormGfx
+                    .word DragonNormLeftGfx
                     .byte DragonState::dead
-                    .word DragonDeadGfx
+                    .word DragonDeadLeftGfx
                     .byte DragonState::ateman
-                    .word DragonNormGfx
+                    .word DragonNormLeftGfx
                     .byte DragonState::roaring
-                    .word DragonRoarGfx
-DragonNormGfx:      dragonnormal_gfxgr_data 0
-DragonRoarGfx:      dragonroar_gfxgr_data   0
-DragonDeadGfx:      dragondead_gfxgr_data   0
+                    .word DragonRoarLeftGfx
+DragonNormLeftGfx:
+ .byte $06     ; .....11.
+ .byte $0f     ; ....1111
+ .byte $f3     ; 1111..11
+ .byte $fe     ; 1111111.
+ .byte $0e     ; ....111.
+ .byte $04     ; .....1..
+ .byte $04     ; .....1..
+ .byte $1e     ; ...1111.
+ .byte $3f     ; ..111111
+ .byte $7f     ; .1111111
+ .byte $e3     ; 111...11
+ .byte $c3     ; 11....11
+ .byte $c3     ; 11....11
+ .byte $c7     ; 11...111
+ .byte $ff     ; 11111111
+ .byte $3c     ; ..1111..
+ .byte $08     ; ....1...
+ .byte $8f     ; 1...1111
+ .byte $e1     ; 111....1
+ .byte $3f     ; ..111111
+ .byte 0
+ .assert >(*-1) = >(DragonNormLeftGfx), error, "Sprite spans page."
+DragonRoarLeftGfx:
+ .byte $80     ; 1.......
+ .byte $40     ; .1......
+ .byte $26     ; ..1..11.
+ .byte $1f     ; ...11111
+ .byte $0b     ; ....1.11
+ .byte $0e     ; ....111.
+ .byte $1e     ; ...1111.
+ .byte $24     ; ..1..1..
+ .byte $44     ; .1...1..
+ .byte $8e     ; 1...111.
+ .byte $1e     ; ...1111.
+ .byte $3f     ; ..111111
+ .byte $7f     ; .1111111
+ .byte $7f     ; .1111111
+ .byte $7f     ; .1111111
+ .byte $7f     ; .1111111
+ .byte $3e     ; ..11111.
+ .byte $1c     ; ...111..
+ .byte $08     ; ....1...
+ .byte $f8     ; 11111...
+ .byte $80     ; 1.......
+ .byte $e0     ; 111.....
+ .byte 0
+ .assert >(*-1) = >(DragonRoarLeftGfx), error, "Sprite spans page."
+DragonDeadLeftGfx:
+ .byte $0c     ; ....11..
+ .byte $0c     ; ....11..
+ .byte $0c     ; ....11..
+ .byte $0e     ; ....111.
+ .byte $1b     ; ...11.11
+ .byte $7f     ; .1111111
+ .byte $ce     ; 11..111.
+ .byte $80     ; 1.......
+ .byte $fc     ; 111111..
+ .byte $fe     ; 1111111.
+ .byte $fe     ; 1111111.
+ .byte $7e     ; .111111.
+ .byte $78     ; .1111...
+ .byte $20     ; ..1.....
+ .byte $6e     ; .11.111.
+ .byte $42     ; .1....1.
+ .byte $7e     ; .111111.
+ .byte 0
+ .assert >(*-1) = >(DragonDeadLeftGfx), error, "Sprite spans page."
+.if 0=1
+DragonNormRightGfx:
+ .byte $60     ; .11.....
+ .byte $f0     ; 1111....
+ .byte $cf     ; 11..1111
+ .byte $7f     ; .1111111
+ .byte $70     ; .111....
+ .byte $20     ; ..1.....
+ .byte $20     ; ..1.....
+ .byte $78     ; .1111...
+ .byte $fc     ; 111111..
+ .byte $fe     ; 1111111.
+ .byte $c7     ; 11...111
+ .byte $c3     ; 11....11
+ .byte $c3     ; 11....11
+ .byte $e3     ; 111...11
+ .byte $ff     ; 11111111
+ .byte $3c     ; ..1111..
+ .byte $10     ; ...1....
+ .byte $f1     ; 1111...1
+ .byte $87     ; 1....111
+ .byte $fc     ; 111111..
+ .byte 0
+ .assert >(*-1) = >(DragonNormRightGfx), error, "Sprite spans page."
+DragonRoarRightGfx:
+ .byte $01     ; .......1
+ .byte $02     ; ......1.
+ .byte $64     ; .11..1..
+ .byte $f8     ; 11111...
+ .byte $d0     ; 11.1....
+ .byte $70     ; .111....
+ .byte $78     ; .1111...
+ .byte $24     ; ..1..1..
+ .byte $22     ; ..1...1.
+ .byte $71     ; .111...1
+ .byte $78     ; .1111...
+ .byte $fc     ; 111111..
+ .byte $fe     ; 1111111.
+ .byte $fe     ; 1111111.
+ .byte $fe     ; 1111111.
+ .byte $fe     ; 1111111.
+ .byte $7c     ; .11111..
+ .byte $38     ; ..111...
+ .byte $10     ; ...1....
+ .byte $1f     ; ...11111
+ .byte $01     ; .......1
+ .byte $07     ; .....111
+ .byte 0
+ .assert >(*-1) = >(DragonRoarRightGfx), error, "Sprite spans page."
+DragonDeadRightGfx:
+ .byte $30     ; ..11....
+ .byte $30     ; ..11....
+ .byte $30     ; ..11....
+ .byte $70     ; .111....
+ .byte $d8     ; 11.11...
+ .byte $fe     ; 1111111.
+ .byte $73     ; .111..11
+ .byte $01     ; .......1
+ .byte $3f     ; ..111111
+ .byte $7f     ; .1111111
+ .byte $7f     ; .1111111
+ .byte $7e     ; .111111.
+ .byte $1e     ; ...1111.
+ .byte $04     ; .....1..
+ .byte $76     ; .111.11.
+ .byte $42     ; .1....1.
+ .byte $7e     ; .111111.
+ .byte 0
+ .assert >(*-1) = >(DragonDeadRightGfx), error, "Sprite spans page."
+.endif
 
 SwordCurrState:     .byte 0
 SwordStates:        .byte $ff
-                    .word SwordGfx
-SwordGfx:           sword_gfxgr_data 0
+                    .word SwordLeftGfx
+SwordLeftGfx:
+ .byte %00100000 ;   X
+ .byte %01000000 ;  X
+ .byte %11111111 ; XXXXXXXX
+ .byte %01000000 ;  X
+ .byte %00100000 ;   X
+ .byte 0
+ .assert >(*-1) = >(SwordLeftGfx), error, "Sprite spans page."
 
 DotCurrState:       .byte 0
 DotStates:          .byte $ff
                     .word DotGfx
-DotGfx:             dot_gfxgr_data
+DotGfx:
+ .byte %10000000 ; X
+ .byte 0
 
-EasterEggGfx:       easteregg_gfxgr_data norm
+EasterEggGfx:
+ .if 1=1
+ .byte $f0 ; 1111....
+ .byte $80 ; 1.......
+ .byte $80 ; 1.......
+ .byte $80 ; 1.......
+ .byte $f4 ; 1111.1..
+ .byte $04 ; .....1..
+ .byte $87 ; 1....111
+ .byte $e5 ; 111..1.1
+ .byte $87 ; 1....111
+ .byte $80 ; 1.......
+ .byte $05 ; .....1.1
+ .byte $e5 ; 111..1.1
+ .byte $a7 ; 1..1.111
+ .byte $e1 ; 111....1
+ .byte $87 ; 1....111
+ .byte $e0 ; 111.....
+ .byte $01 ; .......1
+ .byte $e0 ; 111.....
+ .byte $a0 ; 1..1....
+ .byte $f0 ; 1111....
+ .byte $01 ; .......1
+ .byte $40 ; .1......
+ .byte $e0 ; 111.....
+ .byte $40 ; .1......
+ .byte $40 ; .1......
+ .byte $40 ; .1......
+ .byte $01 ; .......1
+ .byte $e0 ; 111.....
+ .byte $a0 ; 1.1.....
+ .byte $e0 ; 111.....
+ .byte $80 ; 1.......
+ .byte $e0 ; 111.....
+ .byte $01 ; .......1
+ .byte $20 ; ..1.....
+ .byte $20 ; ..1.....
+ .byte $e0 ; 111.....
+ .byte $a0 ; 1.1.....
+ .byte $e0 ; 111.....
+ .byte $01 ; .......1
+ .byte $01 ; .......1
+ .byte $01 ; .......1
+ .byte $88 ; 1...1...
+ .byte $a8 ; 1.1.1...
+ .byte $a8 ; 1.1.1...
+ .byte $a8 ; 1.1.1...
+ .byte $f8 ; 11111...
+ .byte $01 ; .......1
+ .byte $e0 ; 111.....
+ .byte $a0 ; 1.1.....
+ .byte $f0 ; 1111....
+ .byte $01 ; .......1
+ .byte $80 ; 1.......
+ .byte $e0 ; 111.....
+ .byte $8f ; 1...1111
+ .byte $89 ; 1...1..1
+ .byte $0f ; ....1111
+ .byte $8a ; 1...1.1.
+ .byte $e9 ; 111.1..1
+ .byte $80 ; 1.......
+ .byte $8e ; 1...111.
+ .byte $0a ; ....1.1.
+ .byte $ee ; 111.111.
+ .byte $a0 ; 1.1.....
+ .byte $e8 ; 111.1...
+ .byte $88 ; 1...1...
+ .byte $ee ; 111.111.
+ .byte $0a ; ....1.1.
+ .byte $8e ; 1...111.
+ .byte $e0 ; 111.....
+ .byte $a4 ; 1.1..1..
+ .byte $a4 ; 1.1..1..
+ .byte $04 ; .....1..
+ .byte $80 ; 1.......
+ .byte $08 ; ....1...
+ .byte $0e ; ....111.
+ .byte $0a ; ....1.1.
+ .byte $0a ; ....1.1.
+ .byte $80 ; 1.......
+ .byte $0e ; ....111.
+ .byte $0a ; ....1.1.
+ .byte $0e ; ....111.
+ .byte $08 ; ....1...
+ .byte $0e ; ....111.
+ .byte $80 ; 1.......
+ .byte $04 ; .....1..
+ .byte $0e ; ....111.
+ .byte $04 ; .....1..
+ .byte $04 ; .....1..
+ .byte $04 ; .....1..
+ .byte $80 ; 1.......
+ .byte $04 ; .....1..
+ .byte $0e ; ....111.
+ .byte $04 ; .....1..
+ .byte $04 ; .....1..
+ .byte $04 ; .....1..
+ .else
+ .byte $44 ;  X   X
+ .byte $6c ;  XX XX
+ .byte $54 ;  X X X
+ .byte $44 ;  X   X
+ .byte $44 ;  X   X
+ .byte $01 ;        X
+ .byte $10 ;    X
+ .byte $10 ;    X
+ .byte $10 ;    X
+ .byte $10 ;    X
+ .byte $01 ;        X
+ .byte $48 ;  X  X
+ .byte $50 ;  X X
+ .byte $60 ;  XX
+ .byte $50 ;  X X
+ .byte $48 ;  X  X
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $78 ;  XXXX
+ .byte $01 ;        X
+ .byte $44 ;  X   X
+ .byte $6c ;  XX XX
+ .byte $54 ;  X X X
+ .byte $44 ;  X   X
+ .byte $44 ;  X   X
+ .byte $01 ;        X
+ .byte $48 ;  X  X
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $01 ;        X
+ .byte $40 ;  X
+ .byte $70 ;  XXX
+ .byte $40 ;  X
+ .byte $40 ;  X
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $40 ;  X
+ .byte $01 ;        X
+ .byte $40 ;  X
+ .byte $40 ;  X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X
+ .byte $48 ;  X  X
+ .byte $01 ;        X
+ .byte $48 ;  X  X
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $08 ;     X
+ .byte $78 ;  XXXX
+ .byte $01 ;        X
+ .byte $44 ;  X   X
+ .byte $44 ;  X   X
+ .byte $54 ;  X X X
+ .byte $6c ;  XX XX
+ .byte $44 ;  X   X
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X
+ .byte $7c ;  XXXXX
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $78 ;  XXXX
+ .byte $08 ;     X
+ .byte $78 ;  XXXX
+ .byte $01 ;        X
+ .byte $48 ;  X  X
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X  .
+ .byte $48 ;  X  X
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $78 ;  XXXX
+ .byte $01 ;        X
+ .byte $40 ;  X
+ .byte $70 ;  XXX
+ .byte $40 ;  X
+ .byte $40 ;  X
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $78 ; .XXXX
+ .byte $01 ;        X
+ .endif
+ .byte 0
+ .assert >(*-1) = >(EasterEggGfx), error, "Sprite spans page."
 EasterEggDynamic:   .byte roomnum_SecretRoom, 80, 105
 EasterEggCurrState: .byte 0
 EasterEggStates:    .byte $ff
@@ -1807,12 +2574,23 @@ EasterEggStates:    .byte $ff
 ChaliceCurrState:   .byte 0
 ChaliceStates:      .byte $ff
                     .word ChaliceGfx
-ChaliceGfx:         chalice_gfxgr_data
+ChaliceGfx:
+ .byte %10000001 ; X      X
+ .byte %10000001 ; X      X
+ .byte %11000011 ; XX    XX
+ .byte %01111110 ;  XXXXXX
+ .byte %01111110 ;  XXXXXX
+ .byte %00111100 ;   XXXX
+ .byte %00011000 ;    XX
+ .byte %00011000 ;    XX
+ .byte %01111110 ;  XXXXXX
+ .byte 0
+ .assert >(*-1) = >(ChaliceGfx), error, "Sprite spans page."
 
 NullCurrState:      .byte 0
 NullStates:         .byte $ff
                     .word NullGfx
-NullGfx:            null_gfxgr_data
+NullGfx:            .byte 0
 
 NumberDynamic:      .byte roomnum_NumberRoom, 80, 64
 NumberStates:       .byte 1
@@ -1825,7 +2603,17 @@ NumberStates:       .byte 1
 MagnetCurrState:    .byte 0
 MagnetStates:       .byte $ff
                     .word MagnetGfx1
-MagnetGfx1:         magnet_gfxgr_data
+MagnetGfx1:
+ .byte %00111100 ;   XXXX
+ .byte %01111110 ;  XXXXXX
+ .byte %11100111 ; XXX  XXX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte 0
+ .assert >(*-1) = >(MagnetGfx1), error, "Sprite spans page."
 
 
 Rooms:

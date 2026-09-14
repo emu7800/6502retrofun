@@ -1,9 +1,5 @@
  .setcpu "6502"
  .include "vcs.inc"
- .include "enums.inc"
- .include "structs.inc"
- .include "gfx/gr/all.inc"
- .include "gfx/pf/all.inc"
 
 ;*******************************************************************************
 ;* Adventure for the Atari 2600, by Warren Robinett                            *
@@ -34,6 +30,141 @@
 ; 0296      PIA TIM64T     W set 64 clock interval
 ; 1000-1fff ROM
 
+.enum ColorType
+    black       = $00
+    lightgray   = $08
+    invisible   = ColorType::lightgray
+    darkwhite   = $0c
+    white       = $0e
+    yellow      = $1a
+    orange      = $28
+    red         = $36
+    purple      = $66
+    blue        = $86
+    lightblue   = $98
+    turquoise   = $a8
+    lightgreen  = $b8
+    green       = $c8
+    flash       = $cb
+    darkgreen   = $d8
+    darkyellow  = $e8
+.endenum
+
+.enum BWColorType
+    black       = $00
+    darkergray  = $02
+    darkgray    = $06
+    invisible   = $08
+    lightgray   = $0a
+    lightergray = $0c
+    white       = $0e
+.endenum
+
+.enum RoomControlType   ; leftwall    rightwall   bl4 size    pfpriority  pfreflect
+    leftthinwall_pfref  = %10000000             | %00100000             | %00000001
+    rightthinwall_pfref =             %01000000 | %00100000             | %00000001
+    pfref               =                         %00100000             | %00000001
+    pfref_pfp           =                         %00100000 | %00000100 | %00000001
+    pfp                 =                         %00100000 | %00000100
+.endenum
+
+; Values are offsets against RESP0 and HMP0
+.enum SpriteType
+    object1       = 0 ; RESxx/HMxx P0
+    object2       = 1 ; RESxx/HMxx P1
+    leftthinwall  = 2 ; RESxx/HMxx M0
+    rightthinwall = 3 ; RESxx/HMxx M1
+    man           = 4 ; RESxx/HMxx BL
+.endenum
+
+; Values are dependent upon RIOT SWCHB
+.enum ConsoleSwitchType
+    reset             = %00000001 ; 0=pressed
+    select            = %00000010 ; 0=pressed
+    select_and_reset  = %00000011
+    bw                = %00001000 ; 0=bw 1=color
+    leftdifficulty    = %01000000 ; 0=amateur (b) 1=pro (a)
+    rightdifficulty   = %10000000 ; 0=amateur (b) 1=pro (a)
+.endenum
+
+.enum NoiseType
+    game_over   = 0
+    dragon_roar = 1
+    man_eaten   = 2
+    dragon_died = 3
+    drop_item   = 4
+    get_item    = 5
+.endenum
+
+.enum DragonState
+    normal   = 0
+    dead     = 1
+    ateman   = 2
+    roaring  = 255
+.endenum
+
+.enum PortState
+    open           = 1
+    closed         = 28
+    wraparound_max = 56
+.endenum
+
+.struct RoomType
+    gfx_ptr     .word
+    color       .byte ; ColorType enum
+    bw_color    .byte ; BWColorType enum
+    pf_control  .byte
+    room_up     .byte
+    room_right  .byte
+    room_down   .byte
+    room_left   .byte
+.endstruct
+
+.struct ObjectPosType
+    xcoord        .byte
+    ycoord        .byte
+.endstruct
+
+.struct ObjectDynamicType
+    room          .byte
+    xcoord        .byte  ; ObjectPosType
+    ycoord        .byte  ;
+.endstruct
+
+.struct DragonDynamicType
+    room          .byte  ; ObjectDynamicType
+    xcoord        .byte  ;
+    ycoord        .byte  ;
+    move          .byte
+    state         .byte
+.endstruct
+
+.struct BlackBatDynamicType
+    room          .byte  ; DragonDynamicType
+    xcoord        .byte  ;
+    ycoord        .byte  ;
+    move          .byte  ;
+    state         .byte  ;
+    carriedobject .byte
+    fedup         .byte
+.endstruct
+
+.struct StateType
+    state         .byte
+    xcoord        .byte  ; ObjectPosType
+    ycoord        .byte  ;
+.endstruct
+
+.struct ObjectType
+    dynamic_ptr   .word  ; pointer to a DynamicType
+    currstate_ptr .word  ; pointer to a state byte
+    states_ptr    .word  ; pointer to array of StateType
+    color         .byte  ; ColorType
+    bw_color      .byte  ; BWColorType
+    size          .byte
+.endstruct
+
+
 .zeropage   ; segment mapped to $80
 
 roomgfx_base:                   .word 0
@@ -52,7 +183,7 @@ dr_ptr:                         .word 0     ; pointer for dereferencing
 object1:                        .byte 0
 object2:                        .byte 0
 obj_collided_with:              .byte 0
-unread1:                        .byte 0     ; unread byte
+unused:                         .byte 0
 cached_joystick:                .byte 0
 portcullis_number:              .byte 0
 direction_wanted:               .byte 0
@@ -97,8 +228,6 @@ stack_space:                    ; $e7-$ff (12 frames)
 
 .code
 
-START:      jmp StartGame
-
 ;; Render visible portion of screen
 PrintDisplay:
             sta HMCLR       ;clear horizontal motion
@@ -133,8 +262,9 @@ PrintDisplay:
             lda #104                  ;2 21   set counter (208 actual scanlines)
             sta scan_line             ;3 24
                                       ;  24*3=72 color clocks
-            sta WSYNC
-            ; Good place for a WSYNC here? Spills over instead:
+
+Missing_WSYNC_Here:
+            ; Possible missing WSYNC here, spills over instead:
             ;  92 timer expiration occurs mid scanline (35.4 lines, .4*228=92)
             ; +36 max additional time needed to recognize expiration
             ; +72 initializing pxgfx_offsets and other stuff
@@ -345,9 +475,9 @@ SwapPrintObjects:
 ; setup Object1 to print
 SetupObjectPrint:
             ldx object1
-            lda a:Objects+ObjectType::roompos_ptr,x
+            lda Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::roompos_ptr+1,x
+            lda Objects+ObjectType::dynamic_ptr+1,x
             sta dr_ptr+1
             ldy #ObjectDynamicType::xcoord
             lda (dr_ptr),y        ;get Object1's X coordinate
@@ -355,16 +485,16 @@ SetupObjectPrint:
             ldy #ObjectDynamicType::ycoord
             lda (dr_ptr),y        ;get Object1's Y coordinate
             sta player0pos+ObjectPosType::ycoord  ; and store for print
-            lda a:Objects+ObjectType::currstate_ptr,x
+            lda Objects+ObjectType::currstate_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::currstate_ptr+1,x
+            lda Objects+ObjectType::currstate_ptr+1,x
             sta dr_ptr+1
             ldy #0
             lda (dr_ptr),y        ;retrieve Object1's current state
             sta GetObjectState_Arg
-            lda a:Objects+ObjectType::states_ptr,x
+            lda Objects+ObjectType::states_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::states_ptr+1,x
+            lda Objects+ObjectType::states_ptr+1,x
             sta dr_ptr+1
             jsr GetObjectState    ;find current state in the state information
             iny                   ;index to the state's corresponding graphic pointer
@@ -378,23 +508,23 @@ SetupObjectPrint:
             and #ConsoleSwitchType::bw
             beq :+
 ; color
-            lda a:Objects+ObjectType::color,x
+            lda Objects+ObjectType::color,x
             jsr ChangeColor       ;change if necessary
             sta COLUP0            ; and set color luminance00
             jmp :++
 ; B&W
-:           lda a:Objects+ObjectType::bw_color,x
+:           lda Objects+ObjectType::bw_color,x
             jsr ChangeColor       ;change if necessary
             sta COLUP0            ;set color luminance00
 ; Object1 resize
-:           lda a:Objects+ObjectType::size,x
+:           lda Objects+ObjectType::size,x
             ora #$10              ;and set to larger size if necessary
             sta NUSIZ0            ;(used by bridge and invisible surround)
 ; set up Object2 to print
             ldx object2
-            lda a:Objects+ObjectType::roompos_ptr,x
+            lda Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::roompos_ptr+1,x
+            lda Objects+ObjectType::dynamic_ptr+1,x
             sta dr_ptr+1
             ldy #ObjectDynamicType::xcoord
             lda (dr_ptr),y        ;get Object2's X coordinate
@@ -402,16 +532,16 @@ SetupObjectPrint:
             ldy #ObjectDynamicType::ycoord
             lda (dr_ptr),y        ;get Object2's Y coordinate
             sta player1pos+ObjectPosType::ycoord  ; and store for print
-            lda a:Objects+ObjectType::currstate_ptr,x
+            lda Objects+ObjectType::currstate_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::currstate_ptr+1,x
+            lda Objects+ObjectType::currstate_ptr+1,x
             sta dr_ptr+1
             ldy #0
             lda (dr_ptr),y        ;retrieve Object2's current state
             sta GetObjectState_Arg
-            lda a:Objects+ObjectType::states_ptr,x
+            lda Objects+ObjectType::states_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::states_ptr+1,x
+            lda Objects+ObjectType::states_ptr+1,x
             sta dr_ptr+1
             jsr GetObjectState    ;find the current state in the state information
             iny                   ;index to the state's corresponding graphic pointer
@@ -425,16 +555,16 @@ SetupObjectPrint:
             and #ConsoleSwitchType::bw
             beq :+
 ; color
-            lda a:Objects+ObjectType::color,x
+            lda Objects+ObjectType::color,x
             jsr ChangeColor       ;change if necessary
             sta COLUP1            ;and set color luminance01
             jmp :++
 ; B&W
-:           lda a:Objects+ObjectType::bw_color,x
+:           lda Objects+ObjectType::bw_color,x
             jsr ChangeColor       ;change if necessary
             sta COLUP1            ;and set color luminance01
 ; Object2 size
-:           lda a:Objects+ObjectType::size,x
+:           lda Objects+ObjectType::size,x
             ora #$10              ;and set to large size if necessary
             sta NUSIZ1            ;(used by bridge and invisible surround)
             rts
@@ -454,9 +584,9 @@ MoveNextObject:
             lda #0                ;if so, wrap to zero
 GetObjectsInfo:
             tay
-            lda Objects+ObjectType::roompos_ptr,y
+            lda Objects+ObjectType::dynamic_ptr,y
             sta dr_ptr
-            lda Objects+ObjectType::roompos_ptr+1,y
+            lda Objects+ObjectType::dynamic_ptr+1,y
             sta dr_ptr+1
             ldx #0
             lda (dr_ptr,x)          ;get object's current room
@@ -544,11 +674,10 @@ MaintainInputCounter:
 
 ; change color if necessary
 ChangeColor:
-.assert $80 + (ColorType::flash >> 1) = input_counter && (ColorType::flash & 2) = 2, error, "ColorType::flash value and input_counter address invariant broken"
+.assert (ColorType::flash & 2) = 2, error, "ColorType::flash incorrect"
             lsr a                 ;if bit 0 of the color is set
             bcc :+                ; branch if clear, no flash
-            tay                   ;flash
-            lda $0080,y           ;equivalent to: lda input_counter
+            lda input_counter
 :           ldy input_counter+1   ;get the high input counter
             bpl :+                ;if console/joystick moved recently then branch
             eor input_counter+1   ;vary colors after a period of inactivty to limit CRT burn in
@@ -558,9 +687,9 @@ ChangeColor:
 
 ; get the address of the roompos information for an object
 GetObjectAddress:
-            lda a:Objects+ObjectType::roompos_ptr,x
+            lda Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr            ;get and store the low address
-            lda a:Objects+ObjectType::roompos_ptr+1,x
+            lda Objects+ObjectType::dynamic_ptr+1,x
             sta dr_ptr+1          ;get and store the high address
             rts
 
@@ -696,7 +825,7 @@ SetupRoomObjects:
             sta dr_ptr+1
             ldy #(Game1ObjectLocationsEnd - Game1ObjectLocations)  ;copy all the objects dynamic information
 :           lda (dr_ptr),y                ; (the rooms and positions) into the working area
-            sta a:GameObjectsWorkingArea,y
+            sta GameObjectsWorkingArea,y
             dey
             bpl :-
             lda NumberCurrState   ;get the level number
@@ -989,7 +1118,7 @@ MoveGroundObject:
             jsr MoveObjectDelta     ;move the object by delta
             ldy #2                  ;set to do the three
 :           sty portcullis_number
-            lda a:PortCurrStateBase,y  ;get the portal state
+            lda PortCurrStateBase,y  ;get the portal state
             cmp #$1c                ;is it in a closed state?
             beq GetPortal           ;if not, next portal
 ; deal with object moving out of a castle
@@ -1007,7 +1136,7 @@ MoveGroundObject:
             lda #44
             sta ObjectDynamicType::ycoord,x
             lda #1
-            sta a:PortCurrStateBase,y        ;set the portcullis state to 01
+            sta PortCurrStateBase,y        ;set the portcullis state to 01
             rts
 
 GetPortal:  ldy portcullis_number
@@ -1179,7 +1308,7 @@ GetLinkedObject:
             lda (objstore_ptr),y    ;get second object
             tay
             lda z:ObjectDynamicType::room,x  ;compare Object1's room
-            cmp a:ObjectDynamicType::room,y  ; w/Object2's room
+            cmp ObjectDynamicType::room,y    ; w/Object2's room
             bne :+                  ;if not the same room then branch
             cpy MoveGameObjectArg_Difficulty  ;have we matched the second object
             beq :+                  ; for difficulty (if so, carry on)
@@ -1198,10 +1327,10 @@ GetLinkedObject:
 ; work out object's movement
 :           lda #$ff                ;set object movement to none
             sta direction_wanted
-            lda a:ObjectDynamicType::room,y  ;compare Object2's room
+            lda ObjectDynamicType::room,y  ;compare Object2's room
             cmp z:ObjectDynamicType::room,x  ; w/ Object1's room
             bne :++++               ;if not the same, forget it
-            lda a:ObjectDynamicType::xcoord,y  ;compare Object2's X coordinate
+            lda ObjectDynamicType::xcoord,y  ;compare Object2's X coordinate
             cmp z:ObjectDynamicType::xcoord,x  ; w/ Object1's X coordinate
             bcc :+                  ;if Object2 to left of Object1 then branch
             beq :++                 ;if Object2 on Object1 then branch
@@ -1212,7 +1341,7 @@ GetLinkedObject:
 :           lda direction_wanted
             and #$bf                ;signal a move left
             sta direction_wanted
-:           lda a:ObjectDynamicType::ycoord,y  ;compare Object2's Y coordinate
+:           lda ObjectDynamicType::ycoord,y  ;compare Object2's Y coordinate
             cmp z:ObjectDynamicType::ycoord,x  ; w/ Object1's X coordinate
             bcc :+                  ;if Object2 below Object1 then branch
             beq :++                 ;if Object2 on Object1 then branch
@@ -1286,36 +1415,37 @@ GreenDragMatrix:
             .byte 0
 
 ; Move a dragon
-MoveDragon: stx curr_obj_number   ;save object we're dealing with
-            lda a:Objects+ObjectType::roompos_ptr,x
+; x            = dragon object (objnum_DragonRhindle, objnum_DragonYorgle, objnum_DragonGrundle)
+; objstore_ptr = dragon matrix
+; objdelta     = move speed
+MoveDragon: stx curr_obj_number   ;save which dragon we're dealing with
+            lda Objects+ObjectType::dynamic_ptr,x
             tax
-            lda z:DragonDynamicType::state,x  ;get the object's state
-            cmp #0                ;is it in state 00 (normal #1)
-            bne @MoveDragon_6     ;branch if not
-; dragon normal (state 1)
+            lda z:DragonDynamicType::state,x  ;get the dragon's state
+            cmp #DragonState::normal
+            bne @DragonStateNotNormal  ;branch if not
+@DragonStateNormal:
             lda SWCHB             ;read console switches
             and #ConsoleSwitchType::rightdifficulty ;check for P1 difficulty
-            beq @MoveDragon_2     ;if amateur branch
+            beq :+                ;if amateur branch
             lda #0                ;set hard - ignore nothing
-            jmp @MoveDragon_3
-@MoveDragon_2:
-            lda #SwordDynamic     ;set easy - ignore sword
-@MoveDragon_3:
-            sta MoveGameObjectArg_Difficulty
+            jmp :++
+:           lda #SwordDynamic     ;set easy - ignore sword
+:           sta MoveGameObjectArg_Difficulty
             stx MoveGameObjectArg_ObjNumber
             jsr MoveGameObject
-            lda curr_obj_number   ;get object
-            jsr PBCollision       ; and get the player-ball collision
-            beq @MoveDragon_4     ;if none then branch
+            lda curr_obj_number   ;get which dragon
+            jsr PBCollision       ; and check player-ball collision
+            beq @CheckSwordContact;branch if no collision
             lda SWCHB             ;get console switches
             rol a                 ;move P0 difficulty to
-            rol a                 ; bit 01 position
+            rol a                 ; bit 0 position
             rol a
-            and #1                ;mask it out
+            and #1                ;mask out everything else
             ora NumberCurrState   ;merge in the level number
             tay                   ;create lookup
             lda DragonDiff,y      ;get new state
-            sta z:DragonDynamicType::state,x   ;store as dragon's state (open mouthed)
+            sta z:DragonDynamicType::state,x   ;store as dragon's state (roaring)
             lda PrevManDynamic+ObjectDynamicType::xcoord
             sta z:DragonDynamicType::xcoord,x  ;get temp ball X coord and store as dragon's
             lda PrevManDynamic+ObjectDynamicType::ycoord
@@ -1324,52 +1454,49 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             sta sound_type
             lda #16
             sta sound_duration_counter
-@MoveDragon_4:
+@CheckSwordContact:
             stx portcullis_number
-            ldx curr_obj_number   ;get the object number
+            ldx curr_obj_number   ;get which dragon
             jsr FindObjHit        ;set if another object has hit the dragon
             ldx portcullis_number
-            cmp #$51              ;has the sword hit the dragon?
-            bne @MoveDragon_5     ;if not, branch
-            lda #1                ;set the state to 01 (dead)
+            cmp #objnum_Sword     ;has the sword hit the dragon?
+            bne :+                ;if not, branch
+            lda #DragonState::dead
             sta z:DragonDynamicType::state,x
             lda #NoiseType::dragon_died
             sta sound_type
             lda #16
             sta sound_duration_counter
-@MoveDragon_5:
-            jmp @MoveDragon_9     ;jump to finish
-@MoveDragon_6:
-            cmp #1                ;is it in state 01 (dead)
-            beq @MoveDragon_9     ;branch if so (return)
-            cmp #2                ;is it in state 02 (normal #2)
-            bne @MoveDragon_7     ;branch if not
-; normal dragon state 2 (eaten ball)
+:           jmp @DoneWithDragon   ;jump to finish
+@DragonStateNotNormal:
+            cmp #DragonState::dead
+            beq @DoneWithDragon   ;branch if so
+            cmp #DragonState::ateman
+            bne @DragonRoaring    ;branch if not
+@DragonStateAteMan:
             lda z:DragonDynamicType::room,x
             sta ManDynamic+ObjectDynamicType::room
             sta PrevManDynamic+ObjectDynamicType::room
             lda z:DragonDynamicType::xcoord,x
             clc
-            adc #3                ;adjust
+            adc #3                ;adjust +3x
             sta ManDynamic+ObjectDynamicType::xcoord
             sta PrevManDynamic+ObjectDynamicType::xcoord
             lda z:DragonDynamicType::ycoord,x
             sec
-            sbc #10               ;adjust
+            sbc #10               ;adjust -10y
             sta ManDynamic+ObjectDynamicType::ycoord
             sta PrevManDynamic+ObjectDynamicType::ycoord
-            jmp @MoveDragon_9
-
-; dragon roaring
-@MoveDragon_7:
+            jmp @DoneWithDragon
+@DragonRoaring:
             inc z:DragonDynamicType::state,x  ;increment the dragon's state
             lda z:DragonDynamicType::state,x  ;get its state
             cmp #$fc              ;is it near the end?
-            bcc @MoveDragon_9     ;if not, branch
-            lda curr_obj_number   ;get the dragon's number
+            bcc @DoneWithDragon   ;if not, branch
+            lda curr_obj_number   ;get which dragon
             jsr PBCollision       ;check if the ball is colliding
-            beq @MoveDragon_9     ;if not, branch
-            lda #2                ;set the state to state 02: eaten
+            beq @DoneWithDragon   ;if not, branch
+            lda #DragonState::ateman
             sta z:DragonDynamicType::state,x
             lda #NoiseType::man_eaten
             sta sound_type
@@ -1377,50 +1504,47 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             sta sound_duration_counter
             lda #155              ;get the maximum X coordinate
             cmp z:DragonDynamicType::xcoord,x  ;compare with the dragon's X coordinate
-            beq @MoveDragon_8
-            bcs @MoveDragon_8
-            sta z:DragonDynamicType::xcoord,x  ;if too large then use it
-@MoveDragon_8:
-            lda #23               ;set minimum Y coordinate
+            beq :+
+            bcs :+
+            sta z:DragonDynamicType::xcoord,x  ;cap it at max X coordinate
+:           lda #23               ;set minimum Y coordinate
             cmp z:DragonDynamicType::ycoord,x  ;compare with the dragon's Y coordinate
-            bcc @MoveDragon_9
-            sta z:DragonDynamicType::ycoord,x  ;if too small, set as dragon's Y coordinate
-@MoveDragon_9:
+            bcc @DoneWithDragon
+            sta z:DragonDynamicType::ycoord,x  ;cap it at min Y coordinate
+@DoneWithDragon:
             rts
 
-; dragon difficulty
+; dragon difficulty: index = NumberCurrentState + p0 difficulty
 DragonDiff: .byte $d0, $e8       ;level 1: Am, Pro
             .byte $f0, $f6       ;level 2: Am, Pro
             .byte $f0, $f6       ;level 3: Am, Pro
 
 ;; Move the bat
 MoveBat:    inc BlackBatDynamic+BlackBatDynamicType::state ;put bat in the next state
-            lda BlackBatDynamic+BlackBatDynamicType::state ;get the bat state
+            lda BlackBatDynamic+BlackBatDynamicType::state
             cmp #8                 ;has it reached the maximum?
             bne :+
             lda #0                 ;if so, reset the bat state
             sta BlackBatDynamic+BlackBatDynamicType::state
-:           lda BlackBatDynamic+BlackBatDynamicType::fedup ;get the bat fed-up value
+:           lda BlackBatDynamic+BlackBatDynamicType::fedup
             beq @BatFedup          ;if bat fed-up then branch
-            inc BlackBatDynamic+BlackBatDynamicType::fedup ;increment its value for next time
+            inc BlackBatDynamic+BlackBatDynamicType::fedup
             lda z:BlackBatDynamic+BlackBatDynamicType::move
-            ldx #BlackBatDynamic   ;position to bat
-            ldy #3                 ;get the bat's deltas
+            ldx #BlackBatDynamic
+            ldy #3                 ;get the bat's delta
             jsr MoveGroundObject   ;move the bat
             jmp @MoveCarriedObject ;update the bat's object
-
-; bat fed-up
 @BatFedup:  lda #BlackBatDynamic   ;store the bat's dynamic data address
             sta MoveGameObjectArg_ObjNumber
             lda #3                 ;set the bat's delta
             sta objdelta
-            lda #<BatMatrix        ;set the low address of object store
+            lda #<BatMatrix
             sta objstore_ptr
-            lda #>BatMatrix        ;set the high address of object store
+            lda #>BatMatrix
             sta objstore_ptr+1
-            lda BlackBatDynamic+BlackBatDynamicType::carriedobject  ;copy object being carried by Bat
+            lda BlackBatDynamic+BlackBatDynamicType::carriedobject
             sta MoveGameObjectArg_Difficulty
-            jsr MoveGameObject     ;move the Bat
+            jsr MoveGameObject
             ldy linked_obj_index
             lda (objstore_ptr),y   ;look up the object found in the table
             beq @MoveCarriedObject ;if nothing found then forget it
@@ -1428,7 +1552,7 @@ MoveBat:    inc BlackBatDynamic+BlackBatDynamicType::state ;put bat in the next 
             lda (objstore_ptr),y   ;get the object wanted
             tax
             lda z:ObjectDynamicType::room,x
-            cmp BlackBatDynamic    ;is it the same as the Bat's?
+            cmp BlackBatDynamic+BlackBatDynamicType::room  ;is it the same as the Bat's?
             bne @MoveCarriedObject ;if not forget it
 ; see if bat can pick up an object
             lda z:ObjectDynamicType::xcoord,x
@@ -1440,14 +1564,14 @@ MoveBat:    inc BlackBatDynamic+BlackBatDynamicType::state ;put bat in the next 
             bne @MoveCarriedObject ;if not, no pickup possible
             lda z:ObjectDynamicType::ycoord,x
             sec
-            sbc z:BlackBatDynamic+BlackBatDynamicType::ycoord  ;find the difference with the Bat's
-            clc                    ; Y coordinate
-            adc #4                 ;adjust
+            sbc z:BlackBatDynamic+BlackBatDynamicType::ycoord  ;find the difference with the Bat's Y coordinate
+            clc
+            adc #4                 ;adjust so Bat in middle of object
             and #%11111000         ;is the Bat within seven pixels?
             bne @MoveCarriedObject ;if not, no pickup possible
 ; get object
             stx BlackBatDynamic+BlackBatDynamicType::carriedobject  ;store object as being carried
-            lda #16               ;reset the bat fed-up time
+            lda #16                ;reset the bat fed-up time
             sta BlackBatDynamic+BlackBatDynamicType::fedup
 ; move object being carried by bat
 @MoveCarriedObject:
@@ -1456,13 +1580,13 @@ MoveBat:    inc BlackBatDynamic+BlackBatDynamicType::state ;put bat in the next 
             sta z:ObjectDynamicType::room,x
             lda z:BlackBatDynamic+BlackBatDynamicType::xcoord
             clc
-            adc #8                ;adjust to the right
+            adc #8                ;adjust to the right +8x
             sta z:ObjectDynamicType::xcoord,x
             lda z:BlackBatDynamic+BlackBatDynamicType::ycoord
             sta z:ObjectDynamicType::ycoord,x
             lda BlackBatDynamic+BlackBatDynamicType::carriedobject  ;get the object being carried by the bat
             ldy object_carried
-            cmp Objects+ObjectType::roompos_ptr,y  ;are they the same?
+            cmp Objects+ObjectType::dynamic_ptr,y  ;are they the same?
             bne :+               ;if not branch to exit
             lda #objnum_Null
             sta object_carried
@@ -1482,70 +1606,65 @@ BatMatrix:  .byte  BlackBatDynamic, ChaliceDynamic
 
 ;; Deal with portcullis and collisions
 Portals:    ldy #2                ;for each portcullis
-@Portals_2: ldx PortOffsets,y     ;get the portcullis' offset number
+@DoNext:    ldx PortOffsets,y     ;get the portcullis' offset number
             jsr FindObjHit        ;see if an object collided with it
             sta obj_collided_with
             cmp KeyOffsets,y      ;is it the associated key?
-            bne @Portals_3        ;if not then branch
+            bne :+                ;if not then branch
             tya                   ;get the portcullis number
             tax
             inc PortCurrStateBase,x  ;change its state to open it
-@Portals_3: tya                   ;get the portcullis number
+:           tya                   ;get the portcullis number
             tax
             lda PortCurrStateBase,x  ;get the state
-            cmp #$1c              ;is it closed?
-            beq @Portals_7        ;yes - then branch
+            cmp #PortState::closed
+            beq @IncPortState     ;yes - then branch
             lda PortOffsets,y     ;get portcullis number
             jsr PBCollision       ;get the player-ball collision
-            beq @Portals_4        ;if not then branch
-            lda #1                ;set the portcullis to closed
+            beq :+                ;if not then branch
+            lda #PortState::open
             sta PortCurrStateBase,x
             ldx #ManDynamic
-            jmp @Portals_6        ;put the man in the castle
-
-@Portals_4: lda obj_collided_with ;get the object that hit the portcullis
+            jmp @PutManInCastle
+:           lda obj_collided_with ;get the object that hit the portcullis
             cmp #objnum_Null
-            beq @Portals_5        ;if so, branch
+            beq :+                ;if so, branch
             ldx obj_collided_with
             sty portcullis_number
-            jsr GetObjectAddress  ;get its roompos information in dr_ptr using x
+            jsr GetObjectAddress  ;get its dynamic information in dr_ptr using x
             ldy portcullis_number
             ldx dr_ptr            ;get object's address
-            jmp @Portals_6        ;put object in the castle
-
-@Portals_5: jmp @Portals_7
-@Portals_6: lda EntryRoomOffsets,y ;look up castle entry room for this port
-            sta $00,x             ;make it the object's room
-            lda #$10              ;give the object a new Y coordinate
-            sta $02,x
-@Portals_7: tya                   ;get the portcullis number
+            jmp @PutManInCastle
+:           jmp @IncPortState
+@PutManInCastle:
+            lda EntryRoomOffsets,y ;look up castle entry room for this port
+            sta ObjectDynamicType::room,x  ;make it the object's room
+            lda #16               ;give the object a new Y coordinate
+            sta ObjectDynamicType::ycoord,x
+@IncPortState:
+            tya                   ;get the portcullis number
             tax
-            lda PortCurrStateBase,x  ;get its state
-            cmp #1                ;is it open?
-            beq @Portals_8        ; branch if yes
-            cmp #$1c              ;is it closed?
-            beq @Portals_8        ; branch if yes
-            inc PortCurrStateBase,x  ;increment its state
-            lda PortCurrStateBase,x  ;get the state
-            cmp #$38              ;has it reached the maximum state?
-            bne @Portals_8        ; branch if not
-            lda #1                ;set to closed state
+            lda PortCurrStateBase,x
+            cmp #PortState::open
+            beq :+                ; branch if yes
+            cmp #PortState::closed
+            beq :+                ; branch if yes
+            inc PortCurrStateBase,x
+            lda PortCurrStateBase,x
+            cmp #PortState::wraparound_max
+            bne :+                ; branch if not
+            lda #PortState::open  ;wrap around
             sta PortCurrStateBase,x
-@Portals_8: dey                   ;go to the next portcullis
-            bmi @Portals_Done     ;branch if finished
-            jmp @Portals_2        ;do next portcullis
-
-@Portals_Done:
+:           dey                   ;go to the next portcullis
+            bmi @PortalsDone      ;branch if finished
+            jmp @DoNext           ;do next portcullis
+@PortalsDone:
             rts
 
-PortOffsets:
-            .byte  $09, $12, $1b       ;portcullis #1, #2, #3
-
-KeyOffsets: .byte  $63, $6c, $75       ;keys (yellow, white, black)
-EntryRoomOffsets:
-            .byte  roomnum_YellowCastleEntry, roomnum_WhiteCastleEntry, roomnum_BlackCastleEntry
-CastleRoomOffsets:
-            .byte  roomnum_YellowCastle, roomnum_WhiteCastle, roomnum_BlackCastle
+PortOffsets:       .byte  objnum_PortCullis1,        objnum_PortCullis2,       objnum_PortCullis3
+KeyOffsets:        .byte  objnum_YellowKey,          objnum_WhiteKey,          objnum_BlackKey
+EntryRoomOffsets:  .byte  roomnum_YellowCastleEntry, roomnum_WhiteCastleEntry, roomnum_BlackCastleEntry
+CastleRoomOffsets: .byte  roomnum_YellowCastle,      roomnum_WhiteCastle,      roomnum_BlackCastle
 
 ;; Deal with magnet
 Mag:        lda z:MagnetDynamic+ObjectDynamicType::ycoord
@@ -1654,7 +1773,7 @@ RoarNoise:  lda sound_duration_counter
             lsr a                 ;divide by four
             lsr a
             clc
-            adc #$1c              ;set the frequency
+            adc #28               ;set the frequency
             sta AUDF0
             rts
 
@@ -1662,7 +1781,7 @@ EatenNoise:
             lda #6
             sta AUDC0             ;audio-control 0
             lda sound_duration_counter
-            eor #$0f
+            eor #%00001111
             sta AUDF0             ;audio-frequency 0
             lda sound_duration_counter
             lsr a
@@ -1676,7 +1795,7 @@ DragDieNoise:
             sta AUDC0
             lda sound_duration_counter  ;put the note count in
             sta AUDV0             ; the volume
-            eor #$1f
+            eor #%00011111
             sta AUDF0             ;flip the count as store
             rts                   ; as the frequency
 
@@ -1694,58 +1813,188 @@ GetObjectNoise:
             lda sound_duration_counter
             jmp :-                ;make same noise as drop
 
-LeftOfName:         leftofname_gfxpf_data original
-BelowYellowCastle:  belowyellowcastle_gfxpf_data    ;line shared with above room
-SideCorridor:       sidecorridor_gfxpf_data
-NumberRoom:         numberroom_gfxpf_data
+.res 14, 0
 
-; object #1 states (portcullis)
-PortStates:         .byte $04                ;state 04 - open
-                    .word :+++++++
-                    .byte $08
-                    .word :++++++
-                    .byte $0c
-                    .word :+++++
-                    .byte $10
-                    .word :++++
-                    .byte $14
-                    .word :+++
-                    .byte $18
-                    .word :++
-                    .byte $1c                ;state 1c - closed
-                    .word :+
-                    .byte $20
-                    .word :++
-                    .byte $24
-                    .word :+++
-                    .byte $28
-                    .word :++++
-                    .byte $2c
-                    .word :+++++
-                    .byte $30
-                    .word :++++++
-                    .byte $ff                ;state ff - open
-                    .word :+++++++
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-                    port_gfxgr_data
-                    .byte 0
+; The alignment of sprites is carefully done to prevent crossing of page boundaries.
+.assert (* & $fff) = $aa0, error, "Sprites do not start at the expected offset."
 
-TwoExitRoom:        twoexitroom_gfxpf_data
-BlueMazeTop:        bluemazetop_gfxpf_data
-BlueMaze1:          bluemaze1_gfxpf_data
-BlueMazeBottom:     bluemazebottom_gfxpf_data
-BlueMazeCenter:     bluemazecenter_gfxpf_data
-BlueMazeEntry:      bluemazeentry_gfxpf_data
-MazeMiddle:         mazemiddle_gfxpf_data original
-MazeSide:           mazeside_gfxpf_data             ;line shared with above room
-MazeEntry:          mazeentry_gfxpf_data
-CastleDef:          castle_gfxpf_data
+LeftOfName:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; 11.................. ..................11
+ ;byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111 ; uses next room's line
+BelowYellowCastle:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+SideCorridor:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+NumberRoom:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+
+.assert >(*-1) = >(LeftOfName), error, "Sprite(s) spans page."
+
+PortStates:         .byte 4                 ; open
+                    .word PortGfx+12
+                    .byte 8
+                    .word PortGfx+10
+                    .byte 12
+                    .word PortGfx+8
+                    .byte 16
+                    .word PortGfx+6
+                    .byte 20
+                    .word PortGfx+4
+                    .byte 24
+                    .word PortGfx+2
+                    .byte 28                ; closed
+                    .word PortGfx
+                    .byte 32
+                    .word PortGfx+2
+                    .byte 36
+                    .word PortGfx+4
+                    .byte 40
+                    .word PortGfx+6
+                    .byte 44
+                    .word PortGfx+8
+                    .byte 48
+                    .word PortGfx+10
+                    .byte $ff               ; open
+                    .word PortGfx+12
+PortGfx:
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte $fe  ; 1111111.
+ .byte $aa  ; 1.1.1.1.
+ .byte 0
+ .assert >(*-1) = >(PortGfx), error, "Sprite spans page."
+
+TwoExitRoom:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+BlueMazeTop:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $0c, $0c   ; ......11......11.... ....11......11......
+ .byte $f0, $0c, $3c   ; 1111..11......1111.. ..1111......11..1111
+ .byte $f0, $0c, $00   ; 1111..11............ ............11..1111
+ .byte $f0, $ff, $3f   ; 111111111111111111.. ..111111111111111111
+ .byte $00, $30, $30   ; ........11......11.. ..11......11........
+ .byte $f0, $33, $3f   ; 111111..11..111111.. ..111111..11..111111
+BlueMaze1:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $fc, $ff   ; 1111..11111111111111 11111111111111..1111
+ .byte $f0, $00, $c0   ; 1111..............11 11..............1111
+ .byte $f0, $3f, $cf   ; 1111111111..1111..11 11..1111..1111111111
+ .byte $00, $30, $cc   ; ........11....11..11 11..11....11........
+ .byte $f0, $f3, $cc   ; 111111..1111..11..11 11..11..1111..111111
+BlueMazeBottom:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $f3, $0c   ; 111111..1111..11.... ....11..1111..111111
+ .byte $00, $30, $0c   ; ........11....11.... ....11....11........
+ .byte $f0, $3f, $0f   ; 1111111111..1111.... ....1111..1111111111
+ .byte $f0, $00, $00   ; 1111................ ................1111
+ .byte $f0, $f0, $00   ; 1111....1111........ ........1111....1111
+ .byte $00, $30, $00   ; ........11.......... ..........11........
+ .byte $f0, $ff, $ff   ; 111111..1111..11..11 11..11..1111..111111
+BlueMazeCenter:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $33, $3f   ; 111111..11..111111.. ..111111..11..111111
+ .byte $00, $30, $3c   ; ........11....1111.. ..1111....11........
+ .byte $f0, $ff, $3c   ; 111111111111..1111.. ..1111..111111111111
+ .byte $00, $03, $3c   ; ....11........1111.. ..1111........11....
+ .byte $f0, $33, $3c   ; 111111..11....1111.. ..1111....11..111111
+ .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
+ .byte $f0, $f3, $0c   ; 111111..1111..11.... ....11..1111..111111
+BlueMazeEntry:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $f3, $cc   ; 111111..1111..11..11 11..11..1111..111111
+ .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
+ .byte $f0, $33, $fc   ; 111111..11....111111 111111....11..111111
+ .byte $00, $33, $00   ; ....11..11.......... ..........11..11....
+ .byte $f0, $f3, $ff   ; 111111..111111111111 111111111111..111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+MazeMiddle:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $cc   ; 111111111111..11..11 11..11..111111111111
+ .byte $00, $00, $cc   ; ..............11.11. 11..11..............
+ .byte $f0, $03, $cf   ; 111111......1111..11 11..1111......111111
+ .byte $00, $03, $00   ; ....11.............. ..............11....
+ .byte $f0, $f3, $fc   ; 111111..1111..111111 111111..1111..111111
+ .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
+ ;byte $f0, $33, $cc   ; 111111..11....11..11 11..11....11..111111 ; uses next room's line
+MazeSide:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $33, $cc   ; 111111..11....11..11 11..11....11..111111
+ .byte $00, $30, $cc   ; ........11....11..11 11..11....11........
+ .byte $00, $3f, $cf   ; ....111111..1111..11 11..1111..111111....
+ .byte $00, $00, $c0   ; ..................11 11..................
+ .byte $00, $3f, $c3   ; ....111111..11....11 11....11..111111....
+ .byte $00, $30, $c0   ; ........11........11 11........11........
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+MazeEntry:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $30, $00   ; ........11.......... ..........11........
+ .byte $f0, $30, $ff   ; 1111....11..11111111 11111111..11....1111
+ .byte $00, $30, $c0   ; ........11........11 11........11........
+ .byte $f0, $f3, $c0   ; 111111..1111......11 11......1111..111111
+ .byte $00, $03, $c0   ; ....11............11 11............11....
+ .byte $f0, $ff, $cc   ; 11111111111111111111 11111111111111111111
+CastleDef:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $fe, $15   ; 11111111111....1.1.1 1.1.1....11111111111
+ .byte $30, $03, $1f   ; 11........11...11111 11111...11........11
+ .byte $30, $03, $ff   ; 11........1111111111 1111111111........11
+ .byte $30, $00, $ff   ; 11..........11111111 11111111..........11
+ .byte $30, $00, $3f   ; 11......... 111111.. ..111111..........11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+
+.assert >(*-1) = >(TwoExitRoom), error, "Sprite(s) spans page."
 
 PortDynamic1:       .byte roomnum_YellowCastle, 77, 49
 PortDynamic2:       .byte roomnum_WhiteCastle,  77, 49
@@ -1753,91 +2002,611 @@ PortDynamic3:       .byte roomnum_BlackCastle,  77, 49
 
 SurroundCurrState:  .byte 0
 SurroundStates:     .byte $ff
-                    .word :+
-:                   surround_gfxgr_data
+                    .word SurroundGfx
+SurroundGfx:
+ .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+ .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+ .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+ .byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+ .byte 0
+ .assert >(*-1) = >(SurroundGfx), error, "Sprite spans page."
 
-RedMaze1:           redmaze1_gfxpf_data original
-RedMazeBottom:      redmazebottom_gfxpf_data        ;line shared with room above
-RedMazeTop:         redmazetop_gfxpf_data original
-WhiteCastleEntry:   whitecastleentry_gfxpf_data     ;line shared with room above
-TopEntryRoom:       topentryroom_gfxpf_data
-BlackMaze1:         blackmaze1_gfxpf_data original
-BlackMaze3:         blackmaze3_gfxpf_data           ;line shared with room above
-BlackMaze2:         blackmaze2_gfxpf_data original
-BlackMazeEntry:     blackmazeentry_gfxpf_data       ;line shared with room above
+RedMaze1:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $00, $0c   ; ..............11.... ....11..............
+ .byte $f0, $ff, $0c   ; 111111111111..11.... ....11..111111111111
+ .byte $f0, $03, $cc   ; 111111........11..11 11..11........111111
+ ;byte $f0, $33, $cf   ; 111111..11..1111..11 11..1111..11..111111 ; uses next room's line
+RedMazeBottom:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $33, $cf   ; 111111..11..1111..11 11..1111..11..111111
+ .byte $f0, $30, $00   ; 1111....11.......... ..........11....1111
+ .byte $f0, $33, $ff   ; 111111..11..11111111 11111111..11..111111
+ .byte $00, $33, $00   ; ....11..11.......... ..........11..11....
+ .byte $f0, $ff, $00   ; 111111111111........ ........111111111111
+ .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+RedMazeTop:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $00, $00, $c0   ; 1111..............11 11..............1111
+ .byte $f0, $ff, $cf   ; 1111111111111111..11 11..1111111111111111
+ .byte $00, $00, $cc   ; ..............11..11 11..11..............
+ .byte $f0, $33, $ff   ; 111111..11..11111111 11111111..11..111111
+ .byte $f0, $33, $00   ; 111111..11.......... ..........11..111111
+ ;byte $f0, $3f, $0c   ; 1111111111....11.... ....11....1111111111 ; uses next room's line
+WhiteCastleEntry:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $3f, $0c   ; 1111111111....11.... ....11....1111111111
+ .byte $f0, $00, $0c   ; 1111..........11.... ....11..........1111
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $30, $00   ; 1111....11.......... ..........11....1111
+ .byte $f0, $30, $00   ; 1111....11.......... ..........11....1111
+ .byte $00, $30, $00   ; ........11.......... ..........11........
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+TopEntryRoom:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $30, $00, $00   ; 11.................. ..................11
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+BlackMaze1:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $f0, $f0, $ff   ; 1111....111111111111 111111111111....1111
+ .byte $00, $00, $03   ; ............11...... ......11............
+ .byte $f0, $ff, $03   ; 11111111111111...... ......11111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $30, $3f, $ff   ; 11..111111..11111111 11111111..111111..11
+ .byte $00, $30, $00   ; ........11.......... ..........11........
+ ;byte $f0, $f0, $ff   ; 1111....111111111111 111111111111....1111 ; uses next room's line
+BlackMaze3:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF0hPF1-----PF2-----
+ .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
+ .byte $30, $00, $00   ; 11.................. 11..................
+ .byte $30, $3f, $ff   ; 11....11111111111111 11....11111111111111
+ .byte $00, $30, $00   ; ......11............ ......11............
+ .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
+ .byte $30, $00, $03   ; 11................11 11................11
+ .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
+BlackMaze2:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF0hPF1-----PF2-----
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .byte $00, $00, $c0   ; ............11...... ............11......
+ .byte $f0, $ff, $cf   ; 11111111111111..1111 11111111111111..1111
+ .byte $00, $00, $0c   ; ..................11 ..................11
+ .byte $f0, $0f, $ff   ; 1111....111111111111 1111....111111111111
+ .byte $00, $0f, $c0   ; ........111111...... ........111111......
+ ;byte $30, $cf, $cc   ; 11..11..111111..11.. 11..11..111111..11.. ; uses next room's line
+BlackMazeEntry:
+ ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
+ .byte $30, $cf, $cc   ; 11..1111..11..11..11 11..11..11..1111..11
+ .byte $00, $c0, $cc   ; ..........11..11..11 11..11..11..........
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+
+.assert >(*-1) = >(RedMaze1), error, "Sprite(s) spans page."
 
 BridgeCurrState:    .byte 0
 BridgeStates:       .byte $ff
-                    .word :+
-:                   bridge_gfxgr_data
+                    .word BridgeGfx
+BridgeGfx:
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $42  ; .1....1.
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte 0
+ .assert >(*-1) = >(BridgeGfx), error, "Sprite spans page."
 
-GfxNum1:            number1_gfxgr_data
+Number1Gfx:
+ .byte %00000100 ;     X
+ .byte %00001100 ;    XX
+ .byte %00000100 ;     X
+ .byte %00000100 ;     X
+ .byte %00000100 ;     X
+ .byte %00000100 ;     X
+ .byte %00001110 ;    XXX
+ .byte 0
+ .assert >(*-1) = >(Number1Gfx), error, "Sprite spans page."
 
 KeyCurrState:       .byte 0
 KeyStates:          .byte $ff
-                    .word :+
-:                   key_gfxgr_data
+                    .word KeyGfx
+KeyGfx:
+ .byte %00000111 ;      XXX
+ .byte %11111101 ; XXXXXX X
+ .byte %10100111 ; X X  XXX
+ .byte 0
+ .assert >(*-1) = >(KeyGfx), error, "Sprite spans page."
 
-GfxNum2:            number2_gfxgr_data
-GfxNum3:            number3_gfxgr_data
+Number2Gfx:
+ .byte $0e  ; ....111.
+ .byte $11  ; ...1...1
+ .byte $01  ; .......1
+ .byte $02  ; ......1.
+ .byte $04  ; .....1..
+ .byte $08  ; ....1...
+ .byte $1f  ; ...11111
+ .byte 0
+ .assert >(*-1) = >(Number2Gfx), error, "Sprite spans page."
+Number3Gfx:
+ .byte $0e  ; ....111.
+ .byte $11  ; ...1...1
+ .byte $01  ; .......1
+ .byte $06  ; .....11.
+ .byte $01  ; .......1
+ .byte $11  ; ...1...1
+ .byte $0e  ; ....111.
+ .byte 0
+ .assert >(*-1) = >(Number3Gfx), error, "Sprite spans page."
 
-BatStates:          .byte $03
-                    .word :+
+BatStates:          .byte 3
+                    .word Bat1Gfx
                     .byte $ff
-                    .word :++
-:                   bat1_gfxgr_data
-:                   bat2_gfxgr_data
+                    .word Bat2Gfx
+Bat1Gfx:
+ .byte $81  ; 1......1
+ .byte $81  ; 1......1
+ .byte $c3  ; 11....11
+ .byte $c3  ; 11....11
+ .byte $ff  ; 11111111
+ .byte $5a  ; .1.11.1.
+ .byte $66  ; .11..11.
+ .byte 0
+ .assert >(*-1) = >(Bat1Gfx), error, "Sprite spans page."
+Bat2Gfx:
+ .byte $01  ; .......1
+ .byte $80  ; 1.......
+ .byte $01  ; .......1
+ .byte $80  ; 1.......
+ .byte $3c  ; ..1111..
+ .byte $5a  ; .1.11.1.
+ .byte $66  ; .11..11.
+ .byte $c3  ; 11....11
+ .byte $81  ; 1......1
+ .byte $81  ; 1......1
+ .byte $81  ; 1......1
+ .byte 0
+ .assert >(*-1) = >(Bat2Gfx), error, "Sprite spans page."
 
-DragonStates:       .byte $00
-                    .word :+
-                    .byte $01
-                    .word :+++
-                    .byte $02
-                    .word :+
-                    .byte $ff
-                    .word :++
-:                   dragonnormal_gfxgr_data 0
-:                   dragonroar_gfxgr_data   0
-:                   dragondead_gfxgr_data   0
+DragonStates:       .byte DragonState::normal
+                    .word DragonNormLeftGfx
+                    .byte DragonState::dead
+                    .word DragonDeadLeftGfx
+                    .byte DragonState::ateman
+                    .word DragonNormLeftGfx
+                    .byte DragonState::roaring
+                    .word DragonRoarLeftGfx
+DragonNormLeftGfx:
+ .byte $06     ; .....11.
+ .byte $0f     ; ....1111
+ .byte $f3     ; 1111..11
+ .byte $fe     ; 1111111.
+ .byte $0e     ; ....111.
+ .byte $04     ; .....1..
+ .byte $04     ; .....1..
+ .byte $1e     ; ...1111.
+ .byte $3f     ; ..111111
+ .byte $7f     ; .1111111
+ .byte $e3     ; 111...11
+ .byte $c3     ; 11....11
+ .byte $c3     ; 11....11
+ .byte $c7     ; 11...111
+ .byte $ff     ; 11111111
+ .byte $3c     ; ..1111..
+ .byte $08     ; ....1...
+ .byte $8f     ; 1...1111
+ .byte $e1     ; 111....1
+ .byte $3f     ; ..111111
+ .byte 0
+ .assert >(*-1) = >(DragonNormLeftGfx), error, "Sprite spans page."
+DragonRoarLeftGfx:
+ .byte $80     ; 1.......
+ .byte $40     ; .1......
+ .byte $26     ; ..1..11.
+ .byte $1f     ; ...11111
+ .byte $0b     ; ....1.11
+ .byte $0e     ; ....111.
+ .byte $1e     ; ...1111.
+ .byte $24     ; ..1..1..
+ .byte $44     ; .1...1..
+ .byte $8e     ; 1...111.
+ .byte $1e     ; ...1111.
+ .byte $3f     ; ..111111
+ .byte $7f     ; .1111111
+ .byte $7f     ; .1111111
+ .byte $7f     ; .1111111
+ .byte $7f     ; .1111111
+ .byte $3e     ; ..11111.
+ .byte $1c     ; ...111..
+ .byte $08     ; ....1...
+ .byte $f8     ; 11111...
+ .byte $80     ; 1.......
+ .byte $e0     ; 111.....
+ .byte 0
+ .assert >(*-1) = >(DragonRoarLeftGfx), error, "Sprite spans page."
+DragonDeadLeftGfx:
+ .byte $0c     ; ....11..
+ .byte $0c     ; ....11..
+ .byte $0c     ; ....11..
+ .byte $0e     ; ....111.
+ .byte $1b     ; ...11.11
+ .byte $7f     ; .1111111
+ .byte $ce     ; 11..111.
+ .byte $80     ; 1.......
+ .byte $fc     ; 111111..
+ .byte $fe     ; 1111111.
+ .byte $fe     ; 1111111.
+ .byte $7e     ; .111111.
+ .byte $78     ; .1111...
+ .byte $20     ; ..1.....
+ .byte $6e     ; .11.111.
+ .byte $42     ; .1....1.
+ .byte $7e     ; .111111.
+ .byte 0
+ .assert >(*-1) = >(DragonDeadLeftGfx), error, "Sprite spans page."
+.if 0=1
+DragonNormRightGfx:
+ .byte $60     ; .11.....
+ .byte $f0     ; 1111....
+ .byte $cf     ; 11..1111
+ .byte $7f     ; .1111111
+ .byte $70     ; .111....
+ .byte $20     ; ..1.....
+ .byte $20     ; ..1.....
+ .byte $78     ; .1111...
+ .byte $fc     ; 111111..
+ .byte $fe     ; 1111111.
+ .byte $c7     ; 11...111
+ .byte $c3     ; 11....11
+ .byte $c3     ; 11....11
+ .byte $e3     ; 111...11
+ .byte $ff     ; 11111111
+ .byte $3c     ; ..1111..
+ .byte $10     ; ...1....
+ .byte $f1     ; 1111...1
+ .byte $87     ; 1....111
+ .byte $fc     ; 111111..
+ .byte 0
+ .assert >(*-1) = >(DragonNormRightGfx), error, "Sprite spans page."
+DragonRoarRightGfx:
+ .byte $01     ; .......1
+ .byte $02     ; ......1.
+ .byte $64     ; .11..1..
+ .byte $f8     ; 11111...
+ .byte $d0     ; 11.1....
+ .byte $70     ; .111....
+ .byte $78     ; .1111...
+ .byte $24     ; ..1..1..
+ .byte $22     ; ..1...1.
+ .byte $71     ; .111...1
+ .byte $78     ; .1111...
+ .byte $fc     ; 111111..
+ .byte $fe     ; 1111111.
+ .byte $fe     ; 1111111.
+ .byte $fe     ; 1111111.
+ .byte $fe     ; 1111111.
+ .byte $7c     ; .11111..
+ .byte $38     ; ..111...
+ .byte $10     ; ...1....
+ .byte $1f     ; ...11111
+ .byte $01     ; .......1
+ .byte $07     ; .....111
+ .byte 0
+ .assert >(*-1) = >(DragonRoarRightGfx), error, "Sprite spans page."
+DragonDeadRightGfx:
+ .byte $30     ; ..11....
+ .byte $30     ; ..11....
+ .byte $30     ; ..11....
+ .byte $70     ; .111....
+ .byte $d8     ; 11.11...
+ .byte $fe     ; 1111111.
+ .byte $73     ; .111..11
+ .byte $01     ; .......1
+ .byte $3f     ; ..111111
+ .byte $7f     ; .1111111
+ .byte $7f     ; .1111111
+ .byte $7e     ; .111111.
+ .byte $1e     ; ...1111.
+ .byte $04     ; .....1..
+ .byte $76     ; .111.11.
+ .byte $42     ; .1....1.
+ .byte $7e     ; .111111.
+ .byte 0
+ .assert >(*-1) = >(DragonDeadRightGfx), error, "Sprite spans page."
+.endif
 
 SwordCurrState:     .byte 0
 SwordStates:        .byte $ff
-                    .word :+
-:                   sword_gfxgr_data 0
+                    .word SwordLeftGfx
+SwordLeftGfx:
+ .byte %00100000 ;   X
+ .byte %01000000 ;  X
+ .byte %11111111 ; XXXXXXXX
+ .byte %01000000 ;  X
+ .byte %00100000 ;   X
+ .byte 0
+ .assert >(*-1) = >(SwordLeftGfx), error, "Sprite spans page."
 
 DotCurrState:       .byte 0
 DotStates:          .byte $ff
-                    .word :+
-:                   dot_gfxgr_data
+                    .word DotGfx
+DotGfx:
+ .byte %10000000 ; X
+ .byte 0
 
-:                   easteregg_gfxgr_data norm
+EasterEggGfx:
+ .if 1=1
+ .byte $f0 ; 1111....
+ .byte $80 ; 1.......
+ .byte $80 ; 1.......
+ .byte $80 ; 1.......
+ .byte $f4 ; 1111.1..
+ .byte $04 ; .....1..
+ .byte $87 ; 1....111
+ .byte $e5 ; 111..1.1
+ .byte $87 ; 1....111
+ .byte $80 ; 1.......
+ .byte $05 ; .....1.1
+ .byte $e5 ; 111..1.1
+ .byte $a7 ; 1..1.111
+ .byte $e1 ; 111....1
+ .byte $87 ; 1....111
+ .byte $e0 ; 111.....
+ .byte $01 ; .......1
+ .byte $e0 ; 111.....
+ .byte $a0 ; 1..1....
+ .byte $f0 ; 1111....
+ .byte $01 ; .......1
+ .byte $40 ; .1......
+ .byte $e0 ; 111.....
+ .byte $40 ; .1......
+ .byte $40 ; .1......
+ .byte $40 ; .1......
+ .byte $01 ; .......1
+ .byte $e0 ; 111.....
+ .byte $a0 ; 1.1.....
+ .byte $e0 ; 111.....
+ .byte $80 ; 1.......
+ .byte $e0 ; 111.....
+ .byte $01 ; .......1
+ .byte $20 ; ..1.....
+ .byte $20 ; ..1.....
+ .byte $e0 ; 111.....
+ .byte $a0 ; 1.1.....
+ .byte $e0 ; 111.....
+ .byte $01 ; .......1
+ .byte $01 ; .......1
+ .byte $01 ; .......1
+ .byte $88 ; 1...1...
+ .byte $a8 ; 1.1.1...
+ .byte $a8 ; 1.1.1...
+ .byte $a8 ; 1.1.1...
+ .byte $f8 ; 11111...
+ .byte $01 ; .......1
+ .byte $e0 ; 111.....
+ .byte $a0 ; 1.1.....
+ .byte $f0 ; 1111....
+ .byte $01 ; .......1
+ .byte $80 ; 1.......
+ .byte $e0 ; 111.....
+ .byte $8f ; 1...1111
+ .byte $89 ; 1...1..1
+ .byte $0f ; ....1111
+ .byte $8a ; 1...1.1.
+ .byte $e9 ; 111.1..1
+ .byte $80 ; 1.......
+ .byte $8e ; 1...111.
+ .byte $0a ; ....1.1.
+ .byte $ee ; 111.111.
+ .byte $a0 ; 1.1.....
+ .byte $e8 ; 111.1...
+ .byte $88 ; 1...1...
+ .byte $ee ; 111.111.
+ .byte $0a ; ....1.1.
+ .byte $8e ; 1...111.
+ .byte $e0 ; 111.....
+ .byte $a4 ; 1.1..1..
+ .byte $a4 ; 1.1..1..
+ .byte $04 ; .....1..
+ .byte $80 ; 1.......
+ .byte $08 ; ....1...
+ .byte $0e ; ....111.
+ .byte $0a ; ....1.1.
+ .byte $0a ; ....1.1.
+ .byte $80 ; 1.......
+ .byte $0e ; ....111.
+ .byte $0a ; ....1.1.
+ .byte $0e ; ....111.
+ .byte $08 ; ....1...
+ .byte $0e ; ....111.
+ .byte $80 ; 1.......
+ .byte $04 ; .....1..
+ .byte $0e ; ....111.
+ .byte $04 ; .....1..
+ .byte $04 ; .....1..
+ .byte $04 ; .....1..
+ .byte $80 ; 1.......
+ .byte $04 ; .....1..
+ .byte $0e ; ....111.
+ .byte $04 ; .....1..
+ .byte $04 ; .....1..
+ .byte $04 ; .....1..
+ .else
+ .byte $44 ;  X   X
+ .byte $6c ;  XX XX
+ .byte $54 ;  X X X
+ .byte $44 ;  X   X
+ .byte $44 ;  X   X
+ .byte $01 ;        X
+ .byte $10 ;    X
+ .byte $10 ;    X
+ .byte $10 ;    X
+ .byte $10 ;    X
+ .byte $01 ;        X
+ .byte $48 ;  X  X
+ .byte $50 ;  X X
+ .byte $60 ;  XX
+ .byte $50 ;  X X
+ .byte $48 ;  X  X
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $78 ;  XXXX
+ .byte $01 ;        X
+ .byte $44 ;  X   X
+ .byte $6c ;  XX XX
+ .byte $54 ;  X X X
+ .byte $44 ;  X   X
+ .byte $44 ;  X   X
+ .byte $01 ;        X
+ .byte $48 ;  X  X
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $01 ;        X
+ .byte $40 ;  X
+ .byte $70 ;  XXX
+ .byte $40 ;  X
+ .byte $40 ;  X
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $40 ;  X
+ .byte $01 ;        X
+ .byte $40 ;  X
+ .byte $40 ;  X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X
+ .byte $48 ;  X  X
+ .byte $01 ;        X
+ .byte $48 ;  X  X
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $08 ;     X
+ .byte $78 ;  XXXX
+ .byte $01 ;        X
+ .byte $44 ;  X   X
+ .byte $44 ;  X   X
+ .byte $54 ;  X X X
+ .byte $6c ;  XX XX
+ .byte $44 ;  X   X
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X
+ .byte $7c ;  XXXXX
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $78 ;  XXXX
+ .byte $08 ;     X
+ .byte $78 ;  XXXX
+ .byte $01 ;        X
+ .byte $48 ;  X  X
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X  .
+ .byte $48 ;  X  X
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $78 ;  XXXX
+ .byte $01 ;        X
+ .byte $40 ;  X
+ .byte $70 ;  XXX
+ .byte $40 ;  X
+ .byte $40 ;  X
+ .byte $01 ;        X
+ .byte $78 ;  XXXX
+ .byte $48 ;  X  X
+ .byte $78 ;  XXXX
+ .byte $40 ;  X
+ .byte $78 ; .XXXX
+ .byte $01 ;        X
+ .endif
+ .byte 0
+ .assert >(*-1) = >(EasterEggGfx), error, "Sprite spans page."
 EasterEggDynamic:   .byte roomnum_SecretRoom, 80, 105
 EasterEggCurrState: .byte 0
 EasterEggStates:    .byte $ff
-                    .word :-
+                    .word EasterEggGfx
 
 ChaliceCurrState:   .byte 0
 ChaliceStates:      .byte $ff
-                    .word :+
-:                   chalice_gfxgr_data
+                    .word ChaliceGfx
+ChaliceGfx:
+ .byte %10000001 ; X      X
+ .byte %10000001 ; X      X
+ .byte %11000011 ; XX    XX
+ .byte %01111110 ;  XXXXXX
+ .byte %01111110 ;  XXXXXX
+ .byte %00111100 ;   XXXX
+ .byte %00011000 ;    XX
+ .byte %00011000 ;    XX
+ .byte %01111110 ;  XXXXXX
+ .byte 0
+ .assert >(*-1) = >(ChaliceGfx), error, "Sprite spans page."
 
 NullCurrState:      .byte 0
 NullStates:         .byte $ff
-                    .word :+
-:                   null_gfxgr_data
+                    .word NullGfx
+NullGfx:            .byte 0
 
 NumberDynamic:      .byte roomnum_NumberRoom, 80, 64
-NumberStates:       .byte $01
-                    .word GfxNum1
-                    .byte $03
-                    .word GfxNum2
+NumberStates:       .byte 1
+                    .word Number1Gfx
+                    .byte 3
+                    .word Number2Gfx
                     .byte $ff
-                    .word GfxNum3
+                    .word Number3Gfx
 
 MagnetCurrState:    .byte 0
 MagnetStates:       .byte $ff
-                    .word :+
-:                   magnet_gfxgr_data
+                    .word MagnetGfx1
+MagnetGfx1:
+ .byte %00111100 ;   XXXX
+ .byte %01111110 ;  XXXXXX
+ .byte %11100111 ; XXX  XXX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte 0
+ .assert >(*-1) = >(MagnetGfx1), error, "Sprite spans page."
 
 
 Rooms:
@@ -2209,6 +2978,6 @@ objnum_Null := (* - Objects) ; 12
 
 ; 6502 vectors
 .segment "VECTORS"
-    .word START
-    .word START
-    .word START
+    .word StartGame
+    .word StartGame
+    .word StartGame
