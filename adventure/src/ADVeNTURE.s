@@ -183,7 +183,7 @@ dr_ptr:                         .word 0     ; pointer for dereferencing
 object1:                        .byte 0
 object2:                        .byte 0
 obj_collided_with:              .byte 0
-unused:                         .byte 0
+unread1:                        .byte 0     ; unread byte
 cached_joystick:                .byte 0
 portcullis_number:              .byte 0
 direction_wanted:               .byte 0
@@ -646,7 +646,7 @@ GetObjectState:
 :           cmp (dr_ptr),y        ;have we found it in the list of states?
             bcc :+                ;if nearing it then found it and return
             beq :+                ;if found it then return
-.assert .sizeof(StateType) = 3, error, "This subroutine assumes StateType is 3 bytes long."
+            .assert .sizeof(StateType) = 3, error, "This subroutine assumes StateType is 3 bytes long."
             iny                   ;goto next state in list of states
             iny
             iny
@@ -674,10 +674,12 @@ MaintainInputCounter:
 
 ; change color if necessary
 ChangeColor:
-.assert (ColorType::flash & 2) = 2, error, "ColorType::flash incorrect"
             lsr a                 ;if bit 0 of the color is set
             bcc :+                ; branch if clear, no flash
-            lda input_counter
+
+           lda input_counter     ;flash
+           .assert (ColorType::flash & 2) = 2, error, "Bad ColorType::flash value."
+
 :           ldy input_counter+1   ;get the high input counter
             bpl :+                ;if console/joystick moved recently then branch
             eor input_counter+1   ;vary colors after a period of inactivty to limit CRT burn in
@@ -1035,8 +1037,10 @@ PickupPutdown:
             sta sound_type
             lda #4
             sta sound_duration_counter
+:
+
 ; check for collision
-:           lda CXP0FB
+            lda CXP0FB
             and #%01000000        ;get Ball-Player0 collision
             beq :+                ;if nothing occurred then branch
 ; with Player0

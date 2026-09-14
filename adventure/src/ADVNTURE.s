@@ -228,11 +228,11 @@ stack_space:                    ; $e7-$ff (12 frames)
 
 .code
 
-START:      jmp StartGame
+START:      jmp StartGame    ;FIXME: remove and change reset vectors
 
-            sei             ;setup for 6507, start with no
-            cld             ; variable initialization
-            jmp MainGameLoop
+            sei              ;FIXME: remove
+            cld              ;FIXME: remove
+            jmp MainGameLoop ;FIXME: remove
 
 ;; Render visible portion of screen
 PrintDisplay:
@@ -652,7 +652,7 @@ GetObjectState:
 :           cmp (dr_ptr),y        ;have we found it in the list of states?
             bcc :+                ;if nearing it then found it and return
             beq :+                ;if found it then return
-.assert .sizeof(StateType) = 3, error, "This subroutine assumes StateType is 3 bytes long."
+            .assert .sizeof(StateType) = 3, error, "This subroutine assumes StateType is 3 bytes long."
             iny                   ;goto next state in list of states
             iny
             iny
@@ -680,11 +680,16 @@ MaintainInputCounter:
 
 ; change color if necessary
 ChangeColor:
-.assert $80 + (ColorType::flash >> 1) = input_counter && (ColorType::flash & 2) = 2, error, "ColorType::flash value and input_counter address invariant broken"
             lsr a                 ;if bit 0 of the color is set
             bcc :+                ; branch if clear, no flash
-            tay                   ;flash
-            lda $0080,y           ;equivalent to: lda input_counter
+
+           ;lda input_counter     ;flash
+           ;.assert (ColorType::flash & 2) = 2, error, "Bad ColorType::flash value."
+; FIXME: replace the following three lines with the above two:
+            tay
+            lda $0080,y
+            .assert $80 + (ColorType::flash >> 1) = input_counter && (ColorType::flash & 2) = 2, error, "Bad ColorType::flash value."
+
 :           ldy input_counter+1   ;get the high input counter
             bpl :+                ;if console/joystick moved recently then branch
             eor input_counter+1   ;vary colors after a period of inactivty to limit CRT burn in
@@ -1042,8 +1047,10 @@ PickupPutdown:
             sta sound_type
             lda #4
             sta sound_duration_counter
-:           lda #$ff      ;these two instructions inject 4 bytes which seem
-            sta unread1   ;to keep pf?/gfx? locations far away enough for consistent timing
+:
+            lda #$ff              ;FIXME: remove
+            sta unread1           ;FIXME: remove
+
 ; check for collision
             lda CXP0FB
             and #%01000000        ;get Ball-Player0 collision
@@ -1821,6 +1828,8 @@ DropObjectNoise:
 GetObjectNoise:
             lda sound_duration_counter
             jmp :-                ;make same noise as drop
+
+;.res 14, 0 ; Padding may be needed to satisfy the next invariant.
 
 ; The alignment of sprites is carefully done to prevent crossing of page boundaries.
 .assert (* & $fff) = $aa0, error, "Sprites do not start at the expected offset."
