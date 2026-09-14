@@ -63,3 +63,16 @@
     drop_item   = 4
     get_item    = 5
 .endenum
+
+.enum DragonState
+    normal   = 0
+    dead     = 1
+    ateman   = 2
+    roaring  = 255
+.endenum
+
+.enum PortState
+    open           = 1
+    closed         = 28
+    wraparound_max = 56
+.endenum

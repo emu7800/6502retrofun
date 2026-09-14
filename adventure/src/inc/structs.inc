@@ -45,7 +45,7 @@
 .endstruct
 
 .struct ObjectType
-    roompos_ptr   .word  ; pointer to a DynamicType
+    dynamic_ptr   .word  ; pointer to a DynamicType
     currstate_ptr .word  ; pointer to a state byte
     states_ptr    .word  ; pointer to array of StateType
     color         .byte  ; ColorType

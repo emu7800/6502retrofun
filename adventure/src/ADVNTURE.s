@@ -138,7 +138,8 @@ PrintDisplay:
             sta scan_line             ;3 24
                                       ;  24*3=72 color clocks
 
-            ; Good place for a WSYNC here? Spills over instead:
+Missing_WSYNC_Here:
+            ; Possible missing WSYNC here, spills over instead:
             ;  92 timer expiration occurs mid scanline (35.4 lines, .4*228=92)
             ; +36 max additional time needed to recognize expiration
             ; +72 initializing pxgfx_offsets and other stuff
@@ -349,9 +350,9 @@ SwapPrintObjects:
 ; setup Object1 to print
 SetupObjectPrint:
             ldx object1
-            lda a:Objects+ObjectType::roompos_ptr,x
+            lda a:Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::roompos_ptr+1,x
+            lda a:Objects+ObjectType::dynamic_ptr+1,x
             sta dr_ptr+1
             ldy #ObjectDynamicType::xcoord
             lda (dr_ptr),y        ;get Object1's X coordinate
@@ -396,9 +397,9 @@ SetupObjectPrint:
             sta NUSIZ0            ;(used by bridge and invisible surround)
 ; set up Object2 to print
             ldx object2
-            lda a:Objects+ObjectType::roompos_ptr,x
+            lda a:Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr
-            lda a:Objects+ObjectType::roompos_ptr+1,x
+            lda a:Objects+ObjectType::dynamic_ptr+1,x
             sta dr_ptr+1
             ldy #ObjectDynamicType::xcoord
             lda (dr_ptr),y        ;get Object2's X coordinate
@@ -458,9 +459,9 @@ MoveNextObject:
             lda #0                ;if so, wrap to zero
 GetObjectsInfo:
             tay
-            lda Objects+ObjectType::roompos_ptr,y
+            lda Objects+ObjectType::dynamic_ptr,y
             sta dr_ptr
-            lda Objects+ObjectType::roompos_ptr+1,y
+            lda Objects+ObjectType::dynamic_ptr+1,y
             sta dr_ptr+1
             ldx #0
             lda (dr_ptr,x)          ;get object's current room
@@ -562,9 +563,9 @@ ChangeColor:
 
 ; get the address of the roompos information for an object
 GetObjectAddress:
-            lda a:Objects+ObjectType::roompos_ptr,x
+            lda a:Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr            ;get and store the low address
-            lda a:Objects+ObjectType::roompos_ptr+1,x
+            lda a:Objects+ObjectType::dynamic_ptr+1,x
             sta dr_ptr+1          ;get and store the high address
             rts
 
@@ -1292,36 +1293,37 @@ GreenDragMatrix:
             .byte 0
 
 ; Move a dragon
-MoveDragon: stx curr_obj_number   ;save object we're dealing with
-            lda a:Objects+ObjectType::roompos_ptr,x
+; x            = dragon object (objnum_DragonRhindle, objnum_DragonYorgle, objnum_DragonGrundle)
+; objstore_ptr = dragon matrix
+; objdelta     = move speed
+MoveDragon: stx curr_obj_number   ;save which dragon we're dealing with
+            lda a:Objects+ObjectType::dynamic_ptr,x
             tax
-            lda z:DragonDynamicType::state,x  ;get the object's state
-            cmp #0                ;is it in state 00 (normal #1)
-            bne @MoveDragon_6     ;branch if not
-; dragon normal (state 1)
+            lda z:DragonDynamicType::state,x  ;get the dragon's state
+            cmp #DragonState::normal
+            bne @DragonStateNotNormal  ;branch if not
+@DragonStateNormal:
             lda SWCHB             ;read console switches
             and #ConsoleSwitchType::rightdifficulty ;check for P1 difficulty
-            beq @MoveDragon_2     ;if amateur branch
+            beq :+                ;if amateur branch
             lda #0                ;set hard - ignore nothing
-            jmp @MoveDragon_3
-@MoveDragon_2:
-            lda #SwordDynamic     ;set easy - ignore sword
-@MoveDragon_3:
-            sta MoveGameObjectArg_Difficulty
+            jmp :++
+:           lda #SwordDynamic     ;set easy - ignore sword
+:           sta MoveGameObjectArg_Difficulty
             stx MoveGameObjectArg_ObjNumber
             jsr MoveGameObject
-            lda curr_obj_number   ;get object
-            jsr PBCollision       ; and get the player-ball collision
-            beq @MoveDragon_4     ;if none then branch
+            lda curr_obj_number   ;get which dragon
+            jsr PBCollision       ; and check player-ball collision
+            beq @CheckSwordContact;branch if no collision
             lda SWCHB             ;get console switches
             rol a                 ;move P0 difficulty to
-            rol a                 ; bit 01 position
+            rol a                 ; bit 0 position
             rol a
-            and #1                ;mask it out
+            and #1                ;mask out everything else
             ora NumberCurrState   ;merge in the level number
             tay                   ;create lookup
             lda DragonDiff,y      ;get new state
-            sta z:DragonDynamicType::state,x   ;store as dragon's state (open mouthed)
+            sta z:DragonDynamicType::state,x   ;store as dragon's state (roaring)
             lda PrevManDynamic+ObjectDynamicType::xcoord
             sta z:DragonDynamicType::xcoord,x  ;get temp ball X coord and store as dragon's
             lda PrevManDynamic+ObjectDynamicType::ycoord
@@ -1330,52 +1332,49 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             sta sound_type
             lda #16
             sta sound_duration_counter
-@MoveDragon_4:
+@CheckSwordContact:
             stx portcullis_number
-            ldx curr_obj_number   ;get the object number
+            ldx curr_obj_number   ;get which dragon
             jsr FindObjHit        ;set if another object has hit the dragon
             ldx portcullis_number
-            cmp #$51              ;has the sword hit the dragon?
-            bne @MoveDragon_5     ;if not, branch
-            lda #1                ;set the state to 01 (dead)
+            cmp #objnum_Sword     ;has the sword hit the dragon?
+            bne :+                ;if not, branch
+            lda #DragonState::dead
             sta z:DragonDynamicType::state,x
             lda #NoiseType::dragon_died
             sta sound_type
             lda #16
             sta sound_duration_counter
-@MoveDragon_5:
-            jmp @MoveDragon_9     ;jump to finish
-@MoveDragon_6:
-            cmp #1                ;is it in state 01 (dead)
-            beq @MoveDragon_9     ;branch if so (return)
-            cmp #2                ;is it in state 02 (normal #2)
-            bne @MoveDragon_7     ;branch if not
-; normal dragon state 2 (eaten ball)
+:           jmp @DoneWithDragon   ;jump to finish
+@DragonStateNotNormal:
+            cmp #DragonState::dead
+            beq @DoneWithDragon   ;branch if so
+            cmp #DragonState::ateman
+            bne @DragonRoaring    ;branch if not
+@DragonStateAteMan:
             lda z:DragonDynamicType::room,x
             sta ManDynamic+ObjectDynamicType::room
             sta PrevManDynamic+ObjectDynamicType::room
             lda z:DragonDynamicType::xcoord,x
             clc
-            adc #3                ;adjust
+            adc #3                ;adjust +3x
             sta ManDynamic+ObjectDynamicType::xcoord
             sta PrevManDynamic+ObjectDynamicType::xcoord
             lda z:DragonDynamicType::ycoord,x
             sec
-            sbc #10               ;adjust
+            sbc #10               ;adjust -10y
             sta ManDynamic+ObjectDynamicType::ycoord
             sta PrevManDynamic+ObjectDynamicType::ycoord
-            jmp @MoveDragon_9
-
-; dragon roaring
-@MoveDragon_7:
+            jmp @DoneWithDragon
+@DragonRoaring:
             inc z:DragonDynamicType::state,x  ;increment the dragon's state
             lda z:DragonDynamicType::state,x  ;get its state
             cmp #$fc              ;is it near the end?
-            bcc @MoveDragon_9     ;if not, branch
-            lda curr_obj_number   ;get the dragon's number
+            bcc @DoneWithDragon   ;if not, branch
+            lda curr_obj_number   ;get which dragon
             jsr PBCollision       ;check if the ball is colliding
-            beq @MoveDragon_9     ;if not, branch
-            lda #2                ;set the state to state 02: eaten
+            beq @DoneWithDragon   ;if not, branch
+            lda #DragonState::ateman
             sta z:DragonDynamicType::state,x
             lda #NoiseType::man_eaten
             sta sound_type
@@ -1383,50 +1382,47 @@ MoveDragon: stx curr_obj_number   ;save object we're dealing with
             sta sound_duration_counter
             lda #155              ;get the maximum X coordinate
             cmp z:DragonDynamicType::xcoord,x  ;compare with the dragon's X coordinate
-            beq @MoveDragon_8
-            bcs @MoveDragon_8
-            sta z:DragonDynamicType::xcoord,x  ;if too large then use it
-@MoveDragon_8:
-            lda #23               ;set minimum Y coordinate
+            beq :+
+            bcs :+
+            sta z:DragonDynamicType::xcoord,x  ;cap it at max X coordinate
+:           lda #23               ;set minimum Y coordinate
             cmp z:DragonDynamicType::ycoord,x  ;compare with the dragon's Y coordinate
-            bcc @MoveDragon_9
-            sta z:DragonDynamicType::ycoord,x  ;if too small, set as dragon's Y coordinate
-@MoveDragon_9:
+            bcc @DoneWithDragon
+            sta z:DragonDynamicType::ycoord,x  ;cap it at min Y coordinate
+@DoneWithDragon:
             rts
 
-; dragon difficulty
+; dragon difficulty: index = NumberCurrentState + p0 difficulty
 DragonDiff: .byte $d0, $e8       ;level 1: Am, Pro
             .byte $f0, $f6       ;level 2: Am, Pro
             .byte $f0, $f6       ;level 3: Am, Pro
 
 ;; Move the bat
 MoveBat:    inc BlackBatDynamic+BlackBatDynamicType::state ;put bat in the next state
-            lda BlackBatDynamic+BlackBatDynamicType::state ;get the bat state
+            lda BlackBatDynamic+BlackBatDynamicType::state
             cmp #8                 ;has it reached the maximum?
             bne :+
             lda #0                 ;if so, reset the bat state
             sta BlackBatDynamic+BlackBatDynamicType::state
-:           lda BlackBatDynamic+BlackBatDynamicType::fedup ;get the bat fed-up value
+:           lda BlackBatDynamic+BlackBatDynamicType::fedup
             beq @BatFedup          ;if bat fed-up then branch
-            inc BlackBatDynamic+BlackBatDynamicType::fedup ;increment its value for next time
+            inc BlackBatDynamic+BlackBatDynamicType::fedup
             lda z:BlackBatDynamic+BlackBatDynamicType::move
-            ldx #BlackBatDynamic   ;position to bat
-            ldy #3                 ;get the bat's deltas
+            ldx #BlackBatDynamic
+            ldy #3                 ;get the bat's delta
             jsr MoveGroundObject   ;move the bat
             jmp @MoveCarriedObject ;update the bat's object
-
-; bat fed-up
 @BatFedup:  lda #BlackBatDynamic   ;store the bat's dynamic data address
             sta MoveGameObjectArg_ObjNumber
             lda #3                 ;set the bat's delta
             sta objdelta
-            lda #<BatMatrix        ;set the low address of object store
+            lda #<BatMatrix
             sta objstore_ptr
-            lda #>BatMatrix        ;set the high address of object store
+            lda #>BatMatrix
             sta objstore_ptr+1
-            lda BlackBatDynamic+BlackBatDynamicType::carriedobject  ;copy object being carried by Bat
+            lda BlackBatDynamic+BlackBatDynamicType::carriedobject
             sta MoveGameObjectArg_Difficulty
-            jsr MoveGameObject     ;move the Bat
+            jsr MoveGameObject
             ldy linked_obj_index
             lda (objstore_ptr),y   ;look up the object found in the table
             beq @MoveCarriedObject ;if nothing found then forget it
@@ -1434,7 +1430,7 @@ MoveBat:    inc BlackBatDynamic+BlackBatDynamicType::state ;put bat in the next 
             lda (objstore_ptr),y   ;get the object wanted
             tax
             lda z:ObjectDynamicType::room,x
-            cmp BlackBatDynamic    ;is it the same as the Bat's?
+            cmp BlackBatDynamic+BlackBatDynamicType::room  ;is it the same as the Bat's?
             bne @MoveCarriedObject ;if not forget it
 ; see if bat can pick up an object
             lda z:ObjectDynamicType::xcoord,x
@@ -1446,14 +1442,14 @@ MoveBat:    inc BlackBatDynamic+BlackBatDynamicType::state ;put bat in the next 
             bne @MoveCarriedObject ;if not, no pickup possible
             lda z:ObjectDynamicType::ycoord,x
             sec
-            sbc z:BlackBatDynamic+BlackBatDynamicType::ycoord  ;find the difference with the Bat's
-            clc                    ; Y coordinate
-            adc #4                 ;adjust
+            sbc z:BlackBatDynamic+BlackBatDynamicType::ycoord  ;find the difference with the Bat's Y coordinate
+            clc
+            adc #4                 ;adjust so Bat in middle of object
             and #%11111000         ;is the Bat within seven pixels?
             bne @MoveCarriedObject ;if not, no pickup possible
 ; get object
             stx BlackBatDynamic+BlackBatDynamicType::carriedobject  ;store object as being carried
-            lda #16               ;reset the bat fed-up time
+            lda #16                ;reset the bat fed-up time
             sta BlackBatDynamic+BlackBatDynamicType::fedup
 ; move object being carried by bat
 @MoveCarriedObject:
@@ -1462,13 +1458,13 @@ MoveBat:    inc BlackBatDynamic+BlackBatDynamicType::state ;put bat in the next 
             sta z:ObjectDynamicType::room,x
             lda z:BlackBatDynamic+BlackBatDynamicType::xcoord
             clc
-            adc #8                ;adjust to the right
+            adc #8                ;adjust to the right +8x
             sta z:ObjectDynamicType::xcoord,x
             lda z:BlackBatDynamic+BlackBatDynamicType::ycoord
             sta z:ObjectDynamicType::ycoord,x
             lda BlackBatDynamic+BlackBatDynamicType::carriedobject  ;get the object being carried by the bat
             ldy object_carried
-            cmp Objects+ObjectType::roompos_ptr,y  ;are they the same?
+            cmp Objects+ObjectType::dynamic_ptr,y  ;are they the same?
             bne :+               ;if not branch to exit
             lda #objnum_Null
             sta object_carried
@@ -1488,70 +1484,65 @@ BatMatrix:  .byte  BlackBatDynamic, ChaliceDynamic
 
 ;; Deal with portcullis and collisions
 Portals:    ldy #2                ;for each portcullis
-@Portals_2: ldx PortOffsets,y     ;get the portcullis' offset number
+@DoNext:    ldx PortOffsets,y     ;get the portcullis' offset number
             jsr FindObjHit        ;see if an object collided with it
             sta obj_collided_with
             cmp KeyOffsets,y      ;is it the associated key?
-            bne @Portals_3        ;if not then branch
+            bne :+                ;if not then branch
             tya                   ;get the portcullis number
             tax
             inc PortCurrStateBase,x  ;change its state to open it
-@Portals_3: tya                   ;get the portcullis number
+:           tya                   ;get the portcullis number
             tax
             lda PortCurrStateBase,x  ;get the state
-            cmp #$1c              ;is it closed?
-            beq @Portals_7        ;yes - then branch
+            cmp #PortState::closed
+            beq @IncPortState     ;yes - then branch
             lda PortOffsets,y     ;get portcullis number
             jsr PBCollision       ;get the player-ball collision
-            beq @Portals_4        ;if not then branch
-            lda #1                ;set the portcullis to closed
+            beq :+                ;if not then branch
+            lda #PortState::open
             sta PortCurrStateBase,x
             ldx #ManDynamic
-            jmp @Portals_6        ;put the man in the castle
-
-@Portals_4: lda obj_collided_with ;get the object that hit the portcullis
+            jmp @PutManInCastle
+:           lda obj_collided_with ;get the object that hit the portcullis
             cmp #objnum_Null
-            beq @Portals_5        ;if so, branch
+            beq :+                ;if so, branch
             ldx obj_collided_with
             sty portcullis_number
-            jsr GetObjectAddress  ;get its roompos information in dr_ptr using x
+            jsr GetObjectAddress  ;get its dynamic information in dr_ptr using x
             ldy portcullis_number
             ldx dr_ptr            ;get object's address
-            jmp @Portals_6        ;put object in the castle
-
-@Portals_5: jmp @Portals_7
-@Portals_6: lda EntryRoomOffsets,y ;look up castle entry room for this port
-            sta $00,x             ;make it the object's room
-            lda #$10              ;give the object a new Y coordinate
-            sta $02,x
-@Portals_7: tya                   ;get the portcullis number
+            jmp @PutManInCastle
+:           jmp @IncPortState
+@PutManInCastle:
+            lda EntryRoomOffsets,y ;look up castle entry room for this port
+            sta ObjectDynamicType::room,x  ;make it the object's room
+            lda #16               ;give the object a new Y coordinate
+            sta ObjectDynamicType::ycoord,x
+@IncPortState:
+            tya                   ;get the portcullis number
             tax
-            lda PortCurrStateBase,x  ;get its state
-            cmp #1                ;is it open?
-            beq @Portals_8        ; branch if yes
-            cmp #$1c              ;is it closed?
-            beq @Portals_8        ; branch if yes
-            inc PortCurrStateBase,x  ;increment its state
-            lda PortCurrStateBase,x  ;get the state
-            cmp #$38              ;has it reached the maximum state?
-            bne @Portals_8        ; branch if not
-            lda #1                ;set to closed state
+            lda PortCurrStateBase,x
+            cmp #PortState::open
+            beq :+                ; branch if yes
+            cmp #PortState::closed
+            beq :+                ; branch if yes
+            inc PortCurrStateBase,x
+            lda PortCurrStateBase,x
+            cmp #PortState::wraparound_max
+            bne :+                ; branch if not
+            lda #PortState::open  ;wrap around
             sta PortCurrStateBase,x
-@Portals_8: dey                   ;go to the next portcullis
-            bmi @Portals_Done     ;branch if finished
-            jmp @Portals_2        ;do next portcullis
-
-@Portals_Done:
+:           dey                   ;go to the next portcullis
+            bmi @PortalsDone      ;branch if finished
+            jmp @DoNext           ;do next portcullis
+@PortalsDone:
             rts
 
-PortOffsets:
-            .byte  $09, $12, $1b       ;portcullis #1, #2, #3
-
-KeyOffsets: .byte  $63, $6c, $75       ;keys (yellow, white, black)
-EntryRoomOffsets:
-            .byte  roomnum_YellowCastleEntry, roomnum_WhiteCastleEntry, roomnum_BlackCastleEntry
-CastleRoomOffsets:
-            .byte  roomnum_YellowCastle, roomnum_WhiteCastle, roomnum_BlackCastle
+PortOffsets:       .byte  objnum_PortCullis1,        objnum_PortCullis2,       objnum_PortCullis3
+KeyOffsets:        .byte  objnum_YellowKey,          objnum_WhiteKey,          objnum_BlackKey
+EntryRoomOffsets:  .byte  roomnum_YellowCastleEntry, roomnum_WhiteCastleEntry, roomnum_BlackCastleEntry
+CastleRoomOffsets: .byte  roomnum_YellowCastle,      roomnum_WhiteCastle,      roomnum_BlackCastle
 
 ;; Deal with magnet
 Mag:        lda z:MagnetDynamic+ObjectDynamicType::ycoord
@@ -1660,7 +1651,7 @@ RoarNoise:  lda sound_duration_counter
             lsr a                 ;divide by four
             lsr a
             clc
-            adc #$1c              ;set the frequency
+            adc #28               ;set the frequency
             sta AUDF0
             rts
 
@@ -1668,7 +1659,7 @@ EatenNoise:
             lda #6
             sta AUDC0             ;audio-control 0
             lda sound_duration_counter
-            eor #$0f
+            eor #%00001111
             sta AUDF0             ;audio-frequency 0
             lda sound_duration_counter
             lsr a
@@ -1682,7 +1673,7 @@ DragDieNoise:
             sta AUDC0
             lda sound_duration_counter  ;put the note count in
             sta AUDV0             ; the volume
-            eor #$1f
+            eor #%00011111
             sta AUDF0             ;flip the count as store
             rts                   ; as the frequency
 
@@ -1705,42 +1696,33 @@ BelowYellowCastle:  belowyellowcastle_gfxpf_data    ;line shared with above room
 SideCorridor:       sidecorridor_gfxpf_data
 NumberRoom:         numberroom_gfxpf_data
 
-; object #1 states (portcullis)
-PortStates:         .byte $04                ;state 04 - open
-                    .word :+++++++
-                    .byte $08
-                    .word :++++++
-                    .byte $0c
-                    .word :+++++
-                    .byte $10
-                    .word :++++
-                    .byte $14
-                    .word :+++
-                    .byte $18
-                    .word :++
-                    .byte $1c                ;state 1c - closed
-                    .word :+
-                    .byte $20
-                    .word :++
-                    .byte $24
-                    .word :+++
-                    .byte $28
-                    .word :++++
-                    .byte $2c
-                    .word :+++++
-                    .byte $30
-                    .word :++++++
-                    .byte $ff                ;state ff - open
-                    .word :+++++++
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-:                   port_gfxgr_data
-                    port_gfxgr_data
-                    .byte 0
+PortStates:         .byte 4                 ; open
+                    .word PortGfx+12
+                    .byte 8
+                    .word PortGfx+10
+                    .byte 12
+                    .word PortGfx+8
+                    .byte 16
+                    .word PortGfx+6
+                    .byte 20
+                    .word PortGfx+4
+                    .byte 24
+                    .word PortGfx+2
+                    .byte 28                ; closed
+                    .word PortGfx
+                    .byte 32
+                    .word PortGfx+2
+                    .byte 36
+                    .word PortGfx+4
+                    .byte 40
+                    .word PortGfx+6
+                    .byte 44
+                    .word PortGfx+8
+                    .byte 48
+                    .word PortGfx+10
+                    .byte $ff               ; open
+                    .word PortGfx+12
+PortGfx:            port_gfxgr_data
 
 TwoExitRoom:        twoexitroom_gfxpf_data
 BlueMazeTop:        bluemazetop_gfxpf_data
@@ -1759,8 +1741,8 @@ PortDynamic3:       .byte roomnum_BlackCastle,  77, 49
 
 SurroundCurrState:  .byte 0
 SurroundStates:     .byte $ff
-                    .word :+
-:                   surround_gfxgr_data
+                    .word SurroundGfx
+SurroundGfx:        surround_gfxgr_data
 
 RedMaze1:           redmaze1_gfxpf_data original
 RedMazeBottom:      redmazebottom_gfxpf_data        ;line shared with room above
@@ -1774,76 +1756,76 @@ BlackMazeEntry:     blackmazeentry_gfxpf_data       ;line shared with room above
 
 BridgeCurrState:    .byte 0
 BridgeStates:       .byte $ff
-                    .word :+
-:                   bridge_gfxgr_data
+                    .word BridgeGfx
+BridgeGfx:          bridge_gfxgr_data
 
-GfxNum1:            number1_gfxgr_data
+Number1Gfx:         number1_gfxgr_data
 
 KeyCurrState:       .byte 0
 KeyStates:          .byte $ff
-                    .word :+
-:                   key_gfxgr_data
+                    .word KeyGfx
+KeyGfx:             key_gfxgr_data
 
-GfxNum2:            number2_gfxgr_data
-GfxNum3:            number3_gfxgr_data
+Number2Gfx:         number2_gfxgr_data
+Number3Gfx:         number3_gfxgr_data
 
-BatStates:          .byte $03
-                    .word :+
+BatStates:          .byte 3
+                    .word Bat1Gfx
                     .byte $ff
-                    .word :++
-:                   bat1_gfxgr_data
-:                   bat2_gfxgr_data
+                    .word Bat2Gfx
+Bat1Gfx:            bat1_gfxgr_data
+Bat2Gfx:            bat2_gfxgr_data
 
-DragonStates:       .byte $00
-                    .word :+
-                    .byte $01
-                    .word :+++
-                    .byte $02
-                    .word :+
-                    .byte $ff
-                    .word :++
-:                   dragonnormal_gfxgr_data 0
-:                   dragonroar_gfxgr_data   0
-:                   dragondead_gfxgr_data   0
+DragonStates:       .byte DragonState::normal
+                    .word DragonNormGfx
+                    .byte DragonState::dead
+                    .word DragonDeadGfx
+                    .byte DragonState::ateman
+                    .word DragonNormGfx
+                    .byte DragonState::roaring
+                    .word DragonRoarGfx
+DragonNormGfx:      dragonnormal_gfxgr_data 0
+DragonRoarGfx:      dragonroar_gfxgr_data   0
+DragonDeadGfx:      dragondead_gfxgr_data   0
 
 SwordCurrState:     .byte 0
 SwordStates:        .byte $ff
-                    .word :+
-:                   sword_gfxgr_data 0
+                    .word SwordGfx
+SwordGfx:           sword_gfxgr_data 0
 
 DotCurrState:       .byte 0
 DotStates:          .byte $ff
-                    .word :+
-:                   dot_gfxgr_data
+                    .word DotGfx
+DotGfx:             dot_gfxgr_data
 
-:                   easteregg_gfxgr_data norm
+EasterEggGfx:       easteregg_gfxgr_data norm
 EasterEggDynamic:   .byte roomnum_SecretRoom, 80, 105
 EasterEggCurrState: .byte 0
 EasterEggStates:    .byte $ff
-                    .word :-
+                    .word EasterEggGfx
 
 ChaliceCurrState:   .byte 0
 ChaliceStates:      .byte $ff
-                    .word :+
-:                   chalice_gfxgr_data
+                    .word ChaliceGfx
+ChaliceGfx:         chalice_gfxgr_data
 
 NullCurrState:      .byte 0
 NullStates:         .byte $ff
-                    .word :+
-:                   null_gfxgr_data
+                    .word NullGfx
+NullGfx:            null_gfxgr_data
 
 NumberDynamic:      .byte roomnum_NumberRoom, 80, 64
-NumberStates:       .byte $01
-                    .word GfxNum1
-                    .byte $03
-                    .word GfxNum2
+NumberStates:       .byte 1
+                    .word Number1Gfx
+                    .byte 3
+                    .word Number2Gfx
                     .byte $ff
-                    .word GfxNum3
+                    .word Number3Gfx
 
 MagnetCurrState:    .byte 0
 MagnetStates:       .byte $ff
-                    .word :+
-:                   magnet_gfxgr_data
+                    .word MagnetGfx1
+MagnetGfx1:         magnet_gfxgr_data
 
 
 Rooms:
