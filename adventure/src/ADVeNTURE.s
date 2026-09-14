@@ -18,7 +18,7 @@
 
 ; 2600 Memory Map
 ; ---------------
-; 0000-007f TIA     Mirrored every $100 [$000-$900]
+; 0000-007f TIA Mirrored every $100 [$000-$900]
 ; 0080-00ff PIA RAM Mirrored every $100 [$080-$980]
 ; 0180-01ff PIA Stack location, grows downward from $1ff, mapped into PIA RAM $80-$ff
 ; 0280-02ff PIA
@@ -263,7 +263,6 @@ PrintDisplay:
             sta scan_line             ;3 24
                                       ;  24*3=72 color clocks
 
-Missing_WSYNC_Here:
             ; Possible missing WSYNC here, spills over instead:
             ;  92 timer expiration occurs mid scanline (35.4 lines, .4*228=92)
             ; +36 max additional time needed to recognize expiration
@@ -287,23 +286,23 @@ Missing_WSYNC_Here:
 ; Picture start (line offset 40)
             lda #0
             sta VBLANK                ;clear any vertical blank
-            jmp PrintPlayer0
+            jmp @PrintPlayer0
 
 ; Print Player1 (Object2)
-PrintPlayer1:
+@PrintPlayer1:
             lda scan_line
             sec                       ;have we reached Object2's Y coordinate?
             sbc player1pos+ObjectPosType::ycoord
             sta WSYNC                 ;wait for horizontal blank
-            bpl PrintPlayer0          ;if not, branch
+            bpl @PrintPlayer0         ;if not, branch
             ldy p1gfx_offset          ;get the Player1 definition index
             lda (p1gfx_base),y        ;get the next Player1 definition byte
             sta GRP1                  ; and display
-            beq PrintPlayer0          ;if zero then definition finished
+            beq @PrintPlayer0         ;if zero then definition finished
             inc p1gfx_offset          ;goto next Player1 definition byte
 
 ; Print Player0 (Object1), Ball (Man), and Room
-PrintPlayer0:
+@PrintPlayer0:
             ldx #0
             lda scan_line
             sec                      ;have we reached the Object1's Y coordinate?
@@ -341,9 +340,9 @@ PrintPlayer0:
 :           dec scan_line            ;goto next scan line
             lda scan_line
             cmp #8                   ;have we reached to within 8 scanlines of the bottom?
-            bpl PrintPlayer1         ;if not, branch
+            bpl @PrintPlayer1        ;if not, branch
             sta VBLANK               ;turn on VBLANK
-            jmp :++
+            jmp @PrintDone
 
 ; Print Player0 (Object1) and Ball (Man)
 :           sta WSYNC                ;wait for horizontal blank
@@ -351,7 +350,7 @@ PrintPlayer0:
             stx GRP0                 ;display Player0 definition byte (if wanted)
             jmp :--
 
-:           lda #0
+@PrintDone: lda #0
             sta GRP1                 ;clear any graphics for Player1
             sta GRP0                 ;clear any graphics for Player0
             lda #32                  ;set clock interval to 32*(64*3)/228 = 26.9 scanlines
@@ -674,11 +673,11 @@ MaintainInputCounter:
 
 ; change color if necessary
 ChangeColor:
+            .assert (ColorType::flash & 2) = 2, error, "Bad ColorType::flash value."
             lsr a                 ;if bit 0 of the color is set
             bcc :+                ; branch if clear, no flash
 
-           lda input_counter     ;flash
-           .assert (ColorType::flash & 2) = 2, error, "Bad ColorType::flash value."
+            lda input_counter     ;flash
 
 :           ldy input_counter+1   ;get the high input counter
             bpl :+                ;if console/joystick moved recently then branch
@@ -1888,22 +1887,22 @@ PortStates:         .byte 4                 ; open
                     .byte $ff               ; open
                     .word PortGfx+12
 PortGfx:
- .byte $fe  ; 1111111.
- .byte $aa  ; 1.1.1.1.
- .byte $fe  ; 1111111.
- .byte $aa  ; 1.1.1.1.
- .byte $fe  ; 1111111.
- .byte $aa  ; 1.1.1.1.
- .byte $fe  ; 1111111.
- .byte $aa  ; 1.1.1.1.
- .byte $fe  ; 1111111.
- .byte $aa  ; 1.1.1.1.
- .byte $fe  ; 1111111.
- .byte $aa  ; 1.1.1.1.
- .byte $fe  ; 1111111.
- .byte $aa  ; 1.1.1.1.
- .byte $fe  ; 1111111.
- .byte $aa  ; 1.1.1.1.
+ .byte %11111110 ; XXXXXXX
+ .byte %10101010 ; X X X X
+ .byte %11111110 ; XXXXXXX
+ .byte %10101010 ; X X X X
+ .byte %11111110 ; XXXXXXX
+ .byte %10101010 ; X X X X
+ .byte %11111110 ; XXXXXXX
+ .byte %10101010 ; X X X X
+ .byte %11111110 ; XXXXXXX
+ .byte %10101010 ; X X X X
+ .byte %11111110 ; XXXXXXX
+ .byte %10101010 ; X X X X
+ .byte %11111110 ; XXXXXXX
+ .byte %10101010 ; X X X X
+ .byte %11111110 ; XXXXXXX
+ .byte %10101010 ; X X X X
  .byte 0
  .assert >(*-1) = >(PortGfx), error, "Sprite spans page."
 
@@ -2103,30 +2102,30 @@ BridgeCurrState:    .byte 0
 BridgeStates:       .byte $ff
                     .word BridgeGfx
 BridgeGfx:
- .byte $c3  ; 11....11
- .byte $c3  ; 11....11
- .byte $c3  ; 11....11
- .byte $c3  ; 11....11
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $42  ; .1....1.
- .byte $c3  ; 11....11
- .byte $c3  ; 11....11
- .byte $c3  ; 11....11
- .byte $c3  ; 11....11
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %01000010 ;  X    X
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
  .byte 0
  .assert >(*-1) = >(BridgeGfx), error, "Sprite spans page."
 
@@ -2152,23 +2151,23 @@ KeyGfx:
  .assert >(*-1) = >(KeyGfx), error, "Sprite spans page."
 
 Number2Gfx:
- .byte $0e  ; ....111.
- .byte $11  ; ...1...1
- .byte $01  ; .......1
- .byte $02  ; ......1.
- .byte $04  ; .....1..
- .byte $08  ; ....1...
- .byte $1f  ; ...11111
+ .byte %00001110 ;     XXX
+ .byte %00010001 ;    X   X
+ .byte %00000001 ;        X
+ .byte %00000010 ;       X
+ .byte %00000100 ;      X
+ .byte %00001000 ;     X
+ .byte %00011111 ;    XXXXX
  .byte 0
  .assert >(*-1) = >(Number2Gfx), error, "Sprite spans page."
 Number3Gfx:
- .byte $0e  ; ....111.
- .byte $11  ; ...1...1
- .byte $01  ; .......1
- .byte $06  ; .....11.
- .byte $01  ; .......1
- .byte $11  ; ...1...1
- .byte $0e  ; ....111.
+ .byte %00001110 ;     XXX
+ .byte %00010001 ;    X   X
+ .byte %00000001 ;        X
+ .byte %00000110 ;      XX
+ .byte %00000001 ;        X
+ .byte %00010001 ;    X   X
+ .byte %00001110 ;     XXX
  .byte 0
  .assert >(*-1) = >(Number3Gfx), error, "Sprite spans page."
 
@@ -2177,27 +2176,27 @@ BatStates:          .byte 3
                     .byte $ff
                     .word Bat2Gfx
 Bat1Gfx:
- .byte $81  ; 1......1
- .byte $81  ; 1......1
- .byte $c3  ; 11....11
- .byte $c3  ; 11....11
- .byte $ff  ; 11111111
- .byte $5a  ; .1.11.1.
- .byte $66  ; .11..11.
+ .byte %10000001 ; X      X
+ .byte %10000001 ; X      X
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11111111 ; XXXXXXXX
+ .byte %01011010 ;  X XX X
+ .byte %01100110 ;  XX  XX
  .byte 0
  .assert >(*-1) = >(Bat1Gfx), error, "Sprite spans page."
 Bat2Gfx:
- .byte $01  ; .......1
- .byte $80  ; 1.......
- .byte $01  ; .......1
- .byte $80  ; 1.......
- .byte $3c  ; ..1111..
- .byte $5a  ; .1.11.1.
- .byte $66  ; .11..11.
- .byte $c3  ; 11....11
- .byte $81  ; 1......1
- .byte $81  ; 1......1
- .byte $81  ; 1......1
+ .byte %00000001 ;        X
+ .byte %10000000 ; X
+ .byte %00000001 ;        X
+ .byte %10000000 ; X
+ .byte %00111100 ;   XXXX
+ .byte %01011010 ;  X XX X
+ .byte %01100110 ;  XX  XX
+ .byte %11000011 ; XX    XX
+ .byte %10000001 ; X      X
+ .byte %10000001 ; X      X
+ .byte %10000001 ; X      X
  .byte 0
  .assert >(*-1) = >(Bat2Gfx), error, "Sprite spans page."
 
@@ -2210,140 +2209,140 @@ DragonStates:       .byte DragonState::normal
                     .byte DragonState::roaring
                     .word DragonRoarLeftGfx
 DragonNormLeftGfx:
- .byte $06     ; .....11.
- .byte $0f     ; ....1111
- .byte $f3     ; 1111..11
- .byte $fe     ; 1111111.
- .byte $0e     ; ....111.
- .byte $04     ; .....1..
- .byte $04     ; .....1..
- .byte $1e     ; ...1111.
- .byte $3f     ; ..111111
- .byte $7f     ; .1111111
- .byte $e3     ; 111...11
- .byte $c3     ; 11....11
- .byte $c3     ; 11....11
- .byte $c7     ; 11...111
- .byte $ff     ; 11111111
- .byte $3c     ; ..1111..
- .byte $08     ; ....1...
- .byte $8f     ; 1...1111
- .byte $e1     ; 111....1
- .byte $3f     ; ..111111
+ .byte %00000110 ;      XX
+ .byte %00001111 ;     XXXX
+ .byte %11110011 ; XXXX  XX
+ .byte %11111110 ; XXXXXXX
+ .byte %00001110 ;     XXX
+ .byte %00000100 ;      X
+ .byte %00000100 ;      X
+ .byte %00011110 ;    XXXX
+ .byte %00111111 ;   XXXXXX
+ .byte %01111111 ;  XXXXXXX
+ .byte %11100011 ; XXX   XX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11000111 ; XX   XXX
+ .byte %11111111 ; XXXXXXXX
+ .byte %00111100 ;   XXXX
+ .byte %00001000 ;     X
+ .byte %10001111 ; X   XXXX
+ .byte %11100001 ; XXX    X
+ .byte %00111111 ;   XXXXXX
  .byte 0
  .assert >(*-1) = >(DragonNormLeftGfx), error, "Sprite spans page."
 DragonRoarLeftGfx:
- .byte $80     ; 1.......
- .byte $40     ; .1......
- .byte $26     ; ..1..11.
- .byte $1f     ; ...11111
- .byte $0b     ; ....1.11
- .byte $0e     ; ....111.
- .byte $1e     ; ...1111.
- .byte $24     ; ..1..1..
- .byte $44     ; .1...1..
- .byte $8e     ; 1...111.
- .byte $1e     ; ...1111.
- .byte $3f     ; ..111111
- .byte $7f     ; .1111111
- .byte $7f     ; .1111111
- .byte $7f     ; .1111111
- .byte $7f     ; .1111111
- .byte $3e     ; ..11111.
- .byte $1c     ; ...111..
- .byte $08     ; ....1...
- .byte $f8     ; 11111...
- .byte $80     ; 1.......
- .byte $e0     ; 111.....
+ .byte %10000000 ; X
+ .byte %01000000 ;  X
+ .byte %00100110 ;   X  XX
+ .byte %00011111 ;    XXXXX
+ .byte %00001011 ;     X XX
+ .byte %00001110 ;     XXX
+ .byte %00011110 ;    XXXX
+ .byte %00100100 ;   X  X
+ .byte %01000100 ;  X   X
+ .byte %10001110 ; X   XXX
+ .byte %00011110 ;    XXXX
+ .byte %00111111 ;   XXXXXX
+ .byte %01111111 ;  XXXXXXX
+ .byte %01111111 ;  XXXXXXX
+ .byte %01111111 ;  XXXXXXX
+ .byte %01111111 ;  XXXXXXX
+ .byte %00111110 ;   XXXXX
+ .byte %00011100 ;    XXX
+ .byte %00001000 ;     X
+ .byte %11111000 ; XXXXX
+ .byte %10000000 ; X
+ .byte %11100000 ; XXX
  .byte 0
  .assert >(*-1) = >(DragonRoarLeftGfx), error, "Sprite spans page."
 DragonDeadLeftGfx:
- .byte $0c     ; ....11..
- .byte $0c     ; ....11..
- .byte $0c     ; ....11..
- .byte $0e     ; ....111.
- .byte $1b     ; ...11.11
- .byte $7f     ; .1111111
- .byte $ce     ; 11..111.
- .byte $80     ; 1.......
- .byte $fc     ; 111111..
- .byte $fe     ; 1111111.
- .byte $fe     ; 1111111.
- .byte $7e     ; .111111.
- .byte $78     ; .1111...
- .byte $20     ; ..1.....
- .byte $6e     ; .11.111.
- .byte $42     ; .1....1.
- .byte $7e     ; .111111.
+ .byte %00001100 ;     XX
+ .byte %00001100 ;     XX
+ .byte %00001100 ;     XX
+ .byte %00001110 ;     XXX
+ .byte %00011011 ;    XX XX
+ .byte %01111111 ;  XXXXXXX
+ .byte %11001110 ; XX  XXX
+ .byte %10000000 ; X
+ .byte %11111100 ; XXXXXX
+ .byte %11111110 ; XXXXXXX
+ .byte %11111110 ; XXXXXXX
+ .byte %01111110 ;  XXXXXX
+ .byte %01111000 ;  XXXX
+ .byte %00100000 ;   X
+ .byte %01101110 ;  XX XXX
+ .byte %01000010 ;  X    X
+ .byte %01111110 ;  XXXXXX
  .byte 0
  .assert >(*-1) = >(DragonDeadLeftGfx), error, "Sprite spans page."
 .if 0=1
 DragonNormRightGfx:
- .byte $60     ; .11.....
- .byte $f0     ; 1111....
- .byte $cf     ; 11..1111
- .byte $7f     ; .1111111
- .byte $70     ; .111....
- .byte $20     ; ..1.....
- .byte $20     ; ..1.....
- .byte $78     ; .1111...
- .byte $fc     ; 111111..
- .byte $fe     ; 1111111.
- .byte $c7     ; 11...111
- .byte $c3     ; 11....11
- .byte $c3     ; 11....11
- .byte $e3     ; 111...11
- .byte $ff     ; 11111111
- .byte $3c     ; ..1111..
- .byte $10     ; ...1....
- .byte $f1     ; 1111...1
- .byte $87     ; 1....111
- .byte $fc     ; 111111..
+ .byte %01100000 ;  XX
+ .byte %11110000 ; XXXX
+ .byte %11001111 ; XX  XXXX
+ .byte %01111111 ;  XXXXXXX
+ .byte %01110000 ;  XXX
+ .byte %00100000 ;   X
+ .byte %00100000 ;   X
+ .byte %01111000 ;  XXXX
+ .byte %11111100 ; XXXXXX
+ .byte %11111110 ; XXXXXXX
+ .byte %11000111 ; XX   XXX
+ .byte %11000011 ; XX    XX
+ .byte %11000011 ; XX    XX
+ .byte %11100011 ; XXX   XX
+ .byte %11111111 ; XXXXXXXX
+ .byte %00111100 ;   XXXX
+ .byte %00010000 ;    X
+ .byte %11110001 ; XXXX   X
+ .byte %10000111 ; X    XXX
+ .byte %11111100 ; XXXXXX
  .byte 0
  .assert >(*-1) = >(DragonNormRightGfx), error, "Sprite spans page."
 DragonRoarRightGfx:
- .byte $01     ; .......1
- .byte $02     ; ......1.
- .byte $64     ; .11..1..
- .byte $f8     ; 11111...
- .byte $d0     ; 11.1....
- .byte $70     ; .111....
- .byte $78     ; .1111...
- .byte $24     ; ..1..1..
- .byte $22     ; ..1...1.
- .byte $71     ; .111...1
- .byte $78     ; .1111...
- .byte $fc     ; 111111..
- .byte $fe     ; 1111111.
- .byte $fe     ; 1111111.
- .byte $fe     ; 1111111.
- .byte $fe     ; 1111111.
- .byte $7c     ; .11111..
- .byte $38     ; ..111...
- .byte $10     ; ...1....
- .byte $1f     ; ...11111
- .byte $01     ; .......1
- .byte $07     ; .....111
+ .byte %00000001 ;        X
+ .byte %00000010 ;       X
+ .byte %01100100 ;  XX  X
+ .byte %11111000 ; XXXXX
+ .byte %11010000 ; XX X
+ .byte %01110000 ;  XXX
+ .byte %01111000 ;  XXXX
+ .byte %00100100 ;   X  X
+ .byte %00100010 ;   X   X
+ .byte %01110001 ;  XXX   X
+ .byte %01111000 ;  XXXX
+ .byte %11111100 ; XXXXXX
+ .byte %11111110 ; XXXXXXX
+ .byte %11111110 ; XXXXXXX
+ .byte %11111110 ; XXXXXXX
+ .byte %11111110 ; XXXXXXX
+ .byte %01111100 ;  XXXXX
+ .byte %00111000 ;   XXX
+ .byte %00010000 ;    X
+ .byte %00011111 ;    XXXXX
+ .byte %00000001 ;        X
+ .byte %00000111 ;      XXX
  .byte 0
  .assert >(*-1) = >(DragonRoarRightGfx), error, "Sprite spans page."
 DragonDeadRightGfx:
- .byte $30     ; ..11....
- .byte $30     ; ..11....
- .byte $30     ; ..11....
- .byte $70     ; .111....
- .byte $d8     ; 11.11...
- .byte $fe     ; 1111111.
- .byte $73     ; .111..11
- .byte $01     ; .......1
- .byte $3f     ; ..111111
- .byte $7f     ; .1111111
- .byte $7f     ; .1111111
- .byte $7e     ; .111111.
- .byte $1e     ; ...1111.
- .byte $04     ; .....1..
- .byte $76     ; .111.11.
- .byte $42     ; .1....1.
- .byte $7e     ; .111111.
+ .byte %00110000 ;   XX
+ .byte %00110000 ;   XX
+ .byte %00110000 ;   XX
+ .byte %01110000 ;  XXX
+ .byte %11011000 ; XX XX
+ .byte %11111110 ; XXXXXXX
+ .byte %01110011 ;  XXX  XX
+ .byte %00000001 ;        X
+ .byte %00111111 ;   XXXXXX
+ .byte %01111111 ;  XXXXXXX
+ .byte %01111111 ;  XXXXXXX
+ .byte %01111110 ;  XXXXXX
+ .byte %00011110 ;    XXXX
+ .byte %00000100 ;      X
+ .byte %01110110 ;  XXX XX
+ .byte %01000010 ;  X    X
+ .byte %01111110 ;  XXXXXX
  .byte 0
  .assert >(*-1) = >(DragonDeadRightGfx), error, "Sprite spans page."
 .endif
@@ -2359,6 +2358,16 @@ SwordLeftGfx:
  .byte %00100000 ;   X
  .byte 0
  .assert >(*-1) = >(SwordLeftGfx), error, "Sprite spans page."
+.if 0=1
+SwordRightGfx:
+ .byte %00000100 ;      X
+ .byte %00000010 ;       X
+ .byte %11111111 ; XXXXXXXX
+ .byte %00000010 ;       X
+ .byte %00000100 ;      X
+ .byte 0
+ .assert >(*-1) = >(SwordRightGfx), error, "Sprite spans page."
+.endif
 
 DotCurrState:       .byte 0
 DotStates:          .byte $ff
@@ -2369,197 +2378,197 @@ DotGfx:
 
 EasterEggGfx:
  .if 1=1
- .byte $f0 ; 1111....
- .byte $80 ; 1.......
- .byte $80 ; 1.......
- .byte $80 ; 1.......
- .byte $f4 ; 1111.1..
- .byte $04 ; .....1..
- .byte $87 ; 1....111
- .byte $e5 ; 111..1.1
- .byte $87 ; 1....111
- .byte $80 ; 1.......
- .byte $05 ; .....1.1
- .byte $e5 ; 111..1.1
- .byte $a7 ; 1..1.111
- .byte $e1 ; 111....1
- .byte $87 ; 1....111
- .byte $e0 ; 111.....
- .byte $01 ; .......1
- .byte $e0 ; 111.....
- .byte $a0 ; 1..1....
- .byte $f0 ; 1111....
- .byte $01 ; .......1
- .byte $40 ; .1......
- .byte $e0 ; 111.....
- .byte $40 ; .1......
- .byte $40 ; .1......
- .byte $40 ; .1......
- .byte $01 ; .......1
- .byte $e0 ; 111.....
- .byte $a0 ; 1.1.....
- .byte $e0 ; 111.....
- .byte $80 ; 1.......
- .byte $e0 ; 111.....
- .byte $01 ; .......1
- .byte $20 ; ..1.....
- .byte $20 ; ..1.....
- .byte $e0 ; 111.....
- .byte $a0 ; 1.1.....
- .byte $e0 ; 111.....
- .byte $01 ; .......1
- .byte $01 ; .......1
- .byte $01 ; .......1
- .byte $88 ; 1...1...
- .byte $a8 ; 1.1.1...
- .byte $a8 ; 1.1.1...
- .byte $a8 ; 1.1.1...
- .byte $f8 ; 11111...
- .byte $01 ; .......1
- .byte $e0 ; 111.....
- .byte $a0 ; 1.1.....
- .byte $f0 ; 1111....
- .byte $01 ; .......1
- .byte $80 ; 1.......
- .byte $e0 ; 111.....
- .byte $8f ; 1...1111
- .byte $89 ; 1...1..1
- .byte $0f ; ....1111
- .byte $8a ; 1...1.1.
- .byte $e9 ; 111.1..1
- .byte $80 ; 1.......
- .byte $8e ; 1...111.
- .byte $0a ; ....1.1.
- .byte $ee ; 111.111.
- .byte $a0 ; 1.1.....
- .byte $e8 ; 111.1...
- .byte $88 ; 1...1...
- .byte $ee ; 111.111.
- .byte $0a ; ....1.1.
- .byte $8e ; 1...111.
- .byte $e0 ; 111.....
- .byte $a4 ; 1.1..1..
- .byte $a4 ; 1.1..1..
- .byte $04 ; .....1..
- .byte $80 ; 1.......
- .byte $08 ; ....1...
- .byte $0e ; ....111.
- .byte $0a ; ....1.1.
- .byte $0a ; ....1.1.
- .byte $80 ; 1.......
- .byte $0e ; ....111.
- .byte $0a ; ....1.1.
- .byte $0e ; ....111.
- .byte $08 ; ....1...
- .byte $0e ; ....111.
- .byte $80 ; 1.......
- .byte $04 ; .....1..
- .byte $0e ; ....111.
- .byte $04 ; .....1..
- .byte $04 ; .....1..
- .byte $04 ; .....1..
- .byte $80 ; 1.......
- .byte $04 ; .....1..
- .byte $0e ; ....111.
- .byte $04 ; .....1..
- .byte $04 ; .....1..
- .byte $04 ; .....1..
+ .byte %11110000 ; XXXX
+ .byte %10000000 ; X
+ .byte %10000000 ; X
+ .byte %10000000 ; X
+ .byte %11110100 ; XXXX X
+ .byte %00000100 ;      X
+ .byte %10000111 ; X    XXX
+ .byte %11100101 ; XXX  X X
+ .byte %10000111 ; X    XXX
+ .byte %10000000 ; X
+ .byte %00000101 ;      X X
+ .byte %11100101 ; XXX  X X
+ .byte %10100111 ; X X  XXX
+ .byte %11100001 ; XXX    X
+ .byte %10000111 ; X    XXX
+ .byte %11100000 ; XXX
+ .byte %00000001 ;        X
+ .byte %11100000 ; XXX
+ .byte %10100000 ; X X
+ .byte %11110000 ; XXXX
+ .byte %00000001 ;        X
+ .byte %01000000 ;  X
+ .byte %11100000 ; XXX
+ .byte %01000000 ;  X
+ .byte %01000000 ;  X
+ .byte %01000000 ;  X
+ .byte %00000001 ;        X
+ .byte %11100000 ; XXX
+ .byte %10100000 ; X X
+ .byte %11100000 ; XXX
+ .byte %10000000 ; X
+ .byte %11100000 ; XXX
+ .byte %00000001 ;        X
+ .byte %00100000 ;   X
+ .byte %00100000 ;   X
+ .byte %11100000 ; XXX
+ .byte %10100000 ; X X
+ .byte %11100000 ; XXX
+ .byte %00000001 ;        X
+ .byte %00000001 ;        X
+ .byte %00000001 ;        X
+ .byte %10001000 ; X   X
+ .byte %10101000 ; X X X
+ .byte %10101000 ; X X X
+ .byte %10101000 ; X X X
+ .byte %11111000 ; XXXXX
+ .byte %00000001 ;        X
+ .byte %11100000 ; XXX
+ .byte %10100000 ; X X
+ .byte %11110000 ; XXXX
+ .byte %00000001 ;        X
+ .byte %10000000 ; X
+ .byte %11100000 ; XXX
+ .byte %10001111 ; X   XXXX
+ .byte %10001001 ; X   X  X
+ .byte %00001111 ;     XXXX
+ .byte %10001010 ; X   X X
+ .byte %11101001 ; XXX X  X
+ .byte %10000000 ; X
+ .byte %10001110 ; X   XXX
+ .byte %00001010 ;     X X
+ .byte %11101110 ; XXX XXX
+ .byte %10100000 ; X X
+ .byte %11101000 ; XXX X
+ .byte %10001000 ; X   X
+ .byte %11101110 ; XXX XXX
+ .byte %00001010 ;     X X
+ .byte %10001110 ; X   XXX
+ .byte %11100000 ; XXX
+ .byte %10100100 ; X X  X
+ .byte %10100100 ; X X  X
+ .byte %00000100 ;      X
+ .byte %10000000 ; X
+ .byte %00001000 ;     X
+ .byte %00001110 ;     XXX
+ .byte %00001010 ;     X X
+ .byte %00001010 ;     X X
+ .byte %10000000 ; X
+ .byte %00001110 ;     XXX
+ .byte %00001010 ;     X X
+ .byte %00001110 ;     XXX
+ .byte %00001000 ;     X
+ .byte %00001110 ;     XXX
+ .byte %10000000 ; X
+ .byte %00000100 ;      X
+ .byte %00001110 ;     XXX
+ .byte %00000100 ;      X
+ .byte %00000100 ;      X
+ .byte %00000100 ;      X
+ .byte %10000000 ; X
+ .byte %00000100 ;      X
+ .byte %00001110 ;     XXX
+ .byte %00000100 ;      X
+ .byte %00000100 ;      X
+ .byte %00000100 ;      X
  .else
- .byte $44 ;  X   X
- .byte $6c ;  XX XX
- .byte $54 ;  X X X
- .byte $44 ;  X   X
- .byte $44 ;  X   X
- .byte $01 ;        X
- .byte $10 ;    X
- .byte $10 ;    X
- .byte $10 ;    X
- .byte $10 ;    X
- .byte $01 ;        X
- .byte $48 ;  X  X
- .byte $50 ;  X X
- .byte $60 ;  XX
- .byte $50 ;  X X
- .byte $48 ;  X  X
- .byte $01 ;        X
- .byte $78 ;  XXXX
- .byte $40 ;  X
- .byte $78 ;  XXXX
- .byte $40 ;  X
- .byte $78 ;  XXXX
- .byte $01 ;        X
- .byte $44 ;  X   X
- .byte $6c ;  XX XX
- .byte $54 ;  X X X
- .byte $44 ;  X   X
- .byte $44 ;  X   X
- .byte $01 ;        X
- .byte $48 ;  X  X
- .byte $48 ;  X  X
- .byte $78 ;  XXXX
- .byte $01 ;        X
- .byte $40 ;  X
- .byte $70 ;  XXX
- .byte $40 ;  X
- .byte $40 ;  X
- .byte $01 ;        X
- .byte $78 ;  XXXX
- .byte $48 ;  X  X
- .byte $78 ;  XXXX
- .byte $40 ;  X
- .byte $40 ;  X
- .byte $01 ;        X
- .byte $40 ;  X
- .byte $40 ;  X
- .byte $78 ;  XXXX
- .byte $48 ;  X  X
- .byte $48 ;  X  X
- .byte $01 ;        X
- .byte $48 ;  X  X
- .byte $48 ;  X  X
- .byte $78 ;  XXXX
- .byte $08 ;     X
- .byte $78 ;  XXXX
- .byte $01 ;        X
- .byte $44 ;  X   X
- .byte $44 ;  X   X
- .byte $54 ;  X X X
- .byte $6c ;  XX XX
- .byte $44 ;  X   X
- .byte $01 ;        X
- .byte $78 ;  XXXX
- .byte $48 ;  X  X
- .byte $7c ;  XXXXX
- .byte $01 ;        X
- .byte $78 ;  XXXX
- .byte $40 ;  X
- .byte $78 ;  XXXX
- .byte $08 ;     X
- .byte $78 ;  XXXX
- .byte $01 ;        X
- .byte $48 ;  X  X
- .byte $48 ;  X  X
- .byte $78 ;  XXXX
- .byte $48 ;  X  X  .
- .byte $48 ;  X  X
- .byte $01 ;        X
- .byte $78 ;  XXXX
- .byte $48 ;  X  X
- .byte $78 ;  XXXX
- .byte $40 ;  X
- .byte $78 ;  XXXX
- .byte $01 ;        X
- .byte $40 ;  X
- .byte $70 ;  XXX
- .byte $40 ;  X
- .byte $40 ;  X
- .byte $01 ;        X
- .byte $78 ;  XXXX
- .byte $48 ;  X  X
- .byte $78 ;  XXXX
- .byte $40 ;  X
- .byte $78 ; .XXXX
- .byte $01 ;        X
+ .byte %01000100 ;  X   X
+ .byte %01101100 ;  XX XX
+ .byte %01010100 ;  X X X
+ .byte %01000100 ;  X   X
+ .byte %01000100 ;  X   X
+ .byte %00000001 ;        X
+ .byte %00010000 ;    X
+ .byte %00010000 ;    X
+ .byte %00010000 ;    X
+ .byte %00010000 ;    X
+ .byte %00000001 ;        X
+ .byte %01001000 ;  X  X
+ .byte %01010000 ;  X X
+ .byte %01100000 ;  XX
+ .byte %01010000 ;  X X
+ .byte %01001000 ;  X  X
+ .byte %00000001 ;        X
+ .byte %01111000 ;  XXXX
+ .byte %01000000 ;  X
+ .byte %01111000 ;  XXXX
+ .byte %01000000 ;  X
+ .byte %01111000 ;  XXXX
+ .byte %00000001 ;        X
+ .byte %01000100 ;  X   X
+ .byte %01101100 ;  XX XX
+ .byte %01010100 ;  X X X
+ .byte %01000100 ;  X   X
+ .byte %01000100 ;  X   X
+ .byte %00000001 ;        X
+ .byte %01001000 ;  X  X
+ .byte %01001000 ;  X  X
+ .byte %01111000 ;  XXXX
+ .byte %00000001 ;        X
+ .byte %01000000 ;  X
+ .byte %01110000 ;  XXX
+ .byte %01000000 ;  X
+ .byte %01000000 ;  X
+ .byte %00000001 ;        X
+ .byte %01111000 ;  XXXX
+ .byte %01001000 ;  X  X
+ .byte %01111000 ;  XXXX
+ .byte %01000000 ;  X
+ .byte %01000000 ;  X
+ .byte %00000001 ;        X
+ .byte %01000000 ;  X
+ .byte %01000000 ;  X
+ .byte %01111000 ;  XXXX
+ .byte %01001000 ;  X  X
+ .byte %01001000 ;  X  X
+ .byte %00000001 ;        X
+ .byte %01001000 ;  X  X
+ .byte %01001000 ;  X  X
+ .byte %01111000 ;  XXXX
+ .byte %00001000 ;     X
+ .byte %01111000 ;  XXXX
+ .byte %00000001 ;        X
+ .byte %01000100 ;  X   X
+ .byte %01000100 ;  X   X
+ .byte %01010100 ;  X X X
+ .byte %01101100 ;  XX XX
+ .byte %01000100 ;  X   X
+ .byte %00000001 ;        X
+ .byte %01111000 ;  XXXX
+ .byte %01001000 ;  X  X
+ .byte %01111100 ;  XXXXX
+ .byte %00000001 ;        X
+ .byte %01111000 ;  XXXX
+ .byte %01000000 ;  X
+ .byte %01111000 ;  XXXX
+ .byte %00001000 ;     X
+ .byte %01111000 ;  XXXX
+ .byte %00000001 ;        X
+ .byte %01001000 ;  X  X
+ .byte %01001000 ;  X  X
+ .byte %01111000 ;  XXXX
+ .byte %01001000 ;  X  X
+ .byte %01001000 ;  X  X
+ .byte %00000001 ;        X
+ .byte %01111000 ;  XXXX
+ .byte %01001000 ;  X  X
+ .byte %01111000 ;  XXXX
+ .byte %01000000 ;  X
+ .byte %01111000 ;  XXXX
+ .byte %00000001 ;        X
+ .byte %01000000 ;  X
+ .byte %01110000 ;  XXX
+ .byte %01000000 ;  X
+ .byte %01000000 ;  X
+ .byte %00000001 ;        X
+ .byte %01111000 ;  XXXX
+ .byte %01001000 ;  X  X
+ .byte %01111000 ;  XXXX
+ .byte %01000000 ;  X
+ .byte %01111000 ; .XXXX
+ .byte %00000001 ;        X
  .endif
  .byte 0
  .assert >(*-1) = >(EasterEggGfx), error, "Sprite spans page."
@@ -2847,140 +2856,140 @@ roomnum_upfrom_TopEntryRoom = (* - RoomDiffs) | $80
 
 
 Objects:
-objnum_InvisibleSurround := (* - Objects) ; 00
+objnum_InvisibleSurround := (* - Objects)
     .word SurroundDynamic
     .word SurroundCurrState
     .word SurroundStates
     .byte ColorType::orange, BWColorType::lightergray
     .byte 7
 
-objnum_PortCullis1 := (* - Objects) ; 01
+objnum_PortCullis1 := (* - Objects)
     .word PortDynamic1
     .word PortCurrStateBase+0
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-objnum_PortCullis2 := (* - Objects) ; 02
+objnum_PortCullis2 := (* - Objects)
     .word PortDynamic2
     .word PortCurrStateBase+1
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-objnum_PortCullis3 := (* - Objects) ; 03
+objnum_PortCullis3 := (* - Objects)
     .word PortDynamic3
     .word PortCurrStateBase+2
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-objnum_EasterEgg := (* - Objects) ; 04
+objnum_EasterEgg := (* - Objects)
     .word EasterEggDynamic
     .word EasterEggCurrState
     .word EasterEggStates
     .byte ColorType::flash, BWColorType::black
     .byte 0
 
-objnum_Number := (* - Objects) ; 05
+objnum_Number := (* - Objects)
     .word NumberDynamic
     .word NumberCurrState
     .word NumberStates
     .byte ColorType::green, BWColorType::black
     .byte 0
 
-objnum_DragonRhindle := (* - Objects) ; 06
+objnum_DragonRhindle := (* - Objects)
     .word RedDragonDynamic
     .word RedDragonDynamic+DragonDynamicType::state
     .word DragonStates
     .byte ColorType::red, BWColorType::white
     .byte 0
 
-objnum_DragonYorgle := (* - Objects) ; 07
+objnum_DragonYorgle := (* - Objects)
     .word YellowDragonDynamic
     .word YellowDragonDynamic+DragonDynamicType::state
     .word DragonStates
     .byte ColorType::yellow, BWColorType::darkgray
     .byte 0
 
-objnum_DragonGrundle := (* - Objects) ; 08
+objnum_DragonGrundle := (* - Objects)
     .word GreenDragonDynamic
     .word GreenDragonDynamic+DragonDynamicType::state
     .word DragonStates
     .byte ColorType::green, BWColorType::black
     .byte 0
 
-objnum_Sword := (* - Objects) ; 09
+objnum_Sword := (* - Objects)
     .word SwordDynamic
     .word SwordCurrState
     .word SwordStates
     .byte ColorType::yellow, BWColorType::darkgray
     .byte 0
 
-objnum_Bridge := (* - Objects) ; 0a
+objnum_Bridge := (* - Objects)
     .word BridgeDynamic
     .word BridgeCurrState
     .word BridgeStates
     .byte ColorType::purple, BWColorType::darkergray
     .byte 7
 
-objnum_YellowKey := (* - Objects) ; 0b
+objnum_YellowKey := (* - Objects)
     .word YellowKeyDynamic
     .word KeyCurrState
     .word KeyStates
     .byte ColorType::yellow, BWColorType::darkgray
     .byte 0
 
-objnum_WhiteKey := (* - Objects) ; 0c
+objnum_WhiteKey := (* - Objects)
     .word WhiteKeyDynamic
     .word KeyCurrState
     .word KeyStates
     .byte ColorType::white, BWColorType::white
     .byte 0
 
-objnum_BlackKey := (* - Objects) ; 0d
+objnum_BlackKey := (* - Objects)
     .word BlackKeyDynamic
     .word KeyCurrState
     .word KeyStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-objnum_BlackBatKnubberrub := (* - Objects) ; 0e
+objnum_BlackBatKnubberrub := (* - Objects)
     .word BlackBatDynamic
     .word BlackBatDynamic+BlackBatDynamicType::state
     .word BatStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-objnum_BlackDot := (* - Objects) ; 0f
+objnum_BlackDot := (* - Objects)
     .word DotDynamic
     .word DotCurrState
     .word DotStates
     .byte ColorType::invisible, BWColorType::invisible
     .byte 0
 
-objnum_HolyGrail := (* - Objects) ; 10 enchanted chalice
+objnum_EnchantedChalice := (* - Objects)
     .word ChaliceDynamic
     .word ChaliceCurrState
     .word ChaliceStates
     .byte ColorType::flash, BWColorType::darkgray
     .byte 0
 
-objnum_Magnet := (* - Objects) ; 11
+objnum_Magnet := (* - Objects)
     .word MagnetDynamic
     .word MagnetCurrState
     .word MagnetStates
     .byte ColorType::black, BWColorType::darkgray
     .byte 0
 
-objnum_Null := (* - Objects) ; 12
+objnum_Null := (* - Objects)
     .word BridgeDynamic
     .word NullCurrState
     .word NullStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-; 6502 vectors
+; 6502 startup vectors
 .segment "VECTORS"
     .word StartGame
     .word StartGame
