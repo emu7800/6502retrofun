@@ -183,7 +183,7 @@ dr_ptr:                         .word 0     ; pointer for dereferencing
 object1:                        .byte 0
 object2:                        .byte 0
 obj_collided_with:              .byte 0
-unread1:                        .byte 0     ; unread byte
+unused1:                        .byte 0
 cached_joystick:                .byte 0
 portcullis_number:              .byte 0
 direction_wanted:               .byte 0
@@ -269,7 +269,7 @@ PrintDisplay:
             sta scan_line             ;3 24
                                       ;  24*3=72 color clocks
 
-            ; Possible missing WSYNC here, spills over instead:
+            ; Near end of horizontal line here:
             ;  92 timer expiration occurs mid scanline (35.4 lines, .4*228=92)
             ; +36 max additional time needed to recognize expiration
             ; +72 initializing pxgfx_offsets and other stuff
@@ -463,12 +463,12 @@ SetupRoomPrint:
             jsr CacheObjects      ;get next two objects to display
 ; sort out their order
             lda object1
-            cmp #objnum_InvisibleSurround
+            cmp #objoffset_InvisibleSurround
             beq SwapPrintObjects  ; then branch to swap (we want it was Player1)
-            cmp #objnum_Bridge
+            cmp #objoffset_Bridge
             bne SetupObjectPrint  ; swap the objects (we want it as Player1)
             lda object2
-            cmp #objnum_InvisibleSurround
+            cmp #objoffset_InvisibleSurround
             beq SetupObjectPrint  ; (we want it as Player1)
 SwapPrintObjects:
             lda object1
@@ -577,14 +577,14 @@ SetupObjectPrint:
 ; fill cache with two objects in this room
 CacheObjects:
             ldy obj_counter       ;get last object
-            lda #objnum_Null
+            lda #objoffset_Null
             sta object1
             sta object2
 MoveNextObject:
             tya
             clc                   ;goto the next object to check
             adc #.sizeof(ObjectType)
-            cmp #objnum_Null
+            cmp #objoffset_Null
             bcc GetObjectsInfo
             lda #0                ;if so, wrap to zero
 GetObjectsInfo:
@@ -598,7 +598,7 @@ GetObjectsInfo:
             cmp ManDynamic+ObjectDynamicType::room  ; is it in this room?
             bne CheckForMoreObjects ;if not lets try next object (branch)
             lda object1             ;check first slot
-            cmp #objnum_Null
+            cmp #objoffset_Null
             bne StoreObjectToPrint  ; then branch
             sty object1             ;store this object's number to print
             jmp CheckForMoreObjects ; and try for more
@@ -804,7 +804,7 @@ CheckGameStart:
             sta YellowDragonDynamic+DragonDynamicType::state    ;set the yellow dragon's state to OK
             sta GreenDragonDynamic+DragonDynamicType::state     ;set the green dragon's state to OK
             sta sound_duration_counter  ;set the note count to zero
-            lda #objnum_Null
+            lda #objoffset_Null
             sta object_carried
 
 NotReset:   lda SWCHB             ;get the console switches
@@ -847,7 +847,7 @@ SetupRoomObjects:
             jsr PrintDisplay      ;display rooms and objects
 :           lda #0                ;signal that the game has started
             sta is_game_complete
-            lda #objnum_Null
+            lda #objoffset_Null
             sta object_carried
 NotSelect:
             lda SWCHB             ;store the current console switches
@@ -978,7 +978,7 @@ PlayerCollision:
             cpy #2                ;are we checking for the bridge?
             bne ReadStick         ;if not, branch
             lda object_carried
-            cmp #objnum_Bridge
+            cmp #objoffset_Bridge
             beq ReadStick
             lda ManDynamic+ObjectDynamicType::room
             cmp BridgeDynamic     ;is the bridge in this room?
@@ -1038,7 +1038,7 @@ PickupPutdown:
             and #$c0              ;merge out previous presses
             cmp #$40              ;was it previously pressed?
             bne :+                ;if not branch
-            lda #objnum_Null
+            lda #objoffset_Null
             cmp object_carried
             beq :+                ;branch if nothing is carried
             sta object_carried    ;drop object
@@ -1048,7 +1048,7 @@ PickupPutdown:
             sta sound_duration_counter
 :
             lda #$ff              ;FIXME: remove
-            sta unread1           ;FIXME: remove
+            sta unused1           ;FIXME: remove
 
 ; check for collision
             lda CXP0FB
@@ -1107,7 +1107,7 @@ NoObject:   rts                   ; no collision
 ;; Move the carried object
 MoveCarriedObject:
             ldx object_carried
-            cpx #objnum_Null
+            cpx #objoffset_Null
             beq :+
             jsr GetObjectAddress  ;get its roompos information in dr_ptr using x
             ldy #ObjectDynamicType::room
@@ -1293,7 +1293,7 @@ FindObjHit: lda CXPPMM              ;get player0-player1
             beq :++                 ;if so, branch
             cpx object2             ;is object 2 the one being hit?
             beq :+++                ;if so, branch
-:           lda #objnum_Null
+:           lda #objoffset_Null
             rts
 :           lda object2             ;therefore select the other
             rts
@@ -1378,7 +1378,7 @@ MoveRedDragon:
             sta objstore_ptr+1
             lda #3
             sta objdelta
-            ldx #objnum_DragonRhindle
+            ldx #objoffset_DragonRhindle
             jsr MoveDragon
             rts
 
@@ -1397,7 +1397,7 @@ MoveYellowDragon:
             sta objstore_ptr+1
             lda #2
             sta objdelta
-            ldx #objnum_DragonYorgle
+            ldx #objoffset_DragonYorgle
             jsr MoveDragon
             rts
 
@@ -1416,7 +1416,7 @@ MoveGreenDragon:
             sta objstore_ptr+1
             lda #2
             sta objdelta
-            ldx #objnum_DragonGrundle
+            ldx #objoffset_DragonGrundle
             jsr MoveDragon
             rts
 
@@ -1430,7 +1430,7 @@ GreenDragMatrix:
             .byte 0
 
 ; Move a dragon
-; x            = dragon object (objnum_DragonRhindle, objnum_DragonYorgle, objnum_DragonGrundle)
+; x            = dragon object (objoffset_DragonRhindle, objoffset_DragonYorgle, objoffset_DragonGrundle)
 ; objstore_ptr = dragon matrix
 ; objdelta     = move speed
 MoveDragon: stx curr_obj_number   ;save which dragon we're dealing with
@@ -1474,7 +1474,7 @@ MoveDragon: stx curr_obj_number   ;save which dragon we're dealing with
             ldx curr_obj_number   ;get which dragon
             jsr FindObjHit        ;set if another object has hit the dragon
             ldx portcullis_number
-            cmp #objnum_Sword     ;has the sword hit the dragon?
+            cmp #objoffset_Sword     ;has the sword hit the dragon?
             bne :+                ;if not, branch
             lda #DragonState::dead
             sta z:DragonDynamicType::state,x
@@ -1603,7 +1603,7 @@ MoveBat:    inc BlackBatDynamic+BlackBatDynamicType::state ;put bat in the next 
             ldy object_carried
             cmp Objects+ObjectType::dynamic_ptr,y  ;are they the same?
             bne :+               ;if not branch to exit
-            lda #objnum_Null
+            lda #objoffset_Null
             sta object_carried
 :           rts
 
@@ -1642,7 +1642,7 @@ Portals:    ldy #2                ;for each portcullis
             ldx #ManDynamic
             jmp @PutManInCastle
 :           lda obj_collided_with ;get the object that hit the portcullis
-            cmp #objnum_Null
+            cmp #objoffset_Null
             beq :+                ;if so, branch
             ldx obj_collided_with
             sty portcullis_number
@@ -1676,8 +1676,8 @@ Portals:    ldy #2                ;for each portcullis
 @PortalsDone:
             rts
 
-PortOffsets:       .byte  objnum_PortCullis1,        objnum_PortCullis2,       objnum_PortCullis3
-KeyOffsets:        .byte  objnum_YellowKey,          objnum_WhiteKey,          objnum_BlackKey
+PortOffsets:       .byte  objoffset_PortCullis1,     objoffset_PortCullis2,    objoffset_PortCullis3
+KeyOffsets:        .byte  objoffset_YellowKey,       objoffset_WhiteKey,       objoffset_BlackKey
 EntryRoomOffsets:  .byte  roomnum_YellowCastleEntry, roomnum_WhiteCastleEntry, roomnum_BlackCastleEntry
 CastleRoomOffsets: .byte  roomnum_YellowCastle,      roomnum_WhiteCastle,      roomnum_BlackCastle
 
@@ -1828,10 +1828,10 @@ GetObjectNoise:
             lda sound_duration_counter
             jmp :-                ;make same noise as drop
 
-;.res 14, 0 ; Padding may be needed to satisfy the next invariant.
+;.res 14, 0 ; Padding may be needed to satisfy the following invariant.
 
 ; The alignment of sprites is carefully done to prevent crossing of page boundaries.
-.assert (* & $fff) = $aa0, error, "Sprites do not start at the expected offset."
+.assert (* & $fff) = $aa0, error, "Sprite area does not start at the expected offset."
 
 LeftOfName:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
@@ -1842,6 +1842,7 @@ LeftOfName:
  .byte $00, $00, $00   ; 11.................. ..................11
  .byte $00, $00, $00   ; 11.................. ..................11
  ;byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111 ; uses next room's line
+ .assert >(*-1) = >(LeftOfName), error, "Sprite spans page."
 BelowYellowCastle:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
@@ -1851,6 +1852,7 @@ BelowYellowCastle:
  .byte $00, $00, $00   ; .................... ....................
  .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .assert >(*-1) = >(BelowYellowCastle), error, "Sprite spans page."
 SideCorridor:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
@@ -1860,6 +1862,7 @@ SideCorridor:
  .byte $00, $00, $00   ; .................... ....................
  .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .assert >(*-1) = >(SideCorridor), error, "Sprite spans page."
 NumberRoom:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
@@ -1869,8 +1872,7 @@ NumberRoom:
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
-
-.assert >(*-1) = >(LeftOfName), error, "Sprite(s) spans page."
+ .assert >(*-1) = >(NumberRoom), error, "Sprite spans page."
 
 PortStates:         .byte 4                 ; open
                     .word PortGfx+12
@@ -1927,6 +1929,7 @@ TwoExitRoom:
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .assert >(*-1) = >(TwoExitRoom), error, "Sprite spans page."
 BlueMazeTop:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
@@ -1936,6 +1939,7 @@ BlueMazeTop:
  .byte $f0, $ff, $3f   ; 111111111111111111.. ..111111111111111111
  .byte $00, $30, $30   ; ........11......11.. ..11......11........
  .byte $f0, $33, $3f   ; 111111..11..111111.. ..111111..11..111111
+ .assert >(*-1) = >(BlueMazeTop), error, "Sprite spans page."
 BlueMaze1:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
@@ -1945,6 +1949,7 @@ BlueMaze1:
  .byte $f0, $3f, $cf   ; 1111111111..1111..11 11..1111..1111111111
  .byte $00, $30, $cc   ; ........11....11..11 11..11....11........
  .byte $f0, $f3, $cc   ; 111111..1111..11..11 11..11..1111..111111
+ .assert >(*-1) = >(BlueMaze1), error, "Sprite spans page."
 BlueMazeBottom:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $f3, $0c   ; 111111..1111..11.... ....11..1111..111111
@@ -1954,6 +1959,7 @@ BlueMazeBottom:
  .byte $f0, $f0, $00   ; 1111....1111........ ........1111....1111
  .byte $00, $30, $00   ; ........11.......... ..........11........
  .byte $f0, $ff, $ff   ; 111111..1111..11..11 11..11..1111..111111
+ .assert >(*-1) = >(BlueMazeBottom), error, "Sprite spans page."
 BlueMazeCenter:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $33, $3f   ; 111111..11..111111.. ..111111..11..111111
@@ -1963,6 +1969,7 @@ BlueMazeCenter:
  .byte $f0, $33, $3c   ; 111111..11....1111.. ..1111....11..111111
  .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
  .byte $f0, $f3, $0c   ; 111111..1111..11.... ....11..1111..111111
+ .assert >(*-1) = >(BlueMazeCenter), error, "Sprite spans page."
 BlueMazeEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $f3, $cc   ; 111111..1111..11..11 11..11..1111..111111
@@ -1972,6 +1979,7 @@ BlueMazeEntry:
  .byte $f0, $f3, $ff   ; 111111..111111111111 111111111111..111111
  .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .assert >(*-1) = >(BlueMazeEntry), error, "Sprite spans page."
 MazeMiddle:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $cc   ; 111111111111..11..11 11..11..111111111111
@@ -1981,6 +1989,7 @@ MazeMiddle:
  .byte $f0, $f3, $fc   ; 111111..1111..111111 111111..1111..111111
  .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
  ;byte $f0, $33, $cc   ; 111111..11....11..11 11..11....11..111111 ; uses next room's line
+ .assert >(*-1) = >(MazeMiddle), error, "Sprite spans page."
 MazeSide:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $33, $cc   ; 111111..11....11..11 11..11....11..111111
@@ -1990,6 +1999,7 @@ MazeSide:
  .byte $00, $3f, $c3   ; ....111111..11....11 11....11..111111....
  .byte $00, $30, $c0   ; ........11........11 11........11........
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .assert >(*-1) = >(MazeSide), error, "Sprite spans page."
 MazeEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
@@ -1999,6 +2009,7 @@ MazeEntry:
  .byte $f0, $f3, $c0   ; 111111..1111......11 11......1111..111111
  .byte $00, $03, $c0   ; ....11............11 11............11....
  .byte $f0, $ff, $cc   ; 11111111111111111111 11111111111111111111
+ .assert >(*-1) = >(MazeEntry), error, "Sprite spans page."
 CastleDef:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $fe, $15   ; 11111111111....1.1.1 1.1.1....11111111111
@@ -2008,8 +2019,7 @@ CastleDef:
  .byte $30, $00, $3f   ; 11......... 111111.. ..111111..........11
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
-
-.assert >(*-1) = >(TwoExitRoom), error, "Sprite(s) spans page."
+ .assert >(*-1) = >(CastleDef), error, "Sprite spans page."
 
 PortDynamic1:       .byte roomnum_YellowCastle, 77, 49
 PortDynamic2:       .byte roomnum_WhiteCastle,  77, 49
@@ -2035,6 +2045,7 @@ RedMaze1:
  .byte $f0, $ff, $0c   ; 111111111111..11.... ....11..111111111111
  .byte $f0, $03, $cc   ; 111111........11..11 11..11........111111
  ;byte $f0, $33, $cf   ; 111111..11..1111..11 11..1111..11..111111 ; uses next room's line
+ .assert >(*-1) = >(RedMaze1), error, "Sprite spans page."
 RedMazeBottom:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $33, $cf   ; 111111..11..1111..11 11..1111..11..111111
@@ -2044,6 +2055,7 @@ RedMazeBottom:
  .byte $f0, $ff, $00   ; 111111111111........ ........111111111111
  .byte $00, $00, $00   ; 11.................. ..................11
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .assert >(*-1) = >(RedMazeBottom), error, "Sprite spans page."
 RedMazeTop:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
@@ -2053,6 +2065,7 @@ RedMazeTop:
  .byte $f0, $33, $ff   ; 111111..11..11111111 11111111..11..111111
  .byte $f0, $33, $00   ; 111111..11.......... ..........11..111111
  ;byte $f0, $3f, $0c   ; 1111111111....11.... ....11....1111111111 ; uses next room's line
+ .assert >(*-1) = >(RedMazeTop), error, "Sprite spans page."
 WhiteCastleEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $3f, $0c   ; 1111111111....11.... ....11....1111111111
@@ -2062,6 +2075,7 @@ WhiteCastleEntry:
  .byte $f0, $30, $00   ; 1111....11.......... ..........11....1111
  .byte $00, $30, $00   ; ........11.......... ..........11........
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
+ .assert >(*-1) = >(WhiteCastleEntry), error, "Sprite spans page."
 TopEntryRoom:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
@@ -2071,6 +2085,7 @@ TopEntryRoom:
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
+ .assert >(*-1) = >(TopEntryRoom), error, "Sprite spans page."
 BlackMaze1:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $f0, $ff   ; 1111....111111111111 111111111111....1111
@@ -2080,6 +2095,7 @@ BlackMaze1:
  .byte $30, $3f, $ff   ; 11..111111..11111111 11111111..111111..11
  .byte $00, $30, $00   ; ........11.......... ..........11........
  ;byte $f0, $f0, $ff   ; 1111....111111111111 111111111111....1111 ; uses next room's line
+ .assert >(*-1) = >(BlackMaze1), error, "Sprite spans page."
 BlackMaze3:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF0hPF1-----PF2-----
  .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
@@ -2089,6 +2105,7 @@ BlackMaze3:
  .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
  .byte $30, $00, $03   ; 11................11 11................11
  .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
+ .assert >(*-1) = >(BlackMaze3), error, "Sprite spans page."
 BlackMaze2:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF0hPF1-----PF2-----
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
@@ -2098,6 +2115,7 @@ BlackMaze2:
  .byte $f0, $0f, $ff   ; 1111....111111111111 1111....111111111111
  .byte $00, $0f, $c0   ; ........111111...... ........111111......
  ;byte $30, $cf, $cc   ; 11..11..111111..11.. 11..11..111111..11.. ; uses next room's line
+ .assert >(*-1) = >(BlackMaze2), error, "Sprite spans page."
 BlackMazeEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $30, $cf, $cc   ; 11..1111..11..11..11 11..11..11..1111..11
@@ -2107,8 +2125,7 @@ BlackMazeEntry:
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
-
-.assert >(*-1) = >(RedMaze1), error, "Sprite(s) spans page."
+ .assert >(*-1) = >(BlackMazeEntry), error, "Sprite spans page."
 
 BridgeCurrState:    .byte 0
 BridgeStates:       .byte $ff
@@ -2868,133 +2885,133 @@ roomnum_upfrom_TopEntryRoom = (* - RoomDiffs) | $80
 
 
 Objects:
-objnum_InvisibleSurround := (* - Objects)
+objoffset_InvisibleSurround = (* - Objects)
     .word SurroundDynamic
     .word SurroundCurrState
     .word SurroundStates
     .byte ColorType::orange, BWColorType::lightergray
     .byte 7
 
-objnum_PortCullis1 := (* - Objects)
+objoffset_PortCullis1 = (* - Objects)
     .word PortDynamic1
     .word PortCurrStateBase+0
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-objnum_PortCullis2 := (* - Objects)
+objoffset_PortCullis2 = (* - Objects)
     .word PortDynamic2
     .word PortCurrStateBase+1
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-objnum_PortCullis3 := (* - Objects)
+objoffset_PortCullis3 = (* - Objects)
     .word PortDynamic3
     .word PortCurrStateBase+2
     .word PortStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-objnum_EasterEgg := (* - Objects)
+objoffset_EasterEgg = (* - Objects)
     .word EasterEggDynamic
     .word EasterEggCurrState
     .word EasterEggStates
     .byte ColorType::flash, BWColorType::black
     .byte 0
 
-objnum_Number := (* - Objects)
+objoffset_Number = (* - Objects)
     .word NumberDynamic
     .word NumberCurrState
     .word NumberStates
     .byte ColorType::green, BWColorType::black
     .byte 0
 
-objnum_DragonRhindle := (* - Objects)
+objoffset_DragonRhindle = (* - Objects)
     .word RedDragonDynamic
     .word RedDragonDynamic+DragonDynamicType::state
     .word DragonStates
     .byte ColorType::red, BWColorType::white
     .byte 0
 
-objnum_DragonYorgle := (* - Objects)
+objoffset_DragonYorgle = (* - Objects)
     .word YellowDragonDynamic
     .word YellowDragonDynamic+DragonDynamicType::state
     .word DragonStates
     .byte ColorType::yellow, BWColorType::darkgray
     .byte 0
 
-objnum_DragonGrundle := (* - Objects)
+objoffset_DragonGrundle = (* - Objects)
     .word GreenDragonDynamic
     .word GreenDragonDynamic+DragonDynamicType::state
     .word DragonStates
     .byte ColorType::green, BWColorType::black
     .byte 0
 
-objnum_Sword := (* - Objects)
+objoffset_Sword = (* - Objects)
     .word SwordDynamic
     .word SwordCurrState
     .word SwordStates
     .byte ColorType::yellow, BWColorType::darkgray
     .byte 0
 
-objnum_Bridge := (* - Objects)
+objoffset_Bridge = (* - Objects)
     .word BridgeDynamic
     .word BridgeCurrState
     .word BridgeStates
     .byte ColorType::purple, BWColorType::darkergray
     .byte 7
 
-objnum_YellowKey := (* - Objects)
+objoffset_YellowKey = (* - Objects)
     .word YellowKeyDynamic
     .word KeyCurrState
     .word KeyStates
     .byte ColorType::yellow, BWColorType::darkgray
     .byte 0
 
-objnum_WhiteKey := (* - Objects)
+objoffset_WhiteKey = (* - Objects)
     .word WhiteKeyDynamic
     .word KeyCurrState
     .word KeyStates
     .byte ColorType::white, BWColorType::white
     .byte 0
 
-objnum_BlackKey := (* - Objects)
+objoffset_BlackKey = (* - Objects)
     .word BlackKeyDynamic
     .word KeyCurrState
     .word KeyStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-objnum_BlackBatKnubberrub := (* - Objects)
+objoffset_BlackBatKnubberrub = (* - Objects)
     .word BlackBatDynamic
     .word BlackBatDynamic+BlackBatDynamicType::state
     .word BatStates
     .byte ColorType::black, BWColorType::black
     .byte 0
 
-objnum_BlackDot := (* - Objects)
+objoffset_BlackDot = (* - Objects)
     .word DotDynamic
     .word DotCurrState
     .word DotStates
     .byte ColorType::invisible, BWColorType::invisible
     .byte 0
 
-objnum_EnchantedChalice := (* - Objects)
+objoffset_EnchantedChalice = (* - Objects)
     .word ChaliceDynamic
     .word ChaliceCurrState
     .word ChaliceStates
     .byte ColorType::flash, BWColorType::darkgray
     .byte 0
 
-objnum_Magnet := (* - Objects)
+objoffset_Magnet = (* - Objects)
     .word MagnetDynamic
     .word MagnetCurrState
     .word MagnetStates
     .byte ColorType::black, BWColorType::darkgray
     .byte 0
 
-objnum_Null := (* - Objects)
+objoffset_Null = (* - Objects)
     .word BridgeDynamic
     .word NullCurrState
     .word NullStates
