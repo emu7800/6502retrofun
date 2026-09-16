@@ -248,28 +248,24 @@ PrintDisplay:
             sbc #4                    ;and adjust it by four scan lines
             sta man_y2                ; for printing (so Y coordinate specifies middle)
 
-:           lda INTIM                 ;3  3   wait until middle of line offset 38
-            bne :-                    ;3  6
-                                      ;   6*3=18 color clocks minimum, 36 typ/max
+; Spin until middle of line offset 34 (64t timer previously set to 42, 35.4 lines)
 
-            lda #0                    ;2  2
-            sta p0gfx_offset          ;3  5   set Player0 definition index
-            sta p1gfx_offset          ;3  8   set Player1 definition index
-            sta roomgfx_offset        ;3 11   set room definition index
-            sta GRP1                  ;3 14   clear any graphics for Player1
-            lda #1                    ;2 16
-            sta VDELP1                ;3 19   vertically delay Player1
-            lda #104                  ;2 21   set counter (208 actual scanlines)
-            sta scan_line             ;3 24
-                                      ;  24*3=72 color clocks
+:           lda INTIM
+            bne :-
 
-            ; Near end of horizontal line here:
-            ;  92 timer expiration occurs mid scanline (35.4 lines, .4*228=92)
-            ; +36 max additional time needed to recognize expiration
-            ; +72 initializing pxgfx_offsets and other stuff
-            ; 200 < 228
+; Line offset 34, 162-174 color clocks
 
-; Print top line of room (line offset 39)
+            lda #0
+            sta p0gfx_offset          ;set Player0 definition index
+            sta p1gfx_offset          ;set Player1 definition index
+            sta roomgfx_offset        ;set room definition index
+            sta GRP1                  ;clear any graphics for Player1
+            lda #1
+            sta VDELP1                ;vertically delay Player1
+            lda #104                  ;(104-7)*2 + 35 = 229 => 192 visible scanlines
+            sta scan_line
+
+; Set top line of room, spills over to line offset 35
             ldy roomgfx_offset        ;get room definition index
             lda (roomgfx_base),y      ;get first room definition byte
             sta PF0                   ; and display
@@ -283,9 +279,9 @@ PrintDisplay:
             sty roomgfx_offset        ;save for next time
             sta WSYNC                 ;wait for horizontal blank
 
-; Picture start (line offset 40)
+; Picture start, line offset 36
             lda #0
-            sta VBLANK                ;clear any vertical blank
+            sta VBLANK                ;turn off VBLANK
             jmp @PrintPlayer0
 
 ; Print Player1 (Object2)
@@ -341,6 +337,9 @@ PrintDisplay:
             lda scan_line
             cmp #8                   ;have we reached to within 8 scanlines of the bottom?
             bpl @PrintPlayer1        ;if not, branch
+
+; Picture end, line offset 229 at color clock 63
+            sta WSYNC
             sta VBLANK               ;turn on VBLANK
             jmp @PrintDone
 
@@ -393,20 +392,28 @@ PosSpriteX: ldy #2              ;start with 2*15=30 color clocks
             rts
 
 ;; Handle vertical sync
-DoVSYNC:    lda INTIM           ;get timer output
+
+DoVSYNC:
+
+; Spin until middle of line offset 255 (64t timer previously set to 32, 26.9 lines)
+
+            lda INTIM           ;get timer output
             bne DoVSYNC         ;wait for time-out
+
+; Line offset 255, 159-165 color clocks
+
             lda #%10
             sta WSYNC           ;wait for horizontal blank
-            sta VBLANK          ;start vertical blanking
-            sta WSYNC
-            sta WSYNC
-            sta WSYNC
+            sta VBLANK          ;turn on VBLANK, line offset 256
+            sta WSYNC           ;line offset 257
+            sta WSYNC           ;line offset 258
+            sta WSYNC           ;line offset 259
             sta VSYNC           ;start vertical sync
-            sta WSYNC
-            sta WSYNC
+            sta WSYNC           ;line offset 260
+            sta WSYNC           ;line offset 261
             lda #0
-            sta WSYNC           ;wait for horizontal blank
-            sta VSYNC           ;end vertical sync
+            sta WSYNC           ;line offset 262
+            sta VSYNC           ;end vertical sync, line offset 0
             lda #42             ;set clock interval to 42*(64*3)/228 = 35.4 scanlines
             sta TIM64T          ; count down next frame
             rts
@@ -676,9 +683,7 @@ ChangeColor:
             .assert (ColorType::flash & 2) = 2, error, "Bad ColorType::flash value."
             lsr a                 ;if bit 0 of the color is set
             bcc :+                ; branch if clear, no flash
-
             lda input_counter     ;flash
-
 :           ldy input_counter+1   ;get the high input counter
             bpl :+                ;if console/joystick moved recently then branch
             eor input_counter+1   ;vary colors after a period of inactivty to limit CRT burn in
@@ -1036,9 +1041,8 @@ PickupPutdown:
             sta sound_type
             lda #4
             sta sound_duration_counter
-:
 ; check for collision
-            lda CXP0FB
+:           lda CXP0FB
             and #%01000000        ;get Ball-Player0 collision
             beq :+                ;if nothing occurred then branch
 ; with Player0
@@ -1815,7 +1819,7 @@ GetObjectNoise:
             lda sound_duration_counter
             jmp :-                ;make same noise as drop
 
-.res 14, 0 ; Padding needed to satisfy the following invariant.
+.res 12, 0 ; Padding needed to satisfy the following invariant.
 
 ; The alignment of sprites is carefully done to prevent crossing of page boundaries.
 .assert (* & $fff) = $aa0, error, "Sprite area does not start at the expected offset."
