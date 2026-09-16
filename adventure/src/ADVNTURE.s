@@ -13,7 +13,7 @@
 ;* Project created by Andy McFadden, using 6502bench SourceGen v1.5.           *
 ;* Last updated 2020/01/17                                                     *
 ;*******************************************************************************
-;* Ported to cc65 by Mike Murphy (mike@emu7800.net)                            *
+;* Ported to ca65 by Mike Murphy (mike@emu7800.net)                            *
 ;*******************************************************************************
 
 ; 2600 Memory Map
@@ -30,34 +30,34 @@
 ; 0296      PIA TIM64T     W set 64 clock interval
 ; 1000-1fff ROM
 
-.enum ColorType
-    black       = $00
-    lightgray   = $08
-    invisible   = ColorType::lightgray
-    darkwhite   = $0c
-    white       = $0e
-    yellow      = $1a
-    orange      = $28
-    red         = $36
-    purple      = $66
-    blue        = $86
-    lightblue   = $98
-    turquoise   = $a8
-    lightgreen  = $b8
-    green       = $c8
-    flash       = $cb
-    darkgreen   = $d8
-    darkyellow  = $e8
+.enum ColorType                        ; NTSC RGB Color
+    black       = $00                  ; #000000
+    lightgray   = $08                  ; #7e7e7e
+    invisible   = ColorType::lightgray ; #7e7e7e
+    darkwhite   = $0c                  ; #c7c7c7
+    white       = $0e                  ; #ededed
+    yellow      = $1a                  ; #ccad00
+    orange      = $28                  ; #cf6c00
+    red         = $36                  ; #be3216
+    purple      = $66                  ; #782df0
+    blue        = $86                  ; #205efd
+    lightblue   = $98                  ; #239dee
+    turquoise   = $a8                  ; #1bb19e
+    lightgreen  = $b8                  ; #28ba4c
+    green       = $c8                  ; #49b509
+    flash       = $cb                  ; #ffffff
+    darkgreen   = $d8                  ; #76a300
+    darkyellow  = $e8                  ; #a88800
 .endenum
 
-.enum BWColorType
-    black       = $00
-    darkergray  = $02
-    darkgray    = $06
-    invisible   = $08
-    lightgray   = $0a
-    lightergray = $0c
-    white       = $0e
+.enum BWColorType                      ; NTSC RGB Color
+    black       = $00                  ; #000000
+    darkergray  = $02                  ; #1a1a1a
+    darkgray    = $06                  ; #5b5b5b
+    invisible   = $08                  ; #7e7e7e
+    lightgray   = $0a                  ; #a2a2a2
+    lightergray = $0c                  ; #c7c7c7
+    white       = $0e                  ; #ededed
 .endenum
 
 .enum RoomControlType   ; leftwall    rightwall   bl4 size    pfpriority  pfreflect
@@ -107,6 +107,13 @@
     open           = 1
     closed         = 28
     wraparound_max = 56
+.endenum
+
+.enum MoveType
+    up     = %00010000
+    down   = %00100000
+    left   = %01000000
+    right  = %10000000
 .endenum
 
 .struct RoomType
@@ -346,7 +353,7 @@ PrintDisplay:
 
 ; Picture end, line offset 229 at color clock 63
            ;sta WSYNC                ;FIXME: Uncomment to correct following issue:
-            sta VBLANK               ;turn on VBLANK, completes at color clock 72 resulting in 4 visible pixels
+            sta VBLANK               ;turn on VBLANK, completes at color clock 72 resulting in 5 visible pixels
             jmp @PrintDone
 
 ; Print Player0 (Object1) and Ball (Man)
@@ -703,7 +710,7 @@ ChangeColor:
 :           asl a                 ; and restore original color if necessary
             rts
 
-; get the address of the roompos information for an object
+; get the address of the dynamic information for an object
 GetObjectAddress:
             lda Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr            ;get and store the low address
@@ -729,11 +736,11 @@ StartGame:  sei                   ;disable interrupts
 ;; Top of game loop
 MainGameLoop:
             jsr CheckGameStart
-            jsr MakeSound         ;make noise if necessary
+            jsr MakeSound
             jsr MaintainInputCounter
             lda is_game_complete  ;ff = yes
             bne NonActiveLoop
-            lda ChaliceDynamic+ObjectDynamicType::room  ;get the room the chalice is in
+            lda ChaliceDynamic+ObjectDynamicType::room
             cmp #roomnum_YellowCastleEntry  ;is it inside the yellow castle?
             bne :+                ;if not branch
             lda #$ff
@@ -911,46 +918,46 @@ GameObjectLocations:
 
 ; object locations (room and coordinates) for game 1
 Game1ObjectLocations:
-;                 Room                                   X    Y    Mvt  State
-            .byte roomnum_BlackMaze3,                    81,  18            ;black dot
-            .byte roomnum_TopEntryRoom1,                 80,  32,  $00, $00 ;red dragon
-            .byte roomnum_BelowYellowCastleLeftThinWall, 80,  32,  $00, $00 ;yellow dragon
-            .byte roomnum_TopEntryRoom2,                 80,  32,  $00, $00 ;green dragon
-            .byte roomnum_BlackCastleEntry,             128,  32            ;magnet
-            .byte roomnum_YellowCastleEntry,             32,  32            ;sword
-            .byte roomnum_OtherPurpleRoom,               48,  32            ;chalice
-            .byte roomnum_BlueMazeTop,                   41,  55            ;bridge
-            .byte roomnum_YellowCastle,                  32,  64            ;yellow key
-            .byte roomnum_TopEntryRoom1,                 32,  64            ;white key
-            .byte roomnum_TopEntryRoom2,                 32,  64            ;black key
-            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
-            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
-            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
-            .byte roomnum_WhiteCastleEntry,              32,  32,  $00, $00 ;bat
-            .byte $78                                                       ;bat (carrying, fed-up)
+;                 Location                                X    Y    Mvt   State   Object
+            .byte roomnum_BlackMaze3,                    81,  18                  ;black dot
+            .byte roomnum_TopEntryRoom1,                 80,  32,    0,   0       ;red dragon
+            .byte roomnum_BelowYellowCastleLeftThinWall, 80,  32,    0,   0       ;yellow dragon
+            .byte roomnum_TopEntryRoom2,                 80,  32,    0,   0       ;green dragon
+            .byte roomnum_BlackCastleEntry,             128,  32                  ;magnet
+            .byte roomnum_YellowCastleEntry,             32,  32                  ;sword
+            .byte roomnum_OtherPurpleRoom,               48,  32                  ;chalice
+            .byte roomnum_BlueMazeTop,                   41,  55                  ;bridge
+            .byte roomnum_YellowCastle,                  32,  64                  ;yellow key
+            .byte roomnum_TopEntryRoom1,                 32,  64                  ;white key
+            .byte roomnum_TopEntryRoom2,                 32,  64                  ;black key
+            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
+            .byte roomnum_WhiteCastleEntry,              32,  32,    0,   0       ;bat
+            .byte $78                                                             ;bat (carrying, fed-up)
 Game1ObjectLocationsEnd:
-            .byte 0 ; not needed
+            .byte 0 ; FIXME: not needed
 
 Game2ObjectLocations:
-;                 Room                                   X    Y    Mvt  State
-            .byte roomnum_BlackMaze3,                    81,  18            ;black dot
-            .byte roomnum_BlackMaze2,                    80,  32,  $a0, $00 ;red dragon
-            .byte roomnum_RedMazeBottom,                 80,  32,  $a0, $00 ;yellow dragon
-            .byte roomnum_BlueMazeTop,                   80,  32,  $a0, $00 ;green dragon
-            .byte roomnum_TopEntryRoom1,                128,  32            ;magnet
-            .byte roomnum_YellowCastle,                  32,  32            ;sword
-            .byte roomnum_BlackMaze2,                    48,  32            ;chalice
-            .byte roomnum_MazeSide,                      64,  64            ;bridge
-            .byte roomnum_MazeMiddle,                    32,  64            ;yellow key
-            .byte roomnum_BlueMazeBottom,                32,  64            ;white key
-            .byte roomnum_RedMazeBottom,                 32,  64            ;black key
-            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
-            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
-            .byte roomnum_OtherPurpleRoom                                   ;portcullis state
-            .byte roomnum_BelowYellowCastle,             32,  32,  $90, $00 ;bat
-            .byte $78                                                       ;bat (carrying, fed-up)
+;                 Location                                X    Y   Mvt    State   Object
+            .byte roomnum_BlackMaze3,                    81,  18                  ;black dot
+            .byte roomnum_BlackMaze2,                    80,  32,  $a0,   0       ;red dragon
+            .byte roomnum_RedMazeBottom,                 80,  32,  $a0,   0       ;yellow dragon
+            .byte roomnum_BlueMazeTop,                   80,  32,  $a0,   0       ;green dragon
+            .byte roomnum_TopEntryRoom1,                128,  32                  ;magnet
+            .byte roomnum_YellowCastle,                  32,  32                  ;sword
+            .byte roomnum_BlackMaze2,                    48,  32                  ;chalice
+            .byte roomnum_MazeSide,                      64,  64                  ;bridge
+            .byte roomnum_MazeMiddle,                    32,  64                  ;yellow key
+            .byte roomnum_BlueMazeBottom,                32,  64                  ;white key
+            .byte roomnum_RedMazeBottom,                 32,  64                  ;black key
+            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
+            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
+            .byte roomnum_BelowYellowCastle,             32,  32,  $90,   0       ;bat
+            .byte $78                                                             ;bat (carrying, fed-up)
 Game2ObjectLocationsEnd:
-            .byte 0 ; not needed
+            .byte 0 ; FIXME: not needed
 
 ;; Check ball (man) collisions and move ball
 BallMovement:
@@ -1139,18 +1146,19 @@ MoveCarriedObject:
 MoveGroundObject:
             jsr MoveObjectDelta     ;move the object by delta
             ldy #2                  ;set to do the three
-:           sty portcullis_number
-            lda PortCurrStateBase,y  ;get the portal state
-            cmp #$1c                ;is it in a closed state?
-            beq GetPortal           ;if not, next portal
+@HandlePortal:
+            sty portcullis_number
+            lda PortCurrStateBase,y ;get the portal state
+            cmp #PortState::closed
+            beq @NextPortal         ;if not, next portal
 ; deal with object moving out of a castle
             ldy portcullis_number
-            lda ObjectDynamicType::room,x  ;get object's room number
+            lda ObjectDynamicType::room,x
             cmp EntryRoomOffsets,y  ;is it in a castle entry room?
-            bne GetPortal           ;if not, next portal
+            bne @NextPortal         ;if not, next portal
             lda ObjectDynamicType::ycoord,x
-            cmp #13                 ;is it above 13 i.e. at the bottom?
-            bpl GetPortal           ;if so then branch
+            cmp #13                 ;is > 13 (at the bottom?)
+            bpl @NextPortal         ;if so then branch
             lda CastleRoomOffsets,y ;get the castle room
             sta ObjectDynamicType::room,x  ;and put the object in the castle room
             lda #80
@@ -1158,109 +1166,110 @@ MoveGroundObject:
             lda #44
             sta ObjectDynamicType::ycoord,x
             lda #1
-            sta PortCurrStateBase,y        ;set the portcullis state to 01
+            sta PortCurrStateBase,y        ;set the portcullis state to 1
             rts
+@NextPortal:
+            ldy portcullis_number
+            dey                     ;goto next,
+            bpl @HandlePortal       ; and continue
 
-GetPortal:  ldy portcullis_number
-            dey                     ; goto next,
-            bpl :-                  ; and continue
-; DealWithUp
+@DealWithUp:
             lda ObjectDynamicType::ycoord,x
-            cmp #106                ;has it reached above the top?
-            bmi DealWithLeft        ;if not, branch
+            cmp #106              ;has it reached above the top?
+            bmi @DealWithLeft       ;if not, branch
             lda #13                 ;set new Y coordinate to bottom
             sta ObjectDynamicType::ycoord,x
-            ldy #5                  ;get the direction wanted
-            jmp GetNewRoom          ;go and get new room
-DealWithLeft:
+            ldy #RoomType::room_up
+            jmp @GetNewRoom
+
+@DealWithLeft:
             lda ObjectDynamicType::xcoord,x
             cmp #3                  ;is it < 3?
             bcc :+                  ;if so, branch (off to left)
-            cmp #240                ;is it > 240 ?
+            cmp #240              ;is it > 240 ?
             bcs :+                  ;if so, branch (off to right)
-            jmp DealWithDown
+            jmp @DealWithDown
 :           cpx #ManDynamic         ;are we dealing with the man?
             beq :+                  ;if so, branch
-            lda #154                ;set new X coordinate for the others
+            lda #154              ;set new X coordinate for the others
             jmp :++
-
-:           lda #158                ;set new X coordinate for the ball
+:           lda #158              ;set new X coordinate for the ball
 :           sta ObjectDynamicType::xcoord,x
             ldy #RoomType::room_left
-            jmp GetNewRoom
+            jmp @GetNewRoom
 
-DealWithDown:
+@DealWithDown:
             lda ObjectDynamicType::ycoord,x
-            cmp #13                 ;if it's > 13 then
-            bcs DealWithRight       ; branch
-            lda #105                ;set new Y coordinate
+            cmp #13                 ;if it's > 13 then branch
+            bcs @DealWithRight
+            lda #105              ;set new Y coordinate
             sta ObjectDynamicType::ycoord,x
             ldy #RoomType::room_down
-            jmp GetNewRoom
+            jmp @GetNewRoom
 
-DealWithRight:
+@DealWithRight:
             lda ObjectDynamicType::xcoord,x
             cpx #ManDynamic         ;are we dealing with the man?
-            bne :+                  ;branch if not
-            cmp #159                ;has the object reached the right?
-            bcc MovementReturn      ;branch if not
-            lda ObjectDynamicType::room,x ;get the Ball's room
-            cmp #roomnum_BelowYellowCastleRightThinWall  ; right of secret room
-            bne :++                 ;branch if not
+            bne @CheckX             ;branch if not
+            cmp #159                ;is x >= 159?
+            bcc @MovementReturn     ;branch if not
+            lda ObjectDynamicType::room,x  ;get the man's room
+            cmp #roomnum_BelowYellowCastleRightThinWall  ; left of secret room
+            bne @WrapX              ;branch if not
             lda DotDynamic+ObjectDynamicType::room  ;check the room of the black dot
             cmp #roomnum_BlackMaze3 ;is it in the hidden room area?
-            beq :++                 ;if so, branch
+            beq @WrapX              ;if so, branch
 ; change to secret room
             lda #roomnum_SecretRoom
             sta ObjectDynamicType::room,x  ;and make it current
             lda #3                         ;set the X coordinate
             sta ObjectDynamicType::xcoord,x
-            jmp MovementReturn             ;and exit
-
-:           cmp #direction_wanted   ;has the object reached the right of the screen?
-            bcc MovementReturn      ;branch if not (no room change)
-:           lda #3                  ;set the next X coordinate
+            jmp @MovementReturn            ;and exit
+@CheckX:    cmp #155                ;is x >= 155?
+            bcc @MovementReturn     ;branch if not (no room change)
+@WrapX:     lda #3                  ;set the next X coordinate
             sta ObjectDynamicType::xcoord,x
             ldy #RoomType::room_right
-            jmp GetNewRoom
-
-; get new room
-GetNewRoom: lda ObjectDynamicType::room,x
+            jmp @GetNewRoom         ;FIXME: not needed
+@GetNewRoom:
+            lda ObjectDynamicType::room,x
             jsr RoomNumToAddress            ;convert to room address in dr_ptr
             lda (dr_ptr),y                  ;get the adjacent room
             jsr AdjustRoomLevel             ;deal with the level differences
             sta ObjectDynamicType::room,x  ; and store as new object's room
-MovementReturn:
+@MovementReturn:
             rts
 
 ; move the object in direction by delta
 ; a=direction joystick bits, x=object, y=delta
 MoveObjectDelta:
             sta direction_wanted
-MoveObjectOneStep:
+@MoveObjectOneStep:
             dey                     ;count down the delta
-            bmi MoveObjectDone
+            bmi @MoveObjectDone
             lda direction_wanted
-            and #%10000000          ;check for right move
-            bne :+                  ;if no move right then branch
+            and #MoveType::right
+            bne :+                  ;if no move then branch
             inc ObjectDynamicType::xcoord,x
 :           lda direction_wanted
-            and #%01000000          ;check for left move
-            bne :+                  ;if no move left then branch
+            and #MoveType::left
+            bne :+                  ;if no move then branch
             dec ObjectDynamicType::xcoord,x
 :           lda direction_wanted
-            and #%00010000          ;check for move up
-            bne :+                  ;if no move up then branch
+            and #MoveType::up
+            bne :+                  ;if no move then branch
             inc ObjectDynamicType::ycoord,x
 :           lda direction_wanted
-            and #%00100000          ;check for move down
-            bne :+                  ;if no move down then branch
+            and #MoveType::down
+            bne :+                  ;if no move then branch
             dec ObjectDynamicType::ycoord,x
-:           jmp MoveObjectOneStep   ;keep going until delta finished
-MoveObjectDone:
+:           jmp @MoveObjectOneStep  ;keep going until delta finished
+@MoveObjectDone:
             rts
 
 ; adjust room for different levels
+; input a=original room
+; returns a=possibly different room
 AdjustRoomLevel:
             cmp #$80                ;does room number have
             bcc :+                  ; the hi bit set?
@@ -1276,7 +1285,8 @@ AdjustRoomLevel:
 :           rts
 
 ; get player-ball collision
-; input a=object number, returns a=0 if no collision, a<>0 if collision
+; input a=object number
+; returns a=0 if no collision, a<>0 if collision
 PBCollision:
             cmp object1             ;is it the first object?
             beq :+                  ; branch if yes
@@ -1292,7 +1302,8 @@ PBCollision:
             rts
 
 ; find which object has hit object wanted
-; input x=object number, returns hit object number in a
+; input x=object number
+; returns hit object number in a
 FindObjHit: lda CXPPMM              ;get player0-player1
             and #%10000000          ; collision
             beq :+                  ;if nothing, branch
@@ -1320,6 +1331,8 @@ MoveGameObject:
             rts
 
 ; find linked object and get movement
+; input objstore_ptr, MoveGameObjectArg_Difficulty
+; returns direction_wanted
 GetLinkedObject:
             lda #0                  ;set index to zero
             sta linked_obj_index
@@ -1336,7 +1349,7 @@ GetLinkedObject:
             beq :+                  ; for difficulty (if so, carry on)
             cpx MoveGameObjectArg_Difficulty  ;have we matched the first object
             beq :+                  ; for difficulty (if so, carry on)
-            jsr :++                 ;get object's movement
+            jsr @DetermineDirectionWanted  ;FIXME: change to jmp, remove rts
             rts
 :           inc linked_obj_index
             inc linked_obj_index
@@ -1346,35 +1359,35 @@ GetLinkedObject:
             lda #0                  ;set no move if no
             sta direction_wanted
             rts
-; work out object's movement
-:           lda #$ff                ;set object movement to none
+@DetermineDirectionWanted:
+            lda #$ff                ;set object movement to none
             sta direction_wanted
-            lda ObjectDynamicType::room,y  ;compare Object2's room
+            lda ObjectDynamicType::room,y    ;compare Object2's room
             cmp z:ObjectDynamicType::room,x  ; w/ Object1's room
-            bne :++++               ;if not the same, forget it
-            lda ObjectDynamicType::xcoord,y  ;compare Object2's X coordinate
+            bne @Exit                        ;if not the same, forget it
+            lda ObjectDynamicType::xcoord,y    ;compare Object2's X coordinate
             cmp z:ObjectDynamicType::xcoord,x  ; w/ Object1's X coordinate
-            bcc :+                  ;if Object2 to left of Object1 then branch
-            beq :++                 ;if Object2 on Object1 then branch
+            bcc @SetLeft            ;if Object2 to left of Object1 then branch
+            beq @CmpY               ;if Object2 on Object1 then branch
             lda direction_wanted
-            and #$7f                ;signal a move right
+            and #<~MoveType::right
             sta direction_wanted
-            jmp :++                 ;now try vertical
-:           lda direction_wanted
-            and #$bf                ;signal a move left
+            jmp @CmpY
+@SetLeft:   lda direction_wanted
+            and #<~MoveType::left
             sta direction_wanted
-:           lda ObjectDynamicType::ycoord,y  ;compare Object2's Y coordinate
-            cmp z:ObjectDynamicType::ycoord,x  ; w/ Object1's X coordinate
-            bcc :+                  ;if Object2 below Object1 then branch
-            beq :++                 ;if Object2 on Object1 then branch
+@CmpY:      lda ObjectDynamicType::ycoord,y    ;compare Object2's Y coordinate
+            cmp z:ObjectDynamicType::ycoord,x  ; w/ Object1's Y coordinate
+            bcc @SetDown            ;if Object2 below Object1 then branch
+            beq @Exit               ;if Object2 on Object1 then branch
             lda direction_wanted
-            and #$ef                ;signal a move up
+            and #<~MoveType::up
             sta direction_wanted
-            jmp :++                 ;jump to finish
-:           lda direction_wanted
-            and #sound_duration_counter  ;signal a move down
+            jmp @Exit
+@SetDown:   lda direction_wanted
+            and #<~MoveType::down
             sta direction_wanted
-:           lda direction_wanted
+@Exit:      lda direction_wanted
             rts
 
 ;; Move the red dragon "Rhindle"
@@ -1445,7 +1458,7 @@ MoveDragon: stx curr_obj_number   ;save which dragon we're dealing with
             tax
             lda z:DragonDynamicType::state,x  ;get the dragon's state
             cmp #DragonState::normal
-            bne @DragonStateNotNormal  ;branch if not
+            bne @DragonStateNotNormal  ;branch if not normal
 @DragonStateNormal:
             lda SWCHB             ;read console switches
             and #ConsoleSwitchType::rightdifficulty ;check for P1 difficulty
