@@ -76,8 +76,8 @@
     select            = %00000010 ; 0=pressed
     select_and_reset  = %00000011
     bw                = %00001000 ; 0=bw 1=color
-    leftdifficulty    = %01000000 ; 0=amateur (b) 1=pro (a)
-    rightdifficulty   = %10000000 ; 0=amateur (b) 1=pro (a)
+    leftdifficulty    = %01000000 ; 0=Amateur (B) 1=Pro (A)
+    rightdifficulty   = %10000000 ; 0=Amateur (B) 1=Pro (A)
 .endenum
 
 .enum NoiseType
@@ -96,7 +96,7 @@
     roaring  = 255
 .endenum
 
-.enum PortState
+.enum PortCullisState
     open           = 1
     closed         = 28
     wraparound_max = 56
@@ -323,7 +323,8 @@ PrintDisplay:
             cmp #8                   ;have we reached to within 8 scanlines of the bottom?
             bpl @PrintPlayer1        ;if not, branch
 
-            sta WSYNC                ;added this here to cleanly end picture on line offset 230 in exchange for losing 52 CPU cycles
+; cleanly end picture on line offset 230
+            sta WSYNC
             sta VBLANK
 
             jmp @PrintDone
@@ -676,7 +677,7 @@ ChangeColor:
 :           asl a                 ; and restore original color if necessary
             rts
 
-; get the address of the dynamic information for an object
+; load dr_ptr with address of object's dynamic info using x
 GetObjectAddress:
             lda Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr            ;get and store the low address
@@ -685,7 +686,7 @@ GetObjectAddress:
             rts
 
 ;; Game entry point
-StartGame:  sei                   ;disable interrupts
+START:      sei                   ;disable interrupts
             cld
             ldx #$28              ;clear TIA registers $04-$2c
             lda #0                ; i.e. blank
@@ -902,6 +903,7 @@ Game1ObjectLocations:
             .byte roomnum_WhiteCastleEntry,              32,  32,    0,   0       ;bat
             .byte $78                                                             ;bat (carrying, fed-up)
 Game1ObjectLocationsEnd:
+
 Game2ObjectLocations:
 ;                 Location                                X    Y   Mvt    State   Object
             .byte roomnum_BlackMaze3,                    81,  18                  ;black dot
@@ -926,32 +928,32 @@ Game2ObjectLocationsEnd:
 BallMovement:
             lda CXBLPF
             and #%10000000        ;get ball-playfield collision
-            bne PlayerCollision   ;branch if collision (player-wall)
+            bne ManCollision      ;branch if collision (man-wall)
             lda CXM0FB
             and #%01000000        ;get ball-missile0 collision
-            bne PlayerCollision   ;branch if collision (player-left thin)
+            bne ManCollision      ;branch if collision (man-left thin)
             lda CXM1FB
             and #%01000000        ;get ball-missile1 collision
             beq :+                ;branch if no collision
             lda object2           ;if Object2 (to print) is
             cmp #$87              ; not the black dot then collide
-            bne PlayerCollision
+            bne ManCollision
 :           lda CXP0FB
             and #%01000000        ;get ball-player0 collision
             beq :+                ;if no collision then branch
             lda object1           ;if Object1 (to print is)
             cmp #0                ; not the invisible surround then
-            bne PlayerCollision   ; branch (collision)
+            bne ManCollision      ; branch if collision (man-player0)
 :           lda CXP1FB
             and #%01000000        ;get ball-player1 collision
-            beq NoCollision       ;if no collision then branch
+            beq NoManCollision    ;if no collision then branch
             lda object2           ;if player 01 to print is
             cmp #0                ; not the invisible surround then
-            bne PlayerCollision   ; branch (collision)
-            jmp NoCollision
+            bne ManCollision      ; branch if collision (man-player1)
+            jmp NoManCollision
 
-; player collided (with something)
-PlayerCollision:
+; the man collided (with something)
+ManCollision:
             cpy #2                ;are we checking for the bridge?
             bne ReadStick         ;if not, branch
             lda object_carried
@@ -972,11 +974,11 @@ PlayerCollision:
             sec
             sbc ManDynamic+DynamicType::ycoord
             cmp #252
-            bcs NoCollision       ;if < -4 then going through bridge
+            bcs NoManCollision    ;if < -4 then going through bridge
             cmp #25               ;if > 25 then forget it
             bcs ReadStick
-; no collision (and going through bridge)
-NoCollision:
+; man had no collision (and going through bridge)
+NoManCollision:
             lda #<~MoveTypes::none ;reset the joystick input
             sta cached_joystick
             lda ManDynamic+DynamicType::room
@@ -1033,34 +1035,33 @@ PickupPutdown:
 
 :           lda CXP1FB
             and #%01000000        ;get Ball-Player01 collision
-            beq :+                ;if nothing has happened, branch
+            beq :+                ;if no collision, exit
             lda object2           ;get type of Player01
             sta obj_collided_with
             jmp CollisionDetected ;deal with collision
-
-:           jmp NoObject          ;deal with no collision (return)
+:           rts
 
 CollisionDetected:
             ldx obj_collided_with
-            jsr GetObjectAddress  ;get its roompos information in dr_ptr using x
+            jsr GetObjectAddress  ;load dr_ptr with address of object's dynamic info using x
             lda obj_collided_with
-            cmp #$51              ;is it carriable?
-            bcc NoObject          ;if not, branch
+            cmp #objoffset_StartOfCarriables  ;is it carriable?
+            bcc NoCollision       ;not carriable, exit
             ldy #DynamicType::room
             lda (dr_ptr),y        ;get the object's room
-            cmp ManDynamic+DynamicType::room
-            bne NoObject          ;if not, branch
+            cmp ManDynamic+DynamicType::room  ;compare the w/man's room
+            bne NoCollision       ;if not same room, exit
             lda obj_collided_with
             cmp object_carried
-            beq PickupObject      ;if so, branch (and actually pick it up)
+            beq @PickupObject     ;if so, branch (and actually pick it up)
             lda #NoiseType::get_item
             sta sound_type
             lda #4
             sta sound_duration_counter
-PickupObject:
+@PickupObject:
             lda obj_collided_with ;set the object as being carried
             sta object_carried
-            ldx dr_ptr            ;get the dynamic address low byte
+            ldx dr_ptr            ;object to move
             ldy #6                ;move 6 steps in the direction specified
             lda cached_joystick   ; by joystick
             jsr MoveObjectDelta
@@ -1074,14 +1075,15 @@ PickupObject:
             sec
             sbc ManDynamic+DynamicType::ycoord
             sta objman_y_delta    ; and store the difference
-NoObject:   rts                   ; no collision
+NoCollision:
+            rts
 
 ;; Move the carried object
 MoveCarriedObject:
             ldx object_carried
             cpx #objoffset_Null
             beq :+
-            jsr GetObjectAddress  ;get its roompos information in dr_ptr using x
+            jsr GetObjectAddress  ;load dr_ptr with address of object's dynamic info using x
             ldy #DynamicType::room
             lda ManDynamic+DynamicType::room  ;get the current room
             sta (dr_ptr),y        ; and store the object's current room
@@ -1101,13 +1103,16 @@ MoveCarriedObject:
             jsr MoveGroundObject
 :           rts
 
+; move the object in direction by delta
+; move to next room if needed
+; a=MoveTypes/direction, x=object to move, y=move delta
 MoveGroundObject:
             jsr MoveObjectDelta     ;move the object by delta
             ldy #2                  ;set to do the three
 @HandlePortal:
             sty portcullis_number
             lda PortCurrStateBase,y ;get the portal state
-            cmp #PortState::closed
+            cmp #PortCullisState::closed
             beq @NextPortal         ;if not, next portal
 ; deal with object moving out of a castle
             ldy portcullis_number
@@ -1115,25 +1120,25 @@ MoveGroundObject:
             cmp EntryRoomOffsets,y  ;is it in a castle entry room?
             bne @NextPortal         ;if not, next portal
             lda DynamicType::ycoord,x
-            cmp #13                 ;is > 13 (at the bottom?)
-            bpl @NextPortal         ;if so then branch
+            cmp #13                 ;at the bottom? (is y < 13)
+            bpl @NextPortal         ;if not, next portal
             lda CastleRoomOffsets,y ;get the castle room
-            sta DynamicType::room,x  ;and put the object in the castle room
+            sta DynamicType::room,x ; and put the object in the castle room
             lda #80
             sta DynamicType::xcoord,x
             lda #44
             sta DynamicType::ycoord,x
-            lda #1
-            sta PortCurrStateBase,y        ;set the portcullis state to 1
+            lda #PortCullisState::open
+            sta PortCurrStateBase,y
             rts
 @NextPortal:
             ldy portcullis_number
-            dey                     ;goto next,
-            bpl @HandlePortal       ; and continue
+            dey
+            bpl @HandlePortal
 
 @DealWithUp:
             lda DynamicType::ycoord,x
-            cmp #106              ;has it reached above the top?
+            cmp #106                ;has it reached above the top? (is y >= 106)
             bmi @DealWithLeft       ;if not, branch
             lda #13                 ;set new Y coordinate to bottom
             sta DynamicType::ycoord,x
@@ -1142,25 +1147,25 @@ MoveGroundObject:
 
 @DealWithLeft:
             lda DynamicType::xcoord,x
-            cmp #3                  ;is it < 3?
-            bcc :+                  ;if so, branch (off to left)
-            cmp #240              ;is it > 240 ?
-            bcs :+                  ;if so, branch (off to right)
-            jmp @DealWithDown
-:           cpx #ManDynamic         ;are we dealing with the man?
+            cmp #3                  ;is x < 3
+            bcc @GoLeft             ;if so, go left
+            cmp #240                ;is x > 240
+            bcs @GoLeft             ;if so, left
+            bcc @DealWithDown
+@GoLeft:    cpx #ManDynamic         ;are we dealing with the man?
             beq :+                  ;if so, branch
-            lda #154              ;set new X coordinate for the others
-            jmp :++
-:           lda #158              ;set new X coordinate for the ball
+            lda #154                ;set new X coordinate for everyone other than the man
+            bne :++
+:           lda #158                ;set new X coordinate for the man
 :           sta DynamicType::xcoord,x
             ldy #RoomType::room_left
             jmp @GetNewRoom
 
 @DealWithDown:
             lda DynamicType::ycoord,x
-            cmp #13                 ;if it's > 13 then branch
+            cmp #13                 ;is y <= 13
             bcs @DealWithRight
-            lda #105              ;set new Y coordinate
+            lda #105                ;set new Y coordinate
             sta DynamicType::ycoord,x
             ldy #RoomType::room_down
             jmp @GetNewRoom
@@ -1169,9 +1174,9 @@ MoveGroundObject:
             lda DynamicType::xcoord,x
             cpx #ManDynamic         ;are we dealing with the man?
             bne @CheckX             ;branch if not
-            cmp #159                ;is x >= 159?
+            cmp #159                ;is x >= 159
             bcc @MovementReturn     ;branch if not
-            lda DynamicType::room,x  ;get the man's room
+            lda DynamicType::room,x ;the man's room
             cmp #roomnum_BelowYellowCastleRightThinWall  ; left of secret room
             bne @WrapX              ;branch if not
             lda DotDynamic+DynamicType::room  ;check the room of the black dot
@@ -1179,26 +1184,26 @@ MoveGroundObject:
             beq @WrapX              ;if so, branch
 ; change to secret room
             lda #roomnum_SecretRoom
-            sta DynamicType::room,x  ;and make it current
-            lda #3                         ;set the X coordinate
+            sta DynamicType::room,x ;and make it current
+            lda #3                  ;set the X coordinate
             sta DynamicType::xcoord,x
-            jmp @MovementReturn            ;and exit
-@CheckX:    cmp #155                ;is x >= 155?
-            bcc @MovementReturn     ;branch if not (no room change)
-@WrapX:     lda #3                  ;set the next X coordinate
+            bne @MovementReturn
+@CheckX:    cmp #155                ;is x >= 155
+            bcc @MovementReturn     ;branch if not, no room change
+@WrapX:     lda #3                  ;set new X coordinate
             sta DynamicType::xcoord,x
             ldy #RoomType::room_right
 @GetNewRoom:
             lda DynamicType::room,x
-            jsr RoomNumToAddress            ;convert to room address in dr_ptr
-            lda (dr_ptr),y                  ;get the adjacent room
-            jsr AdjustRoomLevel             ;deal with the level differences
-            sta DynamicType::room,x  ; and store as new object's room
+            jsr RoomNumToAddress    ;convert to room address in dr_ptr
+            lda (dr_ptr),y          ;get the adjacent room
+            jsr AdjustRoomLevel     ;deal with the level differences
+            sta DynamicType::room,x ; and store as new object's room
 @MovementReturn:
             rts
 
 ; move the object in direction by delta
-; input a=MoveTypes, x=object to move, y=delta
+; a=MoveTypes, x=object to move, y=delta
 MoveObjectDelta:
             sta direction_wanted
 @MoveObjectOneStep:
@@ -1206,32 +1211,32 @@ MoveObjectDelta:
             bmi @MoveObjectDone
             lda direction_wanted
             and #MoveTypes::right
-            bne :+                  ;if no move then branch
+            bne :+                  ;if no move right then branch
             inc DynamicType::xcoord,x
 :           lda direction_wanted
             and #MoveTypes::left
-            bne :+                  ;if no move then branch
+            bne :+                  ;if no move left then branch
             dec DynamicType::xcoord,x
 :           lda direction_wanted
             and #MoveTypes::up
-            bne :+                  ;if no move then branch
+            bne :+                  ;if no move up then branch
             inc DynamicType::ycoord,x
 :           lda direction_wanted
             and #MoveTypes::down
-            bne :+                  ;if no move then branch
+            bne :+                  ;if no move down then branch
             dec DynamicType::ycoord,x
 :           jmp @MoveObjectOneStep  ;keep going until delta finished
 @MoveObjectDone:
             rts
 
 ; adjust room for different levels
-; input a=original room
+; a=original room
 ; returns a=possibly different room
 AdjustRoomLevel:
-            cmp #$80                ;does room number have
-            bcc :+                  ; the hi bit set?
+            cmp #%10000000          ;does room number have
+            bcc @NoChange           ; the hi bit set?
             sec                     ;yes
-            sbc #$80                ;remove the $80 flag and
+            sbc #%10000000          ;remove the hi bit and
             sta tmp1                ; store the room number
             lda NumberCurrState     ;get the level number
             lsr a                   ;divide it by two
@@ -1239,7 +1244,7 @@ AdjustRoomLevel:
             adc tmp1                ;add to the original room
             tay
             lda RoomDiffs,y         ;use as an offset to get the next room
-:           rts
+@NoChange:  rts
 
 ; get player-ball collision
 ; input a=object number
@@ -1305,7 +1310,7 @@ GetLinkedObject:
             beq :+                            ; branch if yes
             cpx MoveGameObjectArg_Difficulty  ;have we matched Object1 for difficulty?
             beq :+                            ; branch if yes
-            bne @DetermineDirectionWanted
+            jmp @DetermineDirectionWanted
 :           inc linked_obj_index
             inc linked_obj_index
             ldy linked_obj_index
@@ -1604,12 +1609,12 @@ Portals:    ldy #2                ;for each portcullis
 :           tya                   ;get the portcullis number
             tax
             lda PortCurrStateBase,x  ;get the state
-            cmp #PortState::closed
-            beq @IncPortState     ;yes - then branch
+            cmp #PortCullisState::closed
+            beq @IncPortCullisState     ;yes - then branch
             lda PortOffsets,y     ;get portcullis number
             jsr PBCollision       ;get the player-ball collision
             beq :+                ;if not then branch
-            lda #PortState::open
+            lda #PortCullisState::open
             sta PortCurrStateBase,x
             ldx #ManDynamic
             jmp @PutManInCastle
@@ -1618,29 +1623,29 @@ Portals:    ldy #2                ;for each portcullis
             beq :+                ;if so, branch
             ldx obj_collided_with
             sty portcullis_number
-            jsr GetObjectAddress  ;get its dynamic information in dr_ptr using x
+            jsr GetObjectAddress  ;load dr_ptr with address of object's dynamic info using x
             ldy portcullis_number
-            ldx dr_ptr            ;get object's address
+            ldx dr_ptr            ;load address of object's dynamic info to x
             jmp @PutManInCastle
-:           jmp @IncPortState
+:           jmp @IncPortCullisState
 @PutManInCastle:
-            lda EntryRoomOffsets,y ;look up castle entry room for this port
+            lda EntryRoomOffsets,y   ;look up castle entry room for this port
             sta DynamicType::room,x  ;make it the object's room
-            lda #16               ;give the object a new Y coordinate
+            lda #16                  ;give the object a new Y coordinate
             sta DynamicType::ycoord,x
-@IncPortState:
+@IncPortCullisState:
             tya                   ;get the portcullis number
             tax
             lda PortCurrStateBase,x
-            cmp #PortState::open
-            beq :+                ; branch if yes
-            cmp #PortState::closed
-            beq :+                ; branch if yes
+            cmp #PortCullisState::open
+            beq :+                ; branch if open
+            cmp #PortCullisState::closed
+            beq :+                ; branch if closed
             inc PortCurrStateBase,x
             lda PortCurrStateBase,x
-            cmp #PortState::wraparound_max
-            bne :+                ; branch if not
-            lda #PortState::open  ;wrap around
+            cmp #PortCullisState::wraparound_max
+            bne :+                ; branch if not reached wraparound max
+            lda #PortCullisState::open  ;wrap around
             sta PortCurrStateBase,x
 :           dey                   ;go to the next portcullis
             bmi @PortalsDone      ;branch if finished
@@ -1800,7 +1805,7 @@ GetObjectNoise:
             lda sound_duration_counter
             jmp :-                ;make same noise as drop
 
-.res 25, 0 ; Padding may be needed to satisfy the following invariant.
+.res 29, 0 ; Padding may be needed to satisfy the following invariant.
 
 ; The alignment of sprites is carefully done to prevent crossing of page boundaries.
 .assert (* & $fff) = $aa0, error, "Sprite area does not start at the expected offset."
@@ -1846,7 +1851,7 @@ NumberRoom:
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .assert >(*-1) = >(NumberRoom), error, "Sprite spans page."
 
-PortStates:         .byte 4                 ; open
+PortCullisStates:   .byte 4                 ; open
                     .word PortGfx+12
                     .byte 8
                     .word PortGfx+10
@@ -2869,21 +2874,21 @@ objoffset_InvisibleSurround = (* - Objects)
 objoffset_PortCullis1 = (* - Objects)
     .word PortDynamic1
     .word PortCurrStateBase+0
-    .word PortStates
+    .word PortCullisStates
     .byte ColorType::black, ColorType::black
     .byte 0
 
 objoffset_PortCullis2 = (* - Objects)
     .word PortDynamic2
     .word PortCurrStateBase+1
-    .word PortStates
+    .word PortCullisStates
     .byte ColorType::black, ColorType::black
     .byte 0
 
 objoffset_PortCullis3 = (* - Objects)
     .word PortDynamic3
     .word PortCurrStateBase+2
-    .word PortStates
+    .word PortCullisStates
     .byte ColorType::black, ColorType::black
     .byte 0
 
@@ -2923,6 +2928,7 @@ objoffset_DragonGrundle = (* - Objects)
     .byte 0
 
 objoffset_Sword = (* - Objects)
+objoffset_StartOfCarriables = objoffset_Sword
     .word SwordDynamic
     .word SwordCurrState
     .word SwordStates
@@ -2994,6 +3000,6 @@ objoffset_Null = (* - Objects)
 
 ; 6502 startup vectors
 .segment "VECTORS"
-    .word StartGame
-    .word StartGame
-    .word StartGame
+    .word START
+    .word START
+    .word START
