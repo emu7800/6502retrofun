@@ -901,7 +901,7 @@ GameObjectLocations:
 ; object locations (room and coordinates) for game 1
 Game1ObjectLocations:
 ;                 Location                                X    Y    Mvt   State   Object
-            .byte roomnum_BlackMaze3,                    81,  18                  ;black dot
+            .byte roomnum_BlackMazeBottomLeft,           81,  18                  ;black dot
             .byte roomnum_TopEntryRoom1,                 80,  32,    0,   0       ;red dragon
             .byte roomnum_BelowYellowCastleLeftThinWall, 80,  32,    0,   0       ;yellow dragon
             .byte roomnum_TopEntryRoom2,                 80,  32,    0,   0       ;green dragon
@@ -922,17 +922,17 @@ Game1ObjectLocationsEnd:
 
 Game2ObjectLocations:
 ;                 Location                                X    Y   Mvt    State   Object
-            .byte roomnum_BlackMaze3,                    81,  18                  ;black dot
-            .byte roomnum_BlackMaze2,                    80,  32,  $a0,   0       ;red dragon
-            .byte roomnum_RedMazeBottom,                 80,  32,  $a0,   0       ;yellow dragon
+            .byte roomnum_BlackMazeBottomLeft,           81,  18                  ;black dot
+            .byte roomnum_BlackMazeTopRight,             80,  32,  $a0,   0       ;red dragon
+            .byte roomnum_RedMazeBottomLeft,             80,  32,  $a0,   0       ;yellow dragon
             .byte roomnum_BlueMazeTop,                   80,  32,  $a0,   0       ;green dragon
             .byte roomnum_TopEntryRoom1,                128,  32                  ;magnet
             .byte roomnum_YellowCastle,                  32,  32                  ;sword
-            .byte roomnum_BlackMaze2,                    48,  32                  ;chalice
+            .byte roomnum_BlackMazeTopRight,             48,  32                  ;chalice
             .byte roomnum_MazeSide,                      64,  64                  ;bridge
             .byte roomnum_MazeMiddle,                    32,  64                  ;yellow key
             .byte roomnum_BlueMazeBottom,                32,  64                  ;white key
-            .byte roomnum_RedMazeBottom,                 32,  64                  ;black key
+            .byte roomnum_RedMazeBottomLeft,             32,  64                  ;black key
             .byte roomnum_OtherPurpleRoom                                         ;portcullis state
             .byte roomnum_OtherPurpleRoom                                         ;portcullis state
             .byte roomnum_OtherPurpleRoom                                         ;portcullis state
@@ -1202,7 +1202,7 @@ MoveGroundObject:
             cmp #roomnum_BelowYellowCastleRightThinWall  ; left of secret room
             bne @WrapX              ;branch if not
             lda DotDynamic+DynamicType::room  ;check the room of the black dot
-            cmp #roomnum_BlackMaze3 ;is it in the hidden room area?
+            cmp #roomnum_BlackMazeBottomLeft ;is it in the hidden room area?
             beq @WrapX              ;if so, branch
 ; change to secret room
             lda #roomnum_SecretRoom
@@ -1841,11 +1841,11 @@ GetObjectNoise:
 LeftOfName:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
- .byte $00, $00, $00   ; 11.................. ..................11
- .byte $00, $00, $00   ; 11.................. ..................11
- .byte $00, $00, $00   ; 11.................. ..................11
- .byte $00, $00, $00   ; 11.................. ..................11
- .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
  ;byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111 ; uses next room's line
  .assert >(*-1) = >(LeftOfName), error, "Sprite spans page."
 BelowYellowCastle:
@@ -1938,90 +1938,90 @@ TwoExitRoom:
 BlueMazeTop:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
- .byte $00, $0c, $0c   ; ......11......11.... ....11......11......
- .byte $f0, $0c, $3c   ; 1111..11......1111.. ..1111......11..1111
- .byte $f0, $0c, $00   ; 1111..11............ ............11..1111
+ .byte $00, $0c, $0c   ; ........11....11.... ....11....11........
+ .byte $f0, $0c, $3c   ; 1111....11....1111.. ..1111....11....1111
+ .byte $f0, $0c, $00   ; 1111....11.......... ..........11....1111
  .byte $f0, $ff, $3f   ; 111111111111111111.. ..111111111111111111
- .byte $00, $30, $30   ; ........11......11.. ..11......11........
- .byte $f0, $33, $3f   ; 111111..11..111111.. ..111111..11..111111
+ .byte $00, $30, $30   ; ......11........11.. ..11........11......
+ .byte $f0, $33, $3f   ; 1111..11..11111111.. ..11111111..11..1111
  .assert >(*-1) = >(BlueMazeTop), error, "Sprite spans page."
-BlueMaze1:
+BlueMazeLeft:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
  .byte $00, $00, $00   ; .................... ....................
- .byte $f0, $fc, $ff   ; 1111..11111111111111 11111111111111..1111
+ .byte $f0, $fc, $ff   ; 1111111111..11111111 11111111..1111111111
  .byte $f0, $00, $c0   ; 1111..............11 11..............1111
- .byte $f0, $3f, $cf   ; 1111111111..1111..11 11..1111..1111111111
- .byte $00, $30, $cc   ; ........11....11..11 11..11....11........
- .byte $f0, $f3, $cc   ; 111111..1111..11..11 11..11..1111..111111
- .assert >(*-1) = >(BlueMaze1), error, "Sprite spans page."
+ .byte $f0, $3f, $cf   ; 1111..1111111111..11 11..1111111111..1111
+ .byte $00, $30, $cc   ; ......11......11..11 11..11......11......
+ .byte $f0, $f3, $cc   ; 11111111..11..11..11 11..11..111111111111
+ .assert >(*-1) = >(BlueMazeLeft), error, "Sprite spans page."
 BlueMazeBottom:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $f3, $0c   ; 111111..1111..11.... ....11..1111..111111
- .byte $00, $30, $0c   ; ........11....11.... ....11....11........
- .byte $f0, $3f, $0f   ; 1111111111..1111.... ....1111..1111111111
+ .byte $f0, $f3, $0c   ; 11111111..11..11.... ....11..11..11111111
+ .byte $00, $30, $0c   ; ......11......11.... ....11......11......
+ .byte $f0, $3f, $0f   ; 1111..1111111111.... ....1111111111..1111
  .byte $f0, $00, $00   ; 1111................ ................1111
- .byte $f0, $f0, $00   ; 1111....1111........ ........1111....1111
- .byte $00, $30, $00   ; ........11.......... ..........11........
- .byte $f0, $ff, $ff   ; 111111..1111..11..11 11..11..1111..111111
+ .byte $f0, $f0, $00   ; 11111111............ ............11111111
+ .byte $00, $30, $00   ; ......11............ ............11......
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
  .assert >(*-1) = >(BlueMazeBottom), error, "Sprite spans page."
 BlueMazeCenter:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $33, $3f   ; 111111..11..111111.. ..111111..11..111111
- .byte $00, $30, $3c   ; ........11....1111.. ..1111....11........
+ .byte $f0, $33, $3f   ; 1111..11..11111111.. ..11111111..11..1111
+ .byte $00, $30, $3c   ; ......11......1111.. ..1111......11......
  .byte $f0, $ff, $3c   ; 111111111111..1111.. ..1111..111111111111
- .byte $00, $03, $3c   ; ....11........1111.. ..1111........11....
- .byte $f0, $33, $3c   ; 111111..11....1111.. ..1111....11..111111
- .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
- .byte $f0, $f3, $0c   ; 111111..1111..11.... ....11..1111..111111
+ .byte $00, $03, $3c   ; ..........11..1111.. ..1111..11..........
+ .byte $f0, $33, $3c   ; 1111..11..11..1111.. ..1111..11..11..1111
+ .byte $00, $33, $0c   ; ......11..11..11.... ....11..11..11......
+ .byte $f0, $f3, $0c   ; 11111111..11..11.... ....11..11..11111111
  .assert >(*-1) = >(BlueMazeCenter), error, "Sprite spans page."
 BlueMazeEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $f3, $cc   ; 111111..1111..11..11 11..11..1111..111111
- .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
- .byte $f0, $33, $fc   ; 111111..11....111111 111111....11..111111
- .byte $00, $33, $00   ; ....11..11.......... ..........11..11....
- .byte $f0, $f3, $ff   ; 111111..111111111111 111111111111..111111
+ .byte $f0, $f3, $cc   ; 11111111..11..11..11 11..11..11..11111111
+ .byte $00, $33, $0c   ; ......11..11..11.... ....11..11..11......
+ .byte $f0, $33, $fc   ; 1111..11..11..111111 111111..11..11..1111
+ .byte $00, $33, $00   ; ......11..11........ ........11..11......
+ .byte $f0, $f3, $ff   ; 11111111..1111111111 1111111111..11111111
  .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .assert >(*-1) = >(BlueMazeEntry), error, "Sprite spans page."
 MazeMiddle:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $cc   ; 111111111111..11..11 11..11..111111111111
- .byte $00, $00, $cc   ; ..............11.11. 11..11..............
- .byte $f0, $03, $cf   ; 111111......1111..11 11..1111......111111
- .byte $00, $03, $00   ; ....11.............. ..............11....
- .byte $f0, $f3, $fc   ; 111111..1111..111111 111111..1111..111111
- .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
- ;byte $f0, $33, $cc   ; 111111..11....11..11 11..11....11..111111 ; uses next room's line
+ .byte $00, $00, $cc   ; ..............11..11 11..11..............
+ .byte $f0, $03, $cf   ; 1111......111111..11 11..111111......1111
+ .byte $00, $03, $00   ; ..........11........ ........11..........
+ .byte $f0, $f3, $fc   ; 11111111..11..111111 111111..11..11111111
+ .byte $00, $33, $0c   ; ......11..11..11.... ....11..11..11......
+ ;byte $f0, $33, $cc   ; 1111..11..11..11..11 11..11..11..11..1111 ; uses next room's line
  .assert >(*-1) = >(MazeMiddle), error, "Sprite spans page."
 MazeSide:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $33, $cc   ; 111111..11....11..11 11..11....11..111111
- .byte $00, $30, $cc   ; ........11....11..11 11..11....11........
- .byte $00, $3f, $cf   ; ....111111..1111..11 11..1111..111111....
+ .byte $f0, $33, $cc   ; 1111..11..11..11..11 11..11..11..11..1111
+ .byte $00, $30, $cc   ; ......11......11..11 11..11......11......
+ .byte $00, $3f, $cf   ; ......1111111111..11 11..111111111.......
  .byte $00, $00, $c0   ; ..................11 11..................
- .byte $00, $3f, $c3   ; ....111111..11....11 11....11..111111....
- .byte $00, $30, $c0   ; ........11........11 11........11........
+ .byte $00, $3f, $c3   ; ......11111111....11 11....1111111.......
+ .byte $00, $30, $c0   ; ......11..........11 11.........11.......
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
  .assert >(*-1) = >(MazeSide), error, "Sprite spans page."
 MazeEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
- .byte $00, $30, $00   ; ........11.......... ..........11........
- .byte $f0, $30, $ff   ; 1111....11..11111111 11111111..11....1111
- .byte $00, $30, $c0   ; ........11........11 11........11........
- .byte $f0, $f3, $c0   ; 111111..1111......11 11......1111..111111
- .byte $00, $03, $c0   ; ....11............11 11............11....
+ .byte $00, $30, $00   ; ......11............ ............11......
+ .byte $f0, $30, $ff   ; 1111..11....11111111 11111111....11..1111
+ .byte $00, $30, $c0   ; ......11..........11 11..........11......
+ .byte $f0, $f3, $c0   ; 11111111..11......11 11......11..11111111
+ .byte $00, $03, $c0   ; ..........11......11 11......11..........
  .byte $f0, $ff, $cc   ; 11111111111111111111 11111111111111111111
  .assert >(*-1) = >(MazeEntry), error, "Sprite spans page."
 CastleDef:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $fe, $15   ; 11111111111....1.1.1 1.1.1....11111111111
- .byte $30, $03, $1f   ; 11........11...11111 11111...11........11
+ .byte $f0, $fe, $15   ; 11111111111.1.1.1... ...1.1.1.11111111111
+ .byte $30, $03, $1f   ; 11........1111111... ...1111111........11
  .byte $30, $03, $ff   ; 11........1111111111 1111111111........11
  .byte $30, $00, $ff   ; 11..........11111111 11111111..........11
- .byte $30, $00, $3f   ; 11......... 111111.. ..111111..........11
+ .byte $30, $00, $3f   ; 11..........111111.. ..111111..........11
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .assert >(*-1) = >(CastleDef), error, "Sprite spans page."
@@ -2041,44 +2041,44 @@ SurroundGfx:
  .byte 0
  .assert >(*-1) = >(SurroundGfx), error, "Sprite spans page."
 
-RedMaze1:
+RedMazeTopLeft:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
  .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .byte $00, $00, $0c   ; ..............11.... ....11..............
  .byte $f0, $ff, $0c   ; 111111111111..11.... ....11..111111111111
- .byte $f0, $03, $cc   ; 111111........11..11 11..11........111111
- ;byte $f0, $33, $cf   ; 111111..11..1111..11 11..1111..11..111111 ; uses next room's line
- .assert >(*-1) = >(RedMaze1), error, "Sprite spans page."
-RedMazeBottom:
+ .byte $f0, $03, $cc   ; 1111......11..11..11 11..11..11......1111
+ ;byte $f0, $33, $cf   ; 1111..11..111111..11 11..111111..11..1111 ; uses next room's line
+ .assert >(*-1) = >(RedMazeTopLeft), error, "Sprite spans page."
+RedMazeBottomLeft:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $33, $cf   ; 111111..11..1111..11 11..1111..11..111111
- .byte $f0, $30, $00   ; 1111....11.......... ..........11....1111
- .byte $f0, $33, $ff   ; 111111..11..11111111 11111111..11..111111
- .byte $00, $33, $00   ; ....11..11.......... ..........11..11....
+ .byte $f0, $33, $cf   ; 1111..11..11......11 11......11..11..1111
+ .byte $f0, $30, $00   ; 1111..11............ ............11..1111
+ .byte $f0, $33, $ff   ; 1111..11..1111111111 1111111111..11..1111
+ .byte $00, $33, $00   ; ......11..11........ ........11..11......
  .byte $f0, $ff, $00   ; 111111111111........ ........111111111111
- .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
- .assert >(*-1) = >(RedMazeBottom), error, "Sprite spans page."
-RedMazeTop:
+ .assert >(*-1) = >(RedMazeBottomLeft), error, "Sprite spans page."
+RedMazeTopRight:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
- .byte $00, $00, $c0   ; 1111..............11 11..............1111
+ .byte $00, $00, $c0   ; ..................11 11..................
  .byte $f0, $ff, $cf   ; 1111111111111111..11 11..1111111111111111
  .byte $00, $00, $cc   ; ..............11..11 11..11..............
- .byte $f0, $33, $ff   ; 111111..11..11111111 11111111..11..111111
- .byte $f0, $33, $00   ; 111111..11.......... ..........11..111111
- ;byte $f0, $3f, $0c   ; 1111111111....11.... ....11....1111111111 ; uses next room's line
- .assert >(*-1) = >(RedMazeTop), error, "Sprite spans page."
+ .byte $f0, $33, $ff   ; 1111..11..1111111111 1111111111..11..1111
+ .byte $f0, $33, $00   ; 1111..11..11.................11..11..1111
+ ;byte $f0, $3f, $0c   ; 1111..111111..11.... ....11..111111..1111 ; uses next room's line
+ .assert >(*-1) = >(RedMazeTopRight), error, "Sprite spans page."
 WhiteCastleEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $3f, $0c   ; 1111111111....11.... ....11....1111111111
+ .byte $f0, $3f, $0c   ; 1111..111111..11.... ....11..111111..1111
  .byte $f0, $00, $0c   ; 1111..........11.... ....11..........1111
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
- .byte $00, $30, $00   ; 1111....11.......... ..........11....1111
- .byte $f0, $30, $00   ; 1111....11.......... ..........11....1111
- .byte $00, $30, $00   ; ........11.......... ..........11........
+ .byte $00, $30, $00   ; ......11............ ............11......
+ .byte $f0, $30, $00   ; 1111..11............ ............11..1111
+ .byte $00, $30, $00   ; ......11............ ............11......
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .assert >(*-1) = >(WhiteCastleEntry), error, "Sprite spans page."
 TopEntryRoom:
@@ -2091,40 +2091,40 @@ TopEntryRoom:
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
  .assert >(*-1) = >(TopEntryRoom), error, "Sprite spans page."
-BlackMaze1:
+BlackMazeTopLeft:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $f0, $ff   ; 1111....111111111111 111111111111....1111
+ .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
  .byte $00, $00, $03   ; ............11...... ......11............
  .byte $f0, $ff, $03   ; 11111111111111...... ......11111111111111
  .byte $00, $00, $00   ; .................... ....................
- .byte $30, $3f, $ff   ; 11..111111..11111111 11111111..111111..11
- .byte $00, $30, $00   ; ........11.......... ..........11........
- ;byte $f0, $f0, $ff   ; 1111....111111111111 111111111111....1111 ; uses next room's line
- .assert >(*-1) = >(BlackMaze1), error, "Sprite spans page."
-BlackMaze3:
+ .byte $30, $3f, $ff   ; 11....11111111111111 11111111111111....11
+ .byte $00, $30, $00   ; ......11............ ............11......
+ ;byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111 ; uses next room's line
+ .assert >(*-1) = >(BlackMazeTopLeft), error, "Sprite spans page."
+BlackMazeBottomLeft:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF0hPF1-----PF2-----
  .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
  .byte $30, $00, $00   ; 11.................. 11..................
  .byte $30, $3f, $ff   ; 11....11111111111111 11....11111111111111
  .byte $00, $30, $00   ; ......11............ ......11............
  .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
- .byte $30, $00, $03   ; 11................11 11................11
+ .byte $30, $00, $03   ; 11..........11...... 11..........11......
  .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
- .assert >(*-1) = >(BlackMaze3), error, "Sprite spans page."
-BlackMaze2:
+ .assert >(*-1) = >(BlackMazeBottomLeft), error, "Sprite spans page."
+BlackMazeTopRight:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF0hPF1-----PF2-----
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
- .byte $00, $00, $c0   ; ............11...... ............11......
- .byte $f0, $ff, $cf   ; 11111111111111..1111 11111111111111..1111
- .byte $00, $00, $0c   ; ..................11 ..................11
+ .byte $00, $00, $c0   ; ..................11 ..................11
+ .byte $f0, $ff, $cf   ; 1111111111111111..11 1111111111111111..11
+ .byte $00, $00, $0c   ; ..............11.... ..............11....
  .byte $f0, $0f, $ff   ; 1111....111111111111 1111....111111111111
- .byte $00, $0f, $c0   ; ........111111...... ........111111......
- ;byte $30, $cf, $cc   ; 11..11..111111..11.. 11..11..111111..11.. ; uses next room's line
- .assert >(*-1) = >(BlackMaze2), error, "Sprite spans page."
+ .byte $00, $0f, $c0   ; ........1111......11 ........1111......11
+ ;byte $30, $cf, $cc   ; 11..11..1111..11..11 11..11..1111..11..11 ; uses next room's line
+ .assert >(*-1) = >(BlackMazeTopRight), error, "Sprite spans page."
 BlackMazeEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $30, $cf, $cc   ; 11..1111..11..11..11 11..11..11..1111..11
- .byte $00, $c0, $cc   ; ..........11..11..11 11..11..11..........
+ .byte $30, $cf, $cc   ; 11..11..1111..11..11 11..11..1111..11..11
+ .byte $00, $c0, $cc   ; ....11........11..11 11..11........11....
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
@@ -2697,10 +2697,10 @@ roomnum_BlueMazeTop = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeTop
     .byte ColorType::blue, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_BlackCastle, roomnum_BlueMaze1, roomnum_BlueMazeCenter, roomnum_BlueMazeBottom
+    .byte roomnum_BlackCastle, roomnum_BlueMazeLeft, roomnum_BlueMazeCenter, roomnum_BlueMazeBottom
 
-roomnum_BlueMaze1 = (* - Rooms) / .sizeof(RoomType)
-    .word BlueMaze1
+roomnum_BlueMazeLeft = (* - Rooms) / .sizeof(RoomType)
+    .word BlueMazeLeft
     .byte ColorType::blue, ColorType::lightergray
     .byte RoomControlType::pfref
     .byte roomnum_TopEntryRoom2, roomnum_BlueMazeBottom, roomnum_BlueMazeEntry, roomnum_BlueMazeTop
@@ -2709,7 +2709,7 @@ roomnum_BlueMazeBottom = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeBottom
     .byte ColorType::blue, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_BlueMazeCenter, roomnum_BlueMazeTop, roomnum_BelowYellowCastleRightThinWall, roomnum_BlueMaze1
+    .byte roomnum_BlueMazeCenter, roomnum_BlueMazeTop, roomnum_BelowYellowCastleRightThinWall, roomnum_BlueMazeLeft
 
 roomnum_BlueMazeCenter = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeCenter
@@ -2721,7 +2721,7 @@ roomnum_BlueMazeEntry = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeEntry
     .byte ColorType::blue, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_BlueMaze1, roomnum_BlueMazeCenter, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeCenter
+    .byte roomnum_BlueMazeLeft, roomnum_BlueMazeCenter, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeCenter
 
 roomnum_MazeMiddle = (* - Rooms) / .sizeof(RoomType)
     .word MazeMiddle
@@ -2784,56 +2784,56 @@ roomrange_blackkey_end = roomnum_YellowCastleEntry
     .byte RoomControlType::pfref
     .byte roomnum_YellowCastleEntry, roomnum_YellowCastleEntry, roomnum_YellowCastleEntry, roomnum_YellowCastleEntry
 
-roomnum_BlackMaze1 = (* - Rooms) / .sizeof(RoomType)
-roomrange_chalice_start = roomnum_BlackMaze1
-    .word BlackMaze1
+roomnum_BlackMazeTopLeft = (* - Rooms) / .sizeof(RoomType)
+roomrange_chalice_start = roomnum_BlackMazeTopLeft
+    .word BlackMazeTopLeft
     .byte ColorType::invisible, ColorType::invisible
     .byte RoomControlType::pfref_pfp
-    .byte roomnum_BlackMaze3, roomnum_BlackMaze2, roomnum_BlackMaze3, roomnum_BlackMazeEntry
+    .byte roomnum_BlackMazeBottomLeft, roomnum_BlackMazeTopRight, roomnum_BlackMazeBottomLeft, roomnum_BlackMazeEntry
 
-roomnum_BlackMaze2 = (* - Rooms) / .sizeof(RoomType)
-    .word BlackMaze2
+roomnum_BlackMazeTopRight = (* - Rooms) / .sizeof(RoomType)
+    .word BlackMazeTopRight
     .byte ColorType::invisible, ColorType::invisible
     .byte RoomControlType::pfp
-    .byte roomnum_BlackMazeEntry, roomnum_BlackMaze3, roomnum_BlackMazeEntry, roomnum_BlackMaze1
+    .byte roomnum_BlackMazeEntry, roomnum_BlackMazeBottomLeft, roomnum_BlackMazeEntry, roomnum_BlackMazeTopLeft
 
-roomnum_BlackMaze3 = (* - Rooms) / .sizeof(RoomType)
-    .word BlackMaze3
+roomnum_BlackMazeBottomLeft = (* - Rooms) / .sizeof(RoomType)
+    .word BlackMazeBottomLeft
     .byte ColorType::invisible, ColorType::invisible
     .byte RoomControlType::pfp
-    .byte roomnum_BlackMaze1, roomnum_BlackMazeEntry, roomnum_BlackMaze1, roomnum_BlackMaze2
+    .byte roomnum_BlackMazeTopLeft, roomnum_BlackMazeEntry, roomnum_BlackMazeTopLeft, roomnum_BlackMazeTopRight
 
 roomnum_BlackMazeEntry = (* - Rooms) / .sizeof(RoomType)
 roomrange_whitekey_end = roomnum_BlackMazeEntry
     .word BlackMazeEntry
     .byte ColorType::invisible, ColorType::invisible
     .byte RoomControlType::pfref_pfp
-    .byte roomnum_BlackMaze2, roomnum_BlackMaze1, roomnum_BlackCastleEntry, roomnum_BlackMaze3
+    .byte roomnum_BlackMazeTopRight, roomnum_BlackMazeTopLeft, roomnum_BlackCastleEntry, roomnum_BlackMazeBottomLeft
 
-roomnum_RedMaze1 = (* - Rooms) / .sizeof(RoomType)
-    .word RedMaze1
+roomnum_RedMazeTopLeft = (* - Rooms) / .sizeof(RoomType)
+    .word RedMazeTopLeft
     .byte ColorType::red, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_RedMazeBottom, roomnum_RedMazeTop, roomnum_RedMazeBottom, roomnum_RedMazeTop
+    .byte roomnum_RedMazeBottomLeft, roomnum_RedMazeTopRight, roomnum_RedMazeBottomLeft, roomnum_RedMazeTopRight
 
-roomnum_RedMazeTop = (* - Rooms) / .sizeof(RoomType)
-    .word RedMazeTop
+roomnum_RedMazeTopRight = (* - Rooms) / .sizeof(RoomType)
+    .word RedMazeTopRight
     .byte ColorType::red, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_WhiteCastleEntry, roomnum_RedMaze1, roomnum_WhiteCastleEntry, roomnum_RedMaze1
+    .byte roomnum_WhiteCastleEntry, roomnum_RedMazeTopLeft, roomnum_WhiteCastleEntry, roomnum_RedMazeTopLeft
 
-roomnum_RedMazeBottom = (* - Rooms) / .sizeof(RoomType)
-    .word RedMazeBottom
+roomnum_RedMazeBottomLeft = (* - Rooms) / .sizeof(RoomType)
+    .word RedMazeBottomLeft
     .byte ColorType::red, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_RedMaze1, roomnum_WhiteCastleEntry, roomnum_RedMaze1, roomnum_WhiteCastleEntry
+    .byte roomnum_RedMazeTopLeft, roomnum_WhiteCastleEntry, roomnum_RedMazeTopLeft, roomnum_WhiteCastleEntry
 
 roomnum_WhiteCastleEntry = (* - Rooms) / .sizeof(RoomType)
 roomrange_chalice_end = roomnum_WhiteCastleEntry
     .word WhiteCastleEntry
     .byte ColorType::red, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_RedMazeTop, roomnum_RedMazeBottom, roomnum_RedMazeTop, roomnum_RedMazeBottom
+    .byte roomnum_RedMazeTopRight, roomnum_RedMazeBottomLeft, roomnum_RedMazeTopRight, roomnum_RedMazeBottomLeft
 
 roomnum_BlackCastleEntry = (* - Rooms) / .sizeof(RoomType)
     .word TwoExitRoom
@@ -2876,7 +2876,7 @@ roomnum_downfrom_BelowYellowCastleLeftThinWall = (* - RoomDiffs) | $80
 .byte roomnum_BlackCastle,                    roomnum_WhiteCastle,    roomnum_WhiteCastle
 
 roomnum_downfrom_BelowYellowCastleGreen = (* - RoomDiffs) | $80
-.byte roomnum_BlueMaze1,                      roomnum_YellowCastle,   roomnum_YellowCastle
+.byte roomnum_BlueMazeLeft,                   roomnum_YellowCastle,   roomnum_YellowCastle
 
 roomnum_downfrom_BelowYellowCastleRightThinWall = (* - RoomDiffs) | $80
 .byte roomnum_TopEntryRoom2,                  roomnum_MazeEntry,      roomnum_MazeEntry
