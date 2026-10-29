@@ -199,7 +199,7 @@ objstore_ptr:                   .word 0
 objdelta:                       .byte 0
 MoveGameObjectArg_ObjNumber:    .byte 0      ; identifies the object to move (used by MoveGameObject)
 MoveGameObjectArg_Difficulty:   .byte 0      ; difficulty for MoveGameObject to use (used by MoveGameObject)
-joystick_record:                .byte 0
+joystick_record:                .byte 0      ; used by PickupPutdown
 tmp1:                           .byte 0
 SurroundDynamic:                .byte 0, 0, 0
 GetObjectState_Arg:             .byte 0
@@ -223,7 +223,7 @@ START:      jmp StartGame    ;FIXME: remove and change StartGame: label to START
 
 ;; Render visible portion of screen
 PrintDisplay:
-            sta HMCLR       ;clear horizontal motion
+            sta HMCLR                 ;clear horizontal motion
             lda player0pos+PlayerPosType::xcoord
             ldx #SpriteType::object1
             jsr PosSpriteX
@@ -233,9 +233,9 @@ PrintDisplay:
             lda ManDynamic+DynamicType::xcoord
             ldx #SpriteType::man
             jsr PosSpriteX
-            sta WSYNC       ;wait for horizontal blank
-            sta HMOVE       ;apply horizontal motion
-            sta CXCLR       ;clear collision latches
+            sta WSYNC                 ;wait for horizontal blank
+            sta HMOVE                 ;apply horizontal motion
+            sta CXCLR                 ;clear collision latches
             lda ManDynamic+DynamicType::ycoord
             sec
             sbc #4                    ;and adjust it by four scan lines
@@ -609,7 +609,9 @@ CheckForMoreObjects:
 StoreCount: sty obj_counter       ;if so, store current count
             rts                   ; for next time
 
-; convert room number in accumulator to room address in dr_ptr
+; Get room address from room number
+; input: a=room number
+; returns: dr_ptr set to room address
 RoomNumToAddress:
             .assert .sizeof(RoomType) = 9, error, "This subroutine assumes RoomType is 9 bytes long."
             sta tmp1              ;store room number wanted
@@ -640,56 +642,59 @@ RoomNumToAddress:
             rts
 
 ; Get pointer to current state
-; input dr_ptr, returning offset in y
+; input: dr_ptr
+; returns: offset in y
 GetObjectState:
             ldy #0
             lda GetObjectState_Arg
-:           cmp (dr_ptr),y        ;have we found it in the list of states?
-            bcc :+                ;if nearing it then found it and return
-            beq :+                ;if found it then return
+@Next:      cmp (dr_ptr),y        ;have we found it in the list of states?
+            bcc @Done             ;if nearing it then found it and return
+            beq @Done             ;if found it then return
             .assert .sizeof(StateType) = 3, error, "This subroutine assumes StateType is 3 bytes long."
             iny                   ;goto next state in list of states
             iny
             iny
-            jmp :-
-:           rts
+            jmp @Next             ;FIXME: change to bne
+@Done:      rts
 
 ;; Maintain input_counter, clearing high byte when input has been detected (captures randomness)
 MaintainInputCounter:
             inc input_counter
-            bne :+
+            bne @NoWrap
             inc input_counter+1
-            bne :+
-            lda #$80              ;wrap the high input_counter (indicating timeout) if needed
+            bne @NoWrap
+            lda #$80                ;wrap the high input_counter (indicating timeout) if needed
             sta input_counter+1
-:           lda SWCHA               ;get joystick values
+@NoWrap:    lda SWCHA               ;get joystick values
             cmp #<~MoveTypes::none  ;if any movement then branch
-            bne :+
+            bne @JoystickUsed
             lda SWCHB               ;get the console switches
             and #ConsoleSwitchType::select_and_reset
             cmp #ConsoleSwitchType::select_and_reset ;have either of them been used?
-            beq :++               ;if no usage then branch
-:           lda #0                ;zero the high input_counter if the
-            sta input_counter+1   ; switches or joystick have been used
-:           rts
+            beq @Done               ;if no usage then return
+@JoystickUsed:
+            lda #0                  ;zero the high input_counter if the
+            sta input_counter+1     ; switches or joystick have been used
+@Done:      rts
 
-; change color if necessary
+; Change color if necessary
 ChangeColor:
             .assert (ColorType::flash & 2) = 2, error, "Bad ColorType::flash value."
-            lsr a                 ;if bit 0 of the color is set
-            bcc :+                ; branch if clear, no flash
+            lsr a                        ;if bit 0 of the color is set
+            bcc @CheckRecentMovement     ; branch if clear, no flash
 
 ; FIXME: delete the following three lines and uncomment the forth line:
             tay
-            lda $0080,y           ;flash
+            lda $0080,y                  ;flash
             .assert $80 + (ColorType::flash >> 1) = input_counter, error, "Bad ColorType::flash value."
-           ;lda input_counter     ;flash
+           ;lda input_counter            ;flash
 
-:           ldy input_counter+1   ;get the high input counter
-            bpl :+                ;if console/joystick moved recently then branch
-            eor input_counter+1   ;vary colors after a period of inactivty to limit CRT burn in
-            and #$fb              ; turn down the luminance
-:           asl a                 ; and restore original color if necessary
+@CheckRecentMovement:
+            ldy input_counter+1          ;get the high input counter
+            bpl @Done                    ;if console/joystick moved recently then branch
+            eor input_counter+1          ;vary colors after a period of inactivty to limit CRT burn in
+            and #%11111011               ; turn down the luminance
+@Done:      asl a                        ; and restore original color if necessary
             rts
 
 ; load dr_ptr with address of object's dynamic info using x
@@ -943,31 +948,31 @@ Game2ObjectLocationsEnd:
 
 ;; Check ball (man) collisions and move ball
 BallMovement:
-            lda CXBLPF
-            and #%10000000        ;get ball-playfield collision
+            lda CXBLPF            ;bl-pf collision
+            and #%10000000        ;get bl-pf collision
             bne ManCollision      ;branch if collision (man-wall)
-            lda CXM0FB
-            and #%01000000        ;get ball-missile0 collision
+            lda CXM0FB            ;m0-pf, m0-bl collision
+            and #%01000000        ;get m0-bl collision
             bne ManCollision      ;branch if collision (man-left thin)
-            lda CXM1FB
-            and #%01000000        ;get ball-missile1 collision
+            lda CXM1FB            ;m1-pf, m1-bl collision
+            and #%01000000        ;get m1-bl collision
             beq :+                ;branch if no collision
             lda object2           ;if Object2 (to print) is
-            cmp #$87              ; not the black dot then collide
+            cmp #objoffset_BlackDot
             bne ManCollision
-:           lda CXP0FB
-            and #%01000000        ;get ball-player0 collision
+:           lda CXP0FB            ;p0-pf, p0-bl collision
+            and #%01000000        ;get p0-bl collision
             beq :+                ;if no collision then branch
             lda object1           ;if Object1 (to print is)
             cmp #0                ; not the invisible surround then
             bne ManCollision      ; branch if collision (man-player0)
-:           lda CXP1FB
-            and #%01000000        ;get ball-player1 collision
+:           lda CXP1FB            ;p1-pf, p1-bl collision
+            and #%01000000        ;get p1-bl collision
             beq NoManCollision    ;if no collision then branch
-            lda object2           ;if player 01 to print is
-            cmp #0                ; not the invisible surround then
-            bne ManCollision      ; branch if collision (man-player1)
-            jmp NoManCollision
+            lda object2           ;if p1 to print is not the invisible surround then branch if collision (p1-bl)
+            cmp #0
+            bne ManCollision
+            jmp NoManCollision    ;FIXME: change to beq and delete previous two lines
 
 ; the man collided (with something)
 ManCollision:
@@ -1031,8 +1036,8 @@ PickupPutdown:
             rol INPT4             ;get joystick trigger
             ror joystick_record   ;merge into joystick record
             lda joystick_record   ;get joystick record
-            and #$c0              ;merge out previous presses
-            cmp #$40              ;was it previously pressed?
+            and #%11000000        ;merge out previous presses
+            cmp #%01000000        ;was it previously pressed?
             bne :+                ;if not branch
             lda #objoffset_Null
             cmp object_carried
@@ -1047,16 +1052,16 @@ PickupPutdown:
             sta unused1           ;FIXME: remove
 
 ; check for collision
-            lda CXP0FB
-            and #%01000000        ;get Ball-Player0 collision
+            lda CXP0FB            ;p0-pf, p0-bl collision
+            and #%01000000        ;get p0-bl collision
             beq :+                ;if nothing occurred then branch
 ; with Player0
             lda object1           ;get type of Player0
             sta obj_collided_with
             jmp CollisionDetected ;deal with collision
 
-:           lda CXP1FB
-            and #%01000000        ;get Ball-Player01 collision
+:           lda CXP1FB            ;p1-pf, p1-bl collision
+            and #%01000000        ;get p1-bl collision
             beq :+                ;if no collision, exit
             lda object2           ;get type of Player01
             sta obj_collided_with
@@ -1269,28 +1274,28 @@ AdjustRoomLevel:
             lda RoomDiffs,y         ;use as an offset to get the next room
 @NoChange:  rts
 
-; get player-ball collision
+; determine whether a player sprite is colliding with ball (The Man)
 ; input a=object number
 ; returns a=0 if no collision, a<>0 if collision
 PBCollision:
             cmp object1             ;is it the first object?
-            beq :+                  ; branch if yes
+            beq @P0                 ; branch if yes
             cmp object2             ;is it the second object?
-            beq :++                 ; branch if yes
+            beq @P1                 ; branch if yes
             lda #0                  ;otherwise nothing
             rts
-:           lda CXP0FB              ;get player0-ball collision
-            and #%01000000
+@P0:        lda CXP0FB              ;p0-pf, p0-bl collision
+            and #%01000000          ;get p0-bl collision
             rts
-:           lda CXP1FB              ;get player1-ball collision
-            and #%01000000
+@P1:        lda CXP1FB              ;p1-pf, p1-bl collision
+            and #%01000000          ;get p1-bl collision
             rts
 
 ; find which object has hit object wanted
 ; input x=object number
 ; returns hit object number in a
-FindObjHit: lda CXPPMM              ;get player0-player1
-            and #%10000000          ; collision
+FindObjHit: lda CXPPMM              ;p0-p1, m0-m1 collision
+            and #%10000000          ;get p0-p1 collision
             beq :+                  ;if nothing, branch
             cpx object1             ;is object 1 the one being hit?
             beq :++                 ;if so, branch
@@ -1323,12 +1328,12 @@ GetLinkedObject:
             sta linked_obj_index
 :           ldy linked_obj_index
             lda (objstore_ptr),y
-            tax                     ;x is Object1
+            tax                               ;x is Object1
             iny
             lda (objstore_ptr),y
-            tay                     ;y is Object2
-            lda z:DynamicType::room,x   ;compare Object1's room
-            cmp DynamicType::room,y     ; w/Object2's room
+            tay                               ;y is Object2
+            lda z:DynamicType::room,x         ;compare Object1's room
+            cmp DynamicType::room,y           ; w/Object2's room
             bne :+                            ;if not the same room then branch
             cpy MoveGameObjectArg_Difficulty  ;have we matched Object2 for difficulty?
             beq :+                            ; branch if yes
@@ -1339,8 +1344,8 @@ GetLinkedObject:
 :           inc linked_obj_index
             inc linked_obj_index
             ldy linked_obj_index
-            lda (objstore_ptr),y    ;check for end of sequence
-            bne :--                 ;if not branch
+            lda (objstore_ptr),y              ;check for end of sequence
+            bne :--                           ;if not branch
             lda #MoveTypes::none
             sta direction_wanted
             rts
@@ -1349,28 +1354,28 @@ GetLinkedObject:
             sta direction_wanted
             lda DynamicType::room,y      ;compare Object2's room
             cmp z:DynamicType::room,x    ; w/ Object1's room
-            bne @Exit                          ;if not the same, forget it
+            bne @Exit                    ;if not the same, forget it
             lda DynamicType::xcoord,y    ;compare Object2's X coordinate
             cmp z:DynamicType::xcoord,x  ; w/ Object1's X coordinate
-            bcc @SetLeft            ;if Object2 X < Object1 X then branch
-            beq @CmpY               ;if Object2 X = Object1 X then branch
+            bcc @SetLeft                 ;if Object2 X < Object1 X then branch
+            beq @CmpY                    ;if Object2 X = Object1 X then branch
             lda direction_wanted
-            and #<~MoveTypes::right ;move Object1 right
+            and #<~MoveTypes::right      ;move Object1 right
             sta direction_wanted
             jmp @CmpY
 @SetLeft:   lda direction_wanted
-            and #<~MoveTypes::left  ;move Object1 left
+            and #<~MoveTypes::left       ;move Object1 left
             sta direction_wanted
 @CmpY:      lda DynamicType::ycoord,y    ;compare Object2's Y coordinate
             cmp z:DynamicType::ycoord,x  ; w/ Object1's Y coordinate
-            bcc @SetDown            ;if Object2 Y < Object1 Y then branch
-            beq @Exit               ;if Object2 Y = Object1 Y then branch
+            bcc @SetDown                 ;if Object2 Y < Object1 Y then branch
+            beq @Exit                    ;if Object2 Y = Object1 Y then branch
             lda direction_wanted
-            and #<~MoveTypes::up    ;move Object1 up
+            and #<~MoveTypes::up         ;move Object1 up
             sta direction_wanted
             jmp @Exit
 @SetDown:   lda direction_wanted
-            and #<~MoveTypes::down  ;move Object1 down
+            and #<~MoveTypes::down       ;move Object1 down
             sta direction_wanted
 @Exit:      lda direction_wanted
             rts
@@ -1384,7 +1389,7 @@ MoveRedDragon:
             lda #3
             sta objdelta
             ldx #objoffset_DragonRhindle
-            jsr MoveDragon  ;FIXME: change to jmp, remove rts
+            jsr MoveDragon               ;FIXME: change to jmp, remove rts
             rts
 
 RedDragMatrix:
@@ -1403,7 +1408,7 @@ MoveYellowDragon:
             lda #2
             sta objdelta
             ldx #objoffset_DragonYorgle
-            jsr MoveDragon  ;FIXME: change to jmp, remove rts
+            jsr MoveDragon               ;FIXME: change to jmp, remove rts
             rts
 
 YelDragMatrix:
@@ -1422,7 +1427,7 @@ MoveGreenDragon:
             lda #2
             sta objdelta
             ldx #objoffset_DragonGrundle
-            jsr MoveDragon  ;FIXME: change to jmp, remove rts
+            jsr MoveDragon               ;FIXME: change to jmp, remove rts
             rts
 
 GreenDragMatrix:
@@ -1438,33 +1443,33 @@ GreenDragMatrix:
 ; x            = dragon object (objoffset_DragonRhindle, objoffset_DragonYorgle, objoffset_DragonGrundle)
 ; objstore_ptr = dragon matrix
 ; objdelta     = move speed
-MoveDragon: stx curr_obj_number   ;save which dragon we're dealing with
+MoveDragon: stx curr_obj_number          ;save which dragon we're dealing with
             lda Objects+ObjectType::dynamic_ptr,x
             tax
             lda z:DynamicType::state,x
             cmp #DragonState::normal
-            bne @DragonStateNotNormal  ;branch if not normal
+            bne @DragonStateNotNormal    ;branch if not normal
 @DragonStateNormal:
-            lda SWCHB             ;read console switches
-            and #ConsoleSwitchType::rightdifficulty ;check for P1 difficulty
-            beq :+                ;if Amateur (B) branch
-            lda #0                ;set hard - ignore nothing
-            jmp :++               ;FIXME: change to beq
-:           lda #SwordDynamic     ;set easy - ignore sword
+            lda SWCHB                    ;read console switches
+            and #ConsoleSwitchType::rightdifficulty
+            beq :+                       ;if Amateur (B) branch
+            lda #0                       ;set hard - ignore nothing
+            jmp :++                      ;FIXME: change to beq
+:           lda #SwordDynamic            ;set easy - ignore sword
 :           sta MoveGameObjectArg_Difficulty
             stx MoveGameObjectArg_ObjNumber
             jsr MoveGameObject
-            lda curr_obj_number   ;get which dragon
-            jsr PBCollision       ; and check player-ball collision
-            beq @CheckSwordContact;branch if no collision
-            lda SWCHB             ;get console switches
-            rol a                 ;move P0 difficulty to
-            rol a                 ; bit 0 position
+            lda curr_obj_number          ;get which dragon
+            jsr PBCollision              ; and check player-ball collision
+            beq @CheckSwordContact       ;branch if no collision
+            lda SWCHB                    ;get console switches
+            rol a                        ;move P0 difficulty to
+            rol a                        ; bit 0 position
             rol a
-            and #1                ;mask out everything else
-            ora NumberCurrState   ;merge in the level number
-            tay                   ;create lookup
-            lda DragonDiff,y      ;get new state
+            and #1                       ;mask out everything else
+            ora NumberCurrState          ;merge in the level number
+            tay                          ;create lookup
+            lda DragonDiff,y             ;get new state
             sta z:DynamicType::state,x   ;store as dragon's state (roaring)
             lda PrevManDynamic+DynamicType::xcoord
             sta z:DynamicType::xcoord,x  ;get temp ball X coord and store as dragon's
@@ -1476,58 +1481,58 @@ MoveDragon: stx curr_obj_number   ;save which dragon we're dealing with
             sta sound_duration_counter
 @CheckSwordContact:
             stx portcullis_number
-            ldx curr_obj_number   ;get which dragon
-            jsr FindObjHit        ;set if another object has hit the dragon
+            ldx curr_obj_number          ;get which dragon
+            jsr FindObjHit               ;set if another object has hit the dragon
             ldx portcullis_number
-            cmp #objoffset_Sword  ;has the sword hit the dragon?
-            bne :+                ;if not, branch
+            cmp #objoffset_Sword         ;has the sword hit the dragon?
+            bne :+                       ;if not, branch
             lda #DragonState::dead
             sta z:DynamicType::state,x
             lda #NoiseType::dragon_died
             sta sound_type
             lda #16
             sta sound_duration_counter
-:           jmp @DoneWithDragon   ;jump to finish
+:           jmp @DoneWithDragon
 @DragonStateNotNormal:
             cmp #DragonState::dead
-            beq @DoneWithDragon   ;branch if so
+            beq @DoneWithDragon          ;branch if so
             cmp #DragonState::ateman
-            bne @DragonRoaring    ;branch if not
+            bne @DragonRoaring           ;branch if not
 @DragonStateAteMan:
             lda z:DynamicType::room,x
             sta ManDynamic+DynamicType::room
             sta PrevManDynamic+DynamicType::room
             lda z:DynamicType::xcoord,x
             clc
-            adc #3                ;adjust +3x
+            adc #3                       ;adjust +3x
             sta ManDynamic+DynamicType::xcoord
             sta PrevManDynamic+DynamicType::xcoord
             lda z:DynamicType::ycoord,x
             sec
-            sbc #10               ;adjust -10y
+            sbc #10                      ;adjust -10y
             sta ManDynamic+DynamicType::ycoord
             sta PrevManDynamic+DynamicType::ycoord
             jmp @DoneWithDragon
 @DragonRoaring:
-            inc z:DynamicType::state,x  ;increment the dragon's state
-            lda z:DynamicType::state,x  ;get its state
-            cmp #$fc              ;is it near the end?
-            bcc @DoneWithDragon   ;if not, branch
-            lda curr_obj_number   ;get which dragon
-            jsr PBCollision       ;check if the ball is colliding
-            beq @DoneWithDragon   ;if not, branch
+            inc z:DynamicType::state,x   ;increment the dragon's state
+            lda z:DynamicType::state,x   ;get its state
+            cmp #$fc                     ;is it near the end?
+            bcc @DoneWithDragon          ;if not, branch
+            lda curr_obj_number          ;get which dragon
+            jsr PBCollision              ;check player-ball collision
+            beq @DoneWithDragon          ;if not, branch
             lda #DragonState::ateman
             sta z:DynamicType::state,x
             lda #NoiseType::man_eaten
             sta sound_type
             lda #16
             sta sound_duration_counter
-            lda #155              ;get the maximum X coordinate
+            lda #155                     ;get the maximum X coordinate
             cmp z:DynamicType::xcoord,x  ;compare with the dragon's X coordinate
             beq :+
             bcs :+
             sta z:DynamicType::xcoord,x  ;cap it at max X coordinate
-:           lda #23               ;set minimum Y coordinate
+:           lda #23                      ;set minimum Y coordinate
             cmp z:DynamicType::ycoord,x  ;compare with the dragon's Y coordinate
             bcc @DoneWithDragon
             sta z:DynamicType::ycoord,x  ;cap it at min Y coordinate
@@ -1640,7 +1645,7 @@ Portals:    ldy #2                ;for each portcullis
             cmp #PortCullisState::closed
             beq @IncPortCullisState     ;yes - then branch
             lda PortOffsets,y     ;get portcullis number
-            jsr PBCollision       ;get the player-ball collision
+            jsr PBCollision       ;check player-ball collision
             beq :+                ;if not then branch
             lda #PortCullisState::open
             sta PortCurrStateBase,x
@@ -1833,7 +1838,7 @@ GetObjectNoise:
             lda sound_duration_counter
             jmp :-                ;make same noise as drop
 
-;.res 29, 0 ; Padding may be needed to satisfy the following invariant.
+;.res 36, 0 ; Padding may be needed to satisfy the following invariant.
 
 ; The alignment of sprites is carefully done to prevent crossing of page boundaries.
 .assert (* & $fff) = $aa0, error, "Sprite area does not start at the expected offset."

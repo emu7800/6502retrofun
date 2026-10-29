@@ -199,7 +199,7 @@ objstore_ptr:                   .word 0
 objdelta:                       .byte 0
 MoveGameObjectArg_ObjNumber:    .byte 0      ; identifies the object to move (used by MoveGameObject)
 MoveGameObjectArg_Difficulty:   .byte 0      ; difficulty for MoveGameObject to use (used by MoveGameObject)
-joystick_record:                .byte 0
+joystick_record:                .byte 0      ; used by PickupPutdown
 tmp1:                           .byte 0
 SurroundDynamic:                .byte 0, 0, 0
 GetObjectState_Arg:             .byte 0
@@ -217,7 +217,7 @@ stack_space:                    ; $e7-$ff (12 frames)
 
 ;; Render visible portion of screen
 PrintDisplay:
-            sta HMCLR       ;clear horizontal motion
+            sta HMCLR                 ;clear horizontal motion
             lda player0pos+PlayerPosType::xcoord
             ldx #SpriteType::object1
             jsr PosSpriteX
@@ -227,9 +227,9 @@ PrintDisplay:
             lda ManDynamic+DynamicType::xcoord
             ldx #SpriteType::man
             jsr PosSpriteX
-            sta WSYNC       ;wait for horizontal blank
-            sta HMOVE       ;apply horizontal motion
-            sta CXCLR       ;clear collision latches
+            sta WSYNC                 ;wait for horizontal blank
+            sta HMOVE                 ;apply horizontal motion
+            sta CXCLR                 ;clear collision latches
             lda ManDynamic+DynamicType::ycoord
             sec
             sbc #4                    ;and adjust it by four scan lines
@@ -323,7 +323,6 @@ PrintDisplay:
             cmp #8                   ;have we reached to within 8 scanlines of the bottom?
             bpl @PrintPlayer1        ;if not, branch
 
-; cleanly end picture on line offset 230
             sta WSYNC
             sta VBLANK
 
@@ -600,7 +599,9 @@ CheckForMoreObjects:
 StoreCount: sty obj_counter       ;if so, store current count
             rts                   ; for next time
 
-; convert room number in accumulator to room address in dr_ptr
+; Get room address from room number
+; input: a=room number
+; returns: dr_ptr set to room address
 RoomNumToAddress:
             .assert .sizeof(RoomType) = 9, error, "This subroutine assumes RoomType is 9 bytes long."
             sta tmp1              ;store room number wanted
@@ -631,50 +632,55 @@ RoomNumToAddress:
             rts
 
 ; Get pointer to current state
-; input dr_ptr, returning offset in y
+; input: dr_ptr
+; returns: offset in y
 GetObjectState:
             ldy #0
             lda GetObjectState_Arg
-:           cmp (dr_ptr),y        ;have we found it in the list of states?
-            bcc :+                ;if nearing it then found it and return
-            beq :+                ;if found it then return
+@Next:      cmp (dr_ptr),y        ;have we found it in the list of states?
+            bcc @Done             ;if nearing it then found it and return
+            beq @Done             ;if found it then return
             .assert .sizeof(StateType) = 3, error, "This subroutine assumes StateType is 3 bytes long."
             iny                   ;goto next state in list of states
             iny
             iny
-            jmp :-
-:           rts
+            bne @Next
+@Done:      rts
 
 ;; Maintain input_counter, clearing high byte when input has been detected (captures randomness)
 MaintainInputCounter:
             inc input_counter
-            bne :+
+            bne @NoWrap
             inc input_counter+1
-            bne :+
-            lda #$80              ;wrap the high input_counter (indicating timeout) if needed
+            bne @NoWrap
+            lda #$80                ;wrap the high input_counter (indicating timeout) if needed
             sta input_counter+1
-:           lda SWCHA               ;get joystick values
+@NoWrap:    lda SWCHA               ;get joystick values
             cmp #<~MoveTypes::none  ;if any movement then branch
-            bne :+
+            bne @JoystickUsed
             lda SWCHB               ;get the console switches
             and #ConsoleSwitchType::select_and_reset
             cmp #ConsoleSwitchType::select_and_reset ;have either of them been used?
-            beq :++               ;if no usage then branch
-:           lda #0                ;zero the high input_counter if the
-            sta input_counter+1   ; switches or joystick have been used
-:           rts
+            beq @Done               ;if no usage then return
+@JoystickUsed:
+            lda #0                  ;zero the high input_counter if the
+            sta input_counter+1     ; switches or joystick have been used
+@Done:      rts
 
-; change color if necessary
+; Change color if necessary
 ChangeColor:
             .assert (ColorType::flash & 2) = 2, error, "Bad ColorType::flash value."
-            lsr a                 ;if bit 0 of the color is set
-            bcc :+                ; branch if clear, no flash
-            lda input_counter     ;flash
-:           ldy input_counter+1   ;get the high input counter
-            bpl :+                ;if console/joystick moved recently then branch
-            eor input_counter+1   ;vary colors after a period of inactivty to limit CRT burn in
-            and #$fb              ; turn down the luminance
-:           asl a                 ; and restore original color if necessary
+            lsr a                        ;if bit 0 of the color is set
+            bcc @CheckRecentMovement     ; branch if clear, no flash
+
+            lda input_counter            ;flash
+
+@CheckRecentMovement:
+            ldy input_counter+1          ;get the high input counter
+            bpl @Done                    ;if console/joystick moved recently then branch
+            eor input_counter+1          ;vary colors after a period of inactivty to limit CRT burn in
+            and #%11111011               ; turn down the luminance
+@Done:      asl a                        ; and restore original color if necessary
             rts
 
 ; load dr_ptr with address of object's dynamic info using x
@@ -886,7 +892,7 @@ GameObjectLocations:
 ; object locations (room and coordinates) for game 1
 Game1ObjectLocations:
 ;                 Location                                X    Y    Mvt   State   Object
-            .byte roomnum_BlackMaze3,                    81,  18                  ;black dot
+            .byte roomnum_BlackMazeBottomLeft,           81,  18                  ;black dot
             .byte roomnum_TopEntryRoom1,                 80,  32,    0,   0       ;red dragon
             .byte roomnum_BelowYellowCastleLeftThinWall, 80,  32,    0,   0       ;yellow dragon
             .byte roomnum_TopEntryRoom2,                 80,  32,    0,   0       ;green dragon
@@ -906,17 +912,17 @@ Game1ObjectLocationsEnd:
 
 Game2ObjectLocations:
 ;                 Location                                X    Y   Mvt    State   Object
-            .byte roomnum_BlackMaze3,                    81,  18                  ;black dot
-            .byte roomnum_BlackMaze2,                    80,  32,  $a0,   0       ;red dragon
-            .byte roomnum_RedMazeBottom,                 80,  32,  $a0,   0       ;yellow dragon
+            .byte roomnum_BlackMazeBottomLeft,           81,  18                  ;black dot
+            .byte roomnum_BlackMazeTopRight,             80,  32,  $a0,   0       ;red dragon
+            .byte roomnum_RedMazeBottomLeft,             80,  32,  $a0,   0       ;yellow dragon
             .byte roomnum_BlueMazeTop,                   80,  32,  $a0,   0       ;green dragon
             .byte roomnum_TopEntryRoom1,                128,  32                  ;magnet
             .byte roomnum_YellowCastle,                  32,  32                  ;sword
-            .byte roomnum_BlackMaze2,                    48,  32                  ;chalice
+            .byte roomnum_BlackMazeTopRight,             48,  32                  ;chalice
             .byte roomnum_MazeSide,                      64,  64                  ;bridge
             .byte roomnum_MazeMiddle,                    32,  64                  ;yellow key
             .byte roomnum_BlueMazeBottom,                32,  64                  ;white key
-            .byte roomnum_RedMazeBottom,                 32,  64                  ;black key
+            .byte roomnum_RedMazeBottomLeft,             32,  64                  ;black key
             .byte roomnum_OtherPurpleRoom                                         ;portcullis state
             .byte roomnum_OtherPurpleRoom                                         ;portcullis state
             .byte roomnum_OtherPurpleRoom                                         ;portcullis state
@@ -926,31 +932,29 @@ Game2ObjectLocationsEnd:
 
 ;; Check ball (man) collisions and move ball
 BallMovement:
-            lda CXBLPF
-            and #%10000000        ;get ball-playfield collision
+            lda CXBLPF            ;bl-pf collision
+            and #%10000000        ;get bl-pf collision
             bne ManCollision      ;branch if collision (man-wall)
-            lda CXM0FB
-            and #%01000000        ;get ball-missile0 collision
+            lda CXM0FB            ;m0-pf, m0-bl collision
+            and #%01000000        ;get m0-bl collision
             bne ManCollision      ;branch if collision (man-left thin)
-            lda CXM1FB
-            and #%01000000        ;get ball-missile1 collision
+            lda CXM1FB            ;m1-pf, m1-bl collision
+            and #%01000000        ;get m1-bl collision
             beq :+                ;branch if no collision
             lda object2           ;if Object2 (to print) is
-            cmp #$87              ; not the black dot then collide
+            cmp #objoffset_BlackDot
             bne ManCollision
-:           lda CXP0FB
-            and #%01000000        ;get ball-player0 collision
+:           lda CXP0FB            ;p0-pf, p0-bl collision
+            and #%01000000        ;get p0-bl collision
             beq :+                ;if no collision then branch
             lda object1           ;if Object1 (to print is)
             cmp #0                ; not the invisible surround then
             bne ManCollision      ; branch if collision (man-player0)
-:           lda CXP1FB
-            and #%01000000        ;get ball-player1 collision
+:           lda CXP1FB            ;p1-pf, p1-bl collision
+            and #%01000000        ;get p1-bl collision
             beq NoManCollision    ;if no collision then branch
-            lda object2           ;if player 01 to print is
-            cmp #0                ; not the invisible surround then
-            bne ManCollision      ; branch if collision (man-player1)
-            jmp NoManCollision
+            lda object2           ;if p1 to print is not the invisible surround then branch if collision (p1-bl)
+            beq NoManCollision
 
 ; the man collided (with something)
 ManCollision:
@@ -1013,8 +1017,8 @@ PickupPutdown:
             rol INPT4             ;get joystick trigger
             ror joystick_record   ;merge into joystick record
             lda joystick_record   ;get joystick record
-            and #$c0              ;merge out previous presses
-            cmp #$40              ;was it previously pressed?
+            and #%11000000        ;merge out previous presses
+            cmp #%01000000        ;was it previously pressed?
             bne :+                ;if not branch
             lda #objoffset_Null
             cmp object_carried
@@ -1024,17 +1028,18 @@ PickupPutdown:
             sta sound_type
             lda #4
             sta sound_duration_counter
+:
 ; check for collision
-:           lda CXP0FB
-            and #%01000000        ;get Ball-Player0 collision
+            lda CXP0FB            ;p0-pf, p0-bl collision
+            and #%01000000        ;get p0-bl collision
             beq :+                ;if nothing occurred then branch
 ; with Player0
             lda object1           ;get type of Player0
             sta obj_collided_with
             jmp CollisionDetected ;deal with collision
 
-:           lda CXP1FB
-            and #%01000000        ;get Ball-Player01 collision
+:           lda CXP1FB            ;p1-pf, p1-bl collision
+            and #%01000000        ;get p1-bl collision
             beq :+                ;if no collision, exit
             lda object2           ;get type of Player01
             sta obj_collided_with
@@ -1180,7 +1185,7 @@ MoveGroundObject:
             cmp #roomnum_BelowYellowCastleRightThinWall  ; left of secret room
             bne @WrapX              ;branch if not
             lda DotDynamic+DynamicType::room  ;check the room of the black dot
-            cmp #roomnum_BlackMaze3 ;is it in the hidden room area?
+            cmp #roomnum_BlackMazeBottomLeft ;is it in the hidden room area?
             beq @WrapX              ;if so, branch
 ; change to secret room
             lda #roomnum_SecretRoom
@@ -1246,28 +1251,28 @@ AdjustRoomLevel:
             lda RoomDiffs,y         ;use as an offset to get the next room
 @NoChange:  rts
 
-; get player-ball collision
+; determine whether a player sprite is colliding with ball (The Man)
 ; input a=object number
 ; returns a=0 if no collision, a<>0 if collision
 PBCollision:
             cmp object1             ;is it the first object?
-            beq :+                  ; branch if yes
+            beq @P0                 ; branch if yes
             cmp object2             ;is it the second object?
-            beq :++                 ; branch if yes
+            beq @P1                 ; branch if yes
             lda #0                  ;otherwise nothing
             rts
-:           lda CXP0FB              ;get player0-ball collision
-            and #%01000000
+@P0:        lda CXP0FB              ;p0-pf, p0-bl collision
+            and #%01000000          ;get p0-bl collision
             rts
-:           lda CXP1FB              ;get player1-ball collision
-            and #%01000000
+@P1:        lda CXP1FB              ;p1-pf, p1-bl collision
+            and #%01000000          ;get p1-bl collision
             rts
 
 ; find which object has hit object wanted
 ; input x=object number
 ; returns hit object number in a
-FindObjHit: lda CXPPMM              ;get player0-player1
-            and #%10000000          ; collision
+FindObjHit: lda CXPPMM              ;p0-p1, m0-m1 collision
+            and #%10000000          ;get p0-p1 collision
             beq :+                  ;if nothing, branch
             cpx object1             ;is object 1 the one being hit?
             beq :++                 ;if so, branch
@@ -1299,23 +1304,23 @@ GetLinkedObject:
             sta linked_obj_index
 :           ldy linked_obj_index
             lda (objstore_ptr),y
-            tax                     ;x is Object1
+            tax                               ;x is Object1
             iny
             lda (objstore_ptr),y
-            tay                     ;y is Object2
-            lda z:DynamicType::room,x   ;compare Object1's room
-            cmp DynamicType::room,y     ; w/Object2's room
+            tay                               ;y is Object2
+            lda z:DynamicType::room,x         ;compare Object1's room
+            cmp DynamicType::room,y           ; w/Object2's room
             bne :+                            ;if not the same room then branch
             cpy MoveGameObjectArg_Difficulty  ;have we matched Object2 for difficulty?
             beq :+                            ; branch if yes
             cpx MoveGameObjectArg_Difficulty  ;have we matched Object1 for difficulty?
             beq :+                            ; branch if yes
-            jmp @DetermineDirectionWanted
+            bne @DetermineDirectionWanted
 :           inc linked_obj_index
             inc linked_obj_index
             ldy linked_obj_index
-            lda (objstore_ptr),y    ;check for end of sequence
-            bne :--                 ;if not branch
+            lda (objstore_ptr),y              ;check for end of sequence
+            bne :--                           ;if not branch
             lda #MoveTypes::none
             sta direction_wanted
             rts
@@ -1324,28 +1329,28 @@ GetLinkedObject:
             sta direction_wanted
             lda DynamicType::room,y      ;compare Object2's room
             cmp z:DynamicType::room,x    ; w/ Object1's room
-            bne @Exit                          ;if not the same, forget it
+            bne @Exit                    ;if not the same, forget it
             lda DynamicType::xcoord,y    ;compare Object2's X coordinate
             cmp z:DynamicType::xcoord,x  ; w/ Object1's X coordinate
-            bcc @SetLeft            ;if Object2 X < Object1 X then branch
-            beq @CmpY               ;if Object2 X = Object1 X then branch
+            bcc @SetLeft                 ;if Object2 X < Object1 X then branch
+            beq @CmpY                    ;if Object2 X = Object1 X then branch
             lda direction_wanted
-            and #<~MoveTypes::right ;move Object1 right
+            and #<~MoveTypes::right      ;move Object1 right
             sta direction_wanted
             jmp @CmpY
 @SetLeft:   lda direction_wanted
-            and #<~MoveTypes::left  ;move Object1 left
+            and #<~MoveTypes::left       ;move Object1 left
             sta direction_wanted
 @CmpY:      lda DynamicType::ycoord,y    ;compare Object2's Y coordinate
             cmp z:DynamicType::ycoord,x  ; w/ Object1's Y coordinate
-            bcc @SetDown            ;if Object2 Y < Object1 Y then branch
-            beq @Exit               ;if Object2 Y = Object1 Y then branch
+            bcc @SetDown                 ;if Object2 Y < Object1 Y then branch
+            beq @Exit                    ;if Object2 Y = Object1 Y then branch
             lda direction_wanted
-            and #<~MoveTypes::up    ;move Object1 up
+            and #<~MoveTypes::up         ;move Object1 up
             sta direction_wanted
             jmp @Exit
 @SetDown:   lda direction_wanted
-            and #<~MoveTypes::down  ;move Object1 down
+            and #<~MoveTypes::down       ;move Object1 down
             sta direction_wanted
 @Exit:      lda direction_wanted
             rts
@@ -1410,33 +1415,33 @@ GreenDragMatrix:
 ; x            = dragon object (objoffset_DragonRhindle, objoffset_DragonYorgle, objoffset_DragonGrundle)
 ; objstore_ptr = dragon matrix
 ; objdelta     = move speed
-MoveDragon: stx curr_obj_number   ;save which dragon we're dealing with
+MoveDragon: stx curr_obj_number          ;save which dragon we're dealing with
             lda Objects+ObjectType::dynamic_ptr,x
             tax
             lda z:DynamicType::state,x
             cmp #DragonState::normal
-            bne @DragonStateNotNormal  ;branch if not normal
+            bne @DragonStateNotNormal    ;branch if not normal
 @DragonStateNormal:
-            lda SWCHB             ;read console switches
-            and #ConsoleSwitchType::rightdifficulty ;check for P1 difficulty
-            beq :+                ;if Amateur (B) branch
-            lda #0                ;set hard - ignore nothing
+            lda SWCHB                    ;read console switches
+            and #ConsoleSwitchType::rightdifficulty
+            beq :+                       ;if Amateur (B) branch
+            lda #0                       ;set hard - ignore nothing
             beq :++
-:           lda #SwordDynamic     ;set easy - ignore sword
+:           lda #SwordDynamic            ;set easy - ignore sword
 :           sta MoveGameObjectArg_Difficulty
             stx MoveGameObjectArg_ObjNumber
             jsr MoveGameObject
-            lda curr_obj_number   ;get which dragon
-            jsr PBCollision       ; and check player-ball collision
-            beq @CheckSwordContact;branch if no collision
-            lda SWCHB             ;get console switches
-            rol a                 ;move P0 difficulty to
-            rol a                 ; bit 0 position
+            lda curr_obj_number          ;get which dragon
+            jsr PBCollision              ; and check player-ball collision
+            beq @CheckSwordContact       ;branch if no collision
+            lda SWCHB                    ;get console switches
+            rol a                        ;move P0 difficulty to
+            rol a                        ; bit 0 position
             rol a
-            and #1                ;mask out everything else
-            ora NumberCurrState   ;merge in the level number
-            tay                   ;create lookup
-            lda DragonDiff,y      ;get new state
+            and #1                       ;mask out everything else
+            ora NumberCurrState          ;merge in the level number
+            tay                          ;create lookup
+            lda DragonDiff,y             ;get new state
             sta z:DynamicType::state,x   ;store as dragon's state (roaring)
             lda PrevManDynamic+DynamicType::xcoord
             sta z:DynamicType::xcoord,x  ;get temp ball X coord and store as dragon's
@@ -1448,58 +1453,58 @@ MoveDragon: stx curr_obj_number   ;save which dragon we're dealing with
             sta sound_duration_counter
 @CheckSwordContact:
             stx portcullis_number
-            ldx curr_obj_number   ;get which dragon
-            jsr FindObjHit        ;set if another object has hit the dragon
+            ldx curr_obj_number          ;get which dragon
+            jsr FindObjHit               ;set if another object has hit the dragon
             ldx portcullis_number
-            cmp #objoffset_Sword  ;has the sword hit the dragon?
-            bne :+                ;if not, branch
+            cmp #objoffset_Sword         ;has the sword hit the dragon?
+            bne :+                       ;if not, branch
             lda #DragonState::dead
             sta z:DynamicType::state,x
             lda #NoiseType::dragon_died
             sta sound_type
             lda #16
             sta sound_duration_counter
-:           jmp @DoneWithDragon   ;jump to finish
+:           jmp @DoneWithDragon
 @DragonStateNotNormal:
             cmp #DragonState::dead
-            beq @DoneWithDragon   ;branch if so
+            beq @DoneWithDragon          ;branch if so
             cmp #DragonState::ateman
-            bne @DragonRoaring    ;branch if not
+            bne @DragonRoaring           ;branch if not
 @DragonStateAteMan:
             lda z:DynamicType::room,x
             sta ManDynamic+DynamicType::room
             sta PrevManDynamic+DynamicType::room
             lda z:DynamicType::xcoord,x
             clc
-            adc #3                ;adjust +3x
+            adc #3                       ;adjust +3x
             sta ManDynamic+DynamicType::xcoord
             sta PrevManDynamic+DynamicType::xcoord
             lda z:DynamicType::ycoord,x
             sec
-            sbc #10               ;adjust -10y
+            sbc #10                      ;adjust -10y
             sta ManDynamic+DynamicType::ycoord
             sta PrevManDynamic+DynamicType::ycoord
             jmp @DoneWithDragon
 @DragonRoaring:
-            inc z:DynamicType::state,x  ;increment the dragon's state
-            lda z:DynamicType::state,x  ;get its state
-            cmp #$fc              ;is it near the end?
-            bcc @DoneWithDragon   ;if not, branch
-            lda curr_obj_number   ;get which dragon
-            jsr PBCollision       ;check if the ball is colliding
-            beq @DoneWithDragon   ;if not, branch
+            inc z:DynamicType::state,x   ;increment the dragon's state
+            lda z:DynamicType::state,x   ;get its state
+            cmp #$fc                     ;is it near the end?
+            bcc @DoneWithDragon          ;if not, branch
+            lda curr_obj_number          ;get which dragon
+            jsr PBCollision              ;check player-ball collision
+            beq @DoneWithDragon          ;if not, branch
             lda #DragonState::ateman
             sta z:DynamicType::state,x
             lda #NoiseType::man_eaten
             sta sound_type
             lda #16
             sta sound_duration_counter
-            lda #155              ;get the maximum X coordinate
+            lda #155                     ;get the maximum X coordinate
             cmp z:DynamicType::xcoord,x  ;compare with the dragon's X coordinate
             beq :+
             bcs :+
             sta z:DynamicType::xcoord,x  ;cap it at max X coordinate
-:           lda #23               ;set minimum Y coordinate
+:           lda #23                      ;set minimum Y coordinate
             cmp z:DynamicType::ycoord,x  ;compare with the dragon's Y coordinate
             bcc @DoneWithDragon
             sta z:DynamicType::ycoord,x  ;cap it at min Y coordinate
@@ -1612,7 +1617,7 @@ Portals:    ldy #2                ;for each portcullis
             cmp #PortCullisState::closed
             beq @IncPortCullisState     ;yes - then branch
             lda PortOffsets,y     ;get portcullis number
-            jsr PBCollision       ;get the player-ball collision
+            jsr PBCollision       ;check player-ball collision
             beq :+                ;if not then branch
             lda #PortCullisState::open
             sta PortCurrStateBase,x
@@ -1805,7 +1810,7 @@ GetObjectNoise:
             lda sound_duration_counter
             jmp :-                ;make same noise as drop
 
-.res 29, 0 ; Padding may be needed to satisfy the following invariant.
+.res 36, 0 ; Padding may be needed to satisfy the following invariant.
 
 ; The alignment of sprites is carefully done to prevent crossing of page boundaries.
 .assert (* & $fff) = $aa0, error, "Sprite area does not start at the expected offset."
@@ -1813,11 +1818,11 @@ GetObjectNoise:
 LeftOfName:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
- .byte $00, $00, $00   ; 11.................. ..................11
- .byte $00, $00, $00   ; 11.................. ..................11
- .byte $00, $00, $00   ; 11.................. ..................11
- .byte $00, $00, $00   ; 11.................. ..................11
- .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
+ .byte $00, $00, $00   ; .................... ....................
  ;byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111 ; uses next room's line
  .assert >(*-1) = >(LeftOfName), error, "Sprite spans page."
 BelowYellowCastle:
@@ -1910,90 +1915,90 @@ TwoExitRoom:
 BlueMazeTop:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
- .byte $00, $0c, $0c   ; ......11......11.... ....11......11......
- .byte $f0, $0c, $3c   ; 1111..11......1111.. ..1111......11..1111
- .byte $f0, $0c, $00   ; 1111..11............ ............11..1111
+ .byte $00, $0c, $0c   ; ........11....11.... ....11....11........
+ .byte $f0, $0c, $3c   ; 1111....11....1111.. ..1111....11....1111
+ .byte $f0, $0c, $00   ; 1111....11.......... ..........11....1111
  .byte $f0, $ff, $3f   ; 111111111111111111.. ..111111111111111111
- .byte $00, $30, $30   ; ........11......11.. ..11......11........
- .byte $f0, $33, $3f   ; 111111..11..111111.. ..111111..11..111111
+ .byte $00, $30, $30   ; ......11........11.. ..11........11......
+ .byte $f0, $33, $3f   ; 1111..11..11111111.. ..11111111..11..1111
  .assert >(*-1) = >(BlueMazeTop), error, "Sprite spans page."
-BlueMaze1:
+BlueMazeLeft:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
  .byte $00, $00, $00   ; .................... ....................
- .byte $f0, $fc, $ff   ; 1111..11111111111111 11111111111111..1111
+ .byte $f0, $fc, $ff   ; 1111111111..11111111 11111111..1111111111
  .byte $f0, $00, $c0   ; 1111..............11 11..............1111
- .byte $f0, $3f, $cf   ; 1111111111..1111..11 11..1111..1111111111
- .byte $00, $30, $cc   ; ........11....11..11 11..11....11........
- .byte $f0, $f3, $cc   ; 111111..1111..11..11 11..11..1111..111111
- .assert >(*-1) = >(BlueMaze1), error, "Sprite spans page."
+ .byte $f0, $3f, $cf   ; 1111..1111111111..11 11..1111111111..1111
+ .byte $00, $30, $cc   ; ......11......11..11 11..11......11......
+ .byte $f0, $f3, $cc   ; 11111111..11..11..11 11..11..111111111111
+ .assert >(*-1) = >(BlueMazeLeft), error, "Sprite spans page."
 BlueMazeBottom:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $f3, $0c   ; 111111..1111..11.... ....11..1111..111111
- .byte $00, $30, $0c   ; ........11....11.... ....11....11........
- .byte $f0, $3f, $0f   ; 1111111111..1111.... ....1111..1111111111
+ .byte $f0, $f3, $0c   ; 11111111..11..11.... ....11..11..11111111
+ .byte $00, $30, $0c   ; ......11......11.... ....11......11......
+ .byte $f0, $3f, $0f   ; 1111..1111111111.... ....1111111111..1111
  .byte $f0, $00, $00   ; 1111................ ................1111
- .byte $f0, $f0, $00   ; 1111....1111........ ........1111....1111
- .byte $00, $30, $00   ; ........11.......... ..........11........
- .byte $f0, $ff, $ff   ; 111111..1111..11..11 11..11..1111..111111
+ .byte $f0, $f0, $00   ; 11111111............ ............11111111
+ .byte $00, $30, $00   ; ......11............ ............11......
+ .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
  .assert >(*-1) = >(BlueMazeBottom), error, "Sprite spans page."
 BlueMazeCenter:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $33, $3f   ; 111111..11..111111.. ..111111..11..111111
- .byte $00, $30, $3c   ; ........11....1111.. ..1111....11........
+ .byte $f0, $33, $3f   ; 1111..11..11111111.. ..11111111..11..1111
+ .byte $00, $30, $3c   ; ......11......1111.. ..1111......11......
  .byte $f0, $ff, $3c   ; 111111111111..1111.. ..1111..111111111111
- .byte $00, $03, $3c   ; ....11........1111.. ..1111........11....
- .byte $f0, $33, $3c   ; 111111..11....1111.. ..1111....11..111111
- .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
- .byte $f0, $f3, $0c   ; 111111..1111..11.... ....11..1111..111111
+ .byte $00, $03, $3c   ; ..........11..1111.. ..1111..11..........
+ .byte $f0, $33, $3c   ; 1111..11..11..1111.. ..1111..11..11..1111
+ .byte $00, $33, $0c   ; ......11..11..11.... ....11..11..11......
+ .byte $f0, $f3, $0c   ; 11111111..11..11.... ....11..11..11111111
  .assert >(*-1) = >(BlueMazeCenter), error, "Sprite spans page."
 BlueMazeEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $f3, $cc   ; 111111..1111..11..11 11..11..1111..111111
- .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
- .byte $f0, $33, $fc   ; 111111..11....111111 111111....11..111111
- .byte $00, $33, $00   ; ....11..11.......... ..........11..11....
- .byte $f0, $f3, $ff   ; 111111..111111111111 111111111111..111111
+ .byte $f0, $f3, $cc   ; 11111111..11..11..11 11..11..11..11111111
+ .byte $00, $33, $0c   ; ......11..11..11.... ....11..11..11......
+ .byte $f0, $33, $fc   ; 1111..11..11..111111 111111..11..11..1111
+ .byte $00, $33, $00   ; ......11..11........ ........11..11......
+ .byte $f0, $f3, $ff   ; 11111111..1111111111 1111111111..11111111
  .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .assert >(*-1) = >(BlueMazeEntry), error, "Sprite spans page."
 MazeMiddle:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $cc   ; 111111111111..11..11 11..11..111111111111
- .byte $00, $00, $cc   ; ..............11.11. 11..11..............
- .byte $f0, $03, $cf   ; 111111......1111..11 11..1111......111111
- .byte $00, $03, $00   ; ....11.............. ..............11....
- .byte $f0, $f3, $fc   ; 111111..1111..111111 111111..1111..111111
- .byte $00, $33, $0c   ; ....11..11....11.... ....11....11..11....
- ;byte $f0, $33, $cc   ; 111111..11....11..11 11..11....11..111111 ; uses next room's line
+ .byte $00, $00, $cc   ; ..............11..11 11..11..............
+ .byte $f0, $03, $cf   ; 1111......111111..11 11..111111......1111
+ .byte $00, $03, $00   ; ..........11........ ........11..........
+ .byte $f0, $f3, $fc   ; 11111111..11..111111 111111..11..11111111
+ .byte $00, $33, $0c   ; ......11..11..11.... ....11..11..11......
+ ;byte $f0, $33, $cc   ; 1111..11..11..11..11 11..11..11..11..1111 ; uses next room's line
  .assert >(*-1) = >(MazeMiddle), error, "Sprite spans page."
 MazeSide:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $33, $cc   ; 111111..11....11..11 11..11....11..111111
- .byte $00, $30, $cc   ; ........11....11..11 11..11....11........
- .byte $00, $3f, $cf   ; ....111111..1111..11 11..1111..111111....
+ .byte $f0, $33, $cc   ; 1111..11..11..11..11 11..11..11..11..1111
+ .byte $00, $30, $cc   ; ......11......11..11 11..11......11......
+ .byte $00, $3f, $cf   ; ......1111111111..11 11..111111111.......
  .byte $00, $00, $c0   ; ..................11 11..................
- .byte $00, $3f, $c3   ; ....111111..11....11 11....11..111111....
- .byte $00, $30, $c0   ; ........11........11 11........11........
+ .byte $00, $3f, $c3   ; ......11111111....11 11....1111111.......
+ .byte $00, $30, $c0   ; ......11..........11 11.........11.......
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
  .assert >(*-1) = >(MazeSide), error, "Sprite spans page."
 MazeEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
- .byte $00, $30, $00   ; ........11.......... ..........11........
- .byte $f0, $30, $ff   ; 1111....11..11111111 11111111..11....1111
- .byte $00, $30, $c0   ; ........11........11 11........11........
- .byte $f0, $f3, $c0   ; 111111..1111......11 11......1111..111111
- .byte $00, $03, $c0   ; ....11............11 11............11....
- .byte $f0, $ff, $cc   ; 11111111111111111111 11111111111111111111
+ .byte $00, $30, $00   ; ......11............ ............11......
+ .byte $f0, $30, $ff   ; 1111..11....11111111 11111111....11..1111
+ .byte $00, $30, $c0   ; ......11..........11 11..........11......
+ .byte $f0, $f3, $c0   ; 11111111..11......11 11......11..11111111
+ .byte $00, $03, $c0   ; ..........11......11 11......11..........
+ .byte $f0, $ff, $cc   ; 111111111111..11..11 11..11..111111111111
  .assert >(*-1) = >(MazeEntry), error, "Sprite spans page."
 CastleDef:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $fe, $15   ; 11111111111....1.1.1 1.1.1....11111111111
- .byte $30, $03, $1f   ; 11........11...11111 11111...11........11
+ .byte $f0, $fe, $15   ; 11111111111.1.1.1... ...1.1.1.11111111111
+ .byte $30, $03, $1f   ; 11........1111111... ...1111111........11
  .byte $30, $03, $ff   ; 11........1111111111 1111111111........11
  .byte $30, $00, $ff   ; 11..........11111111 11111111..........11
- .byte $30, $00, $3f   ; 11......... 111111.. ..111111..........11
+ .byte $30, $00, $3f   ; 11..........111111.. ..111111..........11
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .assert >(*-1) = >(CastleDef), error, "Sprite spans page."
@@ -2013,44 +2018,44 @@ SurroundGfx:
  .byte 0
  .assert >(*-1) = >(SurroundGfx), error, "Sprite spans page."
 
-RedMaze1:
+RedMazeTopLeft:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
  .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .byte $00, $00, $0c   ; ..............11.... ....11..............
  .byte $f0, $ff, $0c   ; 111111111111..11.... ....11..111111111111
- .byte $f0, $03, $cc   ; 111111........11..11 11..11........111111
- ;byte $f0, $33, $cf   ; 111111..11..1111..11 11..1111..11..111111 ; uses next room's line
- .assert >(*-1) = >(RedMaze1), error, "Sprite spans page."
-RedMazeBottom:
+ .byte $f0, $03, $cc   ; 1111......11..11..11 11..11..11......1111
+ ;byte $f0, $33, $cf   ; 1111..11..111111..11 11..111111..11..1111 ; uses next room's line
+ .assert >(*-1) = >(RedMazeTopLeft), error, "Sprite spans page."
+RedMazeBottomLeft:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $33, $cf   ; 111111..11..1111..11 11..1111..11..111111
- .byte $f0, $30, $00   ; 1111....11.......... ..........11....1111
- .byte $f0, $33, $ff   ; 111111..11..11111111 11111111..11..111111
- .byte $00, $33, $00   ; ....11..11.......... ..........11..11....
+ .byte $f0, $33, $cf   ; 1111..11..11......11 11......11..11..1111
+ .byte $f0, $30, $00   ; 1111..11............ ............11..1111
+ .byte $f0, $33, $ff   ; 1111..11..1111111111 1111111111..11..1111
+ .byte $00, $33, $00   ; ......11..11........ ........11..11......
  .byte $f0, $ff, $00   ; 111111111111........ ........111111111111
- .byte $00, $00, $00   ; 11.................. ..................11
+ .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
- .assert >(*-1) = >(RedMazeBottom), error, "Sprite spans page."
-RedMazeTop:
+ .assert >(*-1) = >(RedMazeBottomLeft), error, "Sprite spans page."
+RedMazeTopRight:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
- .byte $00, $00, $c0   ; 1111..............11 11..............1111
+ .byte $00, $00, $c0   ; ..................11 11..................
  .byte $f0, $ff, $cf   ; 1111111111111111..11 11..1111111111111111
  .byte $00, $00, $cc   ; ..............11..11 11..11..............
- .byte $f0, $33, $ff   ; 111111..11..11111111 11111111..11..111111
- .byte $f0, $33, $00   ; 111111..11.......... ..........11..111111
- ;byte $f0, $3f, $0c   ; 1111111111....11.... ....11....1111111111 ; uses next room's line
- .assert >(*-1) = >(RedMazeTop), error, "Sprite spans page."
+ .byte $f0, $33, $ff   ; 1111..11..1111111111 1111111111..11..1111
+ .byte $f0, $33, $00   ; 1111..11..11.................11..11..1111
+ ;byte $f0, $3f, $0c   ; 1111..111111..11.... ....11..111111..1111 ; uses next room's line
+ .assert >(*-1) = >(RedMazeTopRight), error, "Sprite spans page."
 WhiteCastleEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $3f, $0c   ; 1111111111....11.... ....11....1111111111
+ .byte $f0, $3f, $0c   ; 1111..111111..11.... ....11..111111..1111
  .byte $f0, $00, $0c   ; 1111..........11.... ....11..........1111
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
- .byte $00, $30, $00   ; 1111....11.......... ..........11....1111
- .byte $f0, $30, $00   ; 1111....11.......... ..........11....1111
- .byte $00, $30, $00   ; ........11.......... ..........11........
+ .byte $00, $30, $00   ; ......11............ ............11......
+ .byte $f0, $30, $00   ; 1111..11............ ............11..1111
+ .byte $00, $30, $00   ; ......11............ ............11......
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .assert >(*-1) = >(WhiteCastleEntry), error, "Sprite spans page."
 TopEntryRoom:
@@ -2063,40 +2068,40 @@ TopEntryRoom:
  .byte $30, $00, $00   ; 11.................. ..................11
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
  .assert >(*-1) = >(TopEntryRoom), error, "Sprite spans page."
-BlackMaze1:
+BlackMazeTopLeft:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $f0, $f0, $ff   ; 1111....111111111111 111111111111....1111
+ .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
  .byte $00, $00, $03   ; ............11...... ......11............
  .byte $f0, $ff, $03   ; 11111111111111...... ......11111111111111
  .byte $00, $00, $00   ; .................... ....................
- .byte $30, $3f, $ff   ; 11..111111..11111111 11111111..111111..11
- .byte $00, $30, $00   ; ........11.......... ..........11........
- ;byte $f0, $f0, $ff   ; 1111....111111111111 111111111111....1111 ; uses next room's line
- .assert >(*-1) = >(BlackMaze1), error, "Sprite spans page."
-BlackMaze3:
+ .byte $30, $3f, $ff   ; 11....11111111111111 11111111111111....11
+ .byte $00, $30, $00   ; ......11............ ............11......
+ ;byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111 ; uses next room's line
+ .assert >(*-1) = >(BlackMazeTopLeft), error, "Sprite spans page."
+BlackMazeBottomLeft:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF0hPF1-----PF2-----
  .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
  .byte $30, $00, $00   ; 11.................. 11..................
  .byte $30, $3f, $ff   ; 11....11111111111111 11....11111111111111
  .byte $00, $30, $00   ; ......11............ ......11............
  .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
- .byte $30, $00, $03   ; 11................11 11................11
+ .byte $30, $00, $03   ; 11..........11...... 11..........11......
  .byte $f0, $f0, $ff   ; 11111111....11111111 11111111....11111111
- .assert >(*-1) = >(BlackMaze3), error, "Sprite spans page."
-BlackMaze2:
+ .assert >(*-1) = >(BlackMazeBottomLeft), error, "Sprite spans page."
+BlackMazeTopRight:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF0hPF1-----PF2-----
  .byte $f0, $ff, $ff   ; 11111111111111111111 11111111111111111111
- .byte $00, $00, $c0   ; ............11...... ............11......
- .byte $f0, $ff, $cf   ; 11111111111111..1111 11111111111111..1111
- .byte $00, $00, $0c   ; ..................11 ..................11
+ .byte $00, $00, $c0   ; ..................11 ..................11
+ .byte $f0, $ff, $cf   ; 1111111111111111..11 1111111111111111..11
+ .byte $00, $00, $0c   ; ..............11.... ..............11....
  .byte $f0, $0f, $ff   ; 1111....111111111111 1111....111111111111
- .byte $00, $0f, $c0   ; ........111111...... ........111111......
- ;byte $30, $cf, $cc   ; 11..11..111111..11.. 11..11..111111..11.. ; uses next room's line
- .assert >(*-1) = >(BlackMaze2), error, "Sprite spans page."
+ .byte $00, $0f, $c0   ; ........1111......11 ........1111......11
+ ;byte $30, $cf, $cc   ; 11..11..1111..11..11 11..11..1111..11..11 ; uses next room's line
+ .assert >(*-1) = >(BlackMazeTopRight), error, "Sprite spans page."
 BlackMazeEntry:
  ;     PF0  PF1  PF2     PF0hPF1-----PF2----- PF2-----PF1-----PF0h
- .byte $30, $cf, $cc   ; 11..1111..11..11..11 11..11..11..1111..11
- .byte $00, $c0, $cc   ; ..........11..11..11 11..11..11..........
+ .byte $30, $cf, $cc   ; 11..11..1111..11..11 11..11..1111..11..11
+ .byte $00, $c0, $cc   ; ....11........11..11 11..11........11....
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .byte $00, $00, $00   ; .................... ....................
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
@@ -2669,10 +2674,10 @@ roomnum_BlueMazeTop = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeTop
     .byte ColorType::blue, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_BlackCastle, roomnum_BlueMaze1, roomnum_BlueMazeCenter, roomnum_BlueMazeBottom
+    .byte roomnum_BlackCastle, roomnum_BlueMazeLeft, roomnum_BlueMazeCenter, roomnum_BlueMazeBottom
 
-roomnum_BlueMaze1 = (* - Rooms) / .sizeof(RoomType)
-    .word BlueMaze1
+roomnum_BlueMazeLeft = (* - Rooms) / .sizeof(RoomType)
+    .word BlueMazeLeft
     .byte ColorType::blue, ColorType::lightergray
     .byte RoomControlType::pfref
     .byte roomnum_TopEntryRoom2, roomnum_BlueMazeBottom, roomnum_BlueMazeEntry, roomnum_BlueMazeTop
@@ -2681,7 +2686,7 @@ roomnum_BlueMazeBottom = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeBottom
     .byte ColorType::blue, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_BlueMazeCenter, roomnum_BlueMazeTop, roomnum_BelowYellowCastleRightThinWall, roomnum_BlueMaze1
+    .byte roomnum_BlueMazeCenter, roomnum_BlueMazeTop, roomnum_BelowYellowCastleRightThinWall, roomnum_BlueMazeLeft
 
 roomnum_BlueMazeCenter = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeCenter
@@ -2693,7 +2698,7 @@ roomnum_BlueMazeEntry = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeEntry
     .byte ColorType::blue, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_BlueMaze1, roomnum_BlueMazeCenter, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeCenter
+    .byte roomnum_BlueMazeLeft, roomnum_BlueMazeCenter, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeCenter
 
 roomnum_MazeMiddle = (* - Rooms) / .sizeof(RoomType)
     .word MazeMiddle
@@ -2756,56 +2761,56 @@ roomrange_blackkey_end = roomnum_YellowCastleEntry
     .byte RoomControlType::pfref
     .byte roomnum_YellowCastleEntry, roomnum_YellowCastleEntry, roomnum_YellowCastleEntry, roomnum_YellowCastleEntry
 
-roomnum_BlackMaze1 = (* - Rooms) / .sizeof(RoomType)
-roomrange_chalice_start = roomnum_BlackMaze1
-    .word BlackMaze1
+roomnum_BlackMazeTopLeft = (* - Rooms) / .sizeof(RoomType)
+roomrange_chalice_start = roomnum_BlackMazeTopLeft
+    .word BlackMazeTopLeft
     .byte ColorType::invisible, ColorType::invisible
     .byte RoomControlType::pfref_pfp
-    .byte roomnum_BlackMaze3, roomnum_BlackMaze2, roomnum_BlackMaze3, roomnum_BlackMazeEntry
+    .byte roomnum_BlackMazeBottomLeft, roomnum_BlackMazeTopRight, roomnum_BlackMazeBottomLeft, roomnum_BlackMazeEntry
 
-roomnum_BlackMaze2 = (* - Rooms) / .sizeof(RoomType)
-    .word BlackMaze2
+roomnum_BlackMazeTopRight = (* - Rooms) / .sizeof(RoomType)
+    .word BlackMazeTopRight
     .byte ColorType::invisible, ColorType::invisible
     .byte RoomControlType::pfp
-    .byte roomnum_BlackMazeEntry, roomnum_BlackMaze3, roomnum_BlackMazeEntry, roomnum_BlackMaze1
+    .byte roomnum_BlackMazeEntry, roomnum_BlackMazeBottomLeft, roomnum_BlackMazeEntry, roomnum_BlackMazeTopLeft
 
-roomnum_BlackMaze3 = (* - Rooms) / .sizeof(RoomType)
-    .word BlackMaze3
+roomnum_BlackMazeBottomLeft = (* - Rooms) / .sizeof(RoomType)
+    .word BlackMazeBottomLeft
     .byte ColorType::invisible, ColorType::invisible
     .byte RoomControlType::pfp
-    .byte roomnum_BlackMaze1, roomnum_BlackMazeEntry, roomnum_BlackMaze1, roomnum_BlackMaze2
+    .byte roomnum_BlackMazeTopLeft, roomnum_BlackMazeEntry, roomnum_BlackMazeTopLeft, roomnum_BlackMazeTopRight
 
 roomnum_BlackMazeEntry = (* - Rooms) / .sizeof(RoomType)
 roomrange_whitekey_end = roomnum_BlackMazeEntry
     .word BlackMazeEntry
     .byte ColorType::invisible, ColorType::invisible
     .byte RoomControlType::pfref_pfp
-    .byte roomnum_BlackMaze2, roomnum_BlackMaze1, roomnum_BlackCastleEntry, roomnum_BlackMaze3
+    .byte roomnum_BlackMazeTopRight, roomnum_BlackMazeTopLeft, roomnum_BlackCastleEntry, roomnum_BlackMazeBottomLeft
 
-roomnum_RedMaze1 = (* - Rooms) / .sizeof(RoomType)
-    .word RedMaze1
+roomnum_RedMazeTopLeft = (* - Rooms) / .sizeof(RoomType)
+    .word RedMazeTopLeft
     .byte ColorType::red, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_RedMazeBottom, roomnum_RedMazeTop, roomnum_RedMazeBottom, roomnum_RedMazeTop
+    .byte roomnum_RedMazeBottomLeft, roomnum_RedMazeTopRight, roomnum_RedMazeBottomLeft, roomnum_RedMazeTopRight
 
-roomnum_RedMazeTop = (* - Rooms) / .sizeof(RoomType)
-    .word RedMazeTop
+roomnum_RedMazeTopRight = (* - Rooms) / .sizeof(RoomType)
+    .word RedMazeTopRight
     .byte ColorType::red, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_WhiteCastleEntry, roomnum_RedMaze1, roomnum_WhiteCastleEntry, roomnum_RedMaze1
+    .byte roomnum_WhiteCastleEntry, roomnum_RedMazeTopLeft, roomnum_WhiteCastleEntry, roomnum_RedMazeTopLeft
 
-roomnum_RedMazeBottom = (* - Rooms) / .sizeof(RoomType)
-    .word RedMazeBottom
+roomnum_RedMazeBottomLeft = (* - Rooms) / .sizeof(RoomType)
+    .word RedMazeBottomLeft
     .byte ColorType::red, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_RedMaze1, roomnum_WhiteCastleEntry, roomnum_RedMaze1, roomnum_WhiteCastleEntry
+    .byte roomnum_RedMazeTopLeft, roomnum_WhiteCastleEntry, roomnum_RedMazeTopLeft, roomnum_WhiteCastleEntry
 
 roomnum_WhiteCastleEntry = (* - Rooms) / .sizeof(RoomType)
 roomrange_chalice_end = roomnum_WhiteCastleEntry
     .word WhiteCastleEntry
     .byte ColorType::red, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_RedMazeTop, roomnum_RedMazeBottom, roomnum_RedMazeTop, roomnum_RedMazeBottom
+    .byte roomnum_RedMazeTopRight, roomnum_RedMazeBottomLeft, roomnum_RedMazeTopRight, roomnum_RedMazeBottomLeft
 
 roomnum_BlackCastleEntry = (* - Rooms) / .sizeof(RoomType)
     .word TwoExitRoom
@@ -2848,7 +2853,7 @@ roomnum_downfrom_BelowYellowCastleLeftThinWall = (* - RoomDiffs) | $80
 .byte roomnum_BlackCastle,                    roomnum_WhiteCastle,    roomnum_WhiteCastle
 
 roomnum_downfrom_BelowYellowCastleGreen = (* - RoomDiffs) | $80
-.byte roomnum_BlueMaze1,                      roomnum_YellowCastle,   roomnum_YellowCastle
+.byte roomnum_BlueMazeLeft,                   roomnum_YellowCastle,   roomnum_YellowCastle
 
 roomnum_downfrom_BelowYellowCastleRightThinWall = (* - RoomDiffs) | $80
 .byte roomnum_TopEntryRoom2,                  roomnum_MazeEntry,      roomnum_MazeEntry
