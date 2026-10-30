@@ -138,8 +138,7 @@
 
 .struct StateType
     state         .byte
-    xcoord        .byte
-    ycoord        .byte
+    gfx_ptr       .word
 .endstruct
 
 .struct ObjectType
@@ -163,18 +162,18 @@ ManDynamic:                     .byte 0, 0, 0
 man_y2:                         .byte 0     ; man's adjusted y coordinate?
 scan_line:                      .byte 0     ; current scan line
 roomgfx_offset:                 .byte 0     ; room graphics offset
-p0gfx_offset:                   .byte 0     ; player00 graphics offset
-p1gfx_offset:                   .byte 0     ; player01 graphics offset
+p0gfx_offset:                   .byte 0     ; player0 graphics offset
+p1gfx_offset:                   .byte 0     ; player1 graphics offset
 cached_swchb:                   .byte 0     ; cached console switches
 dr_ptr:                         .word 0     ; pointer for dereferencing
-object1:                        .byte 0
-object2:                        .byte 0
+object1:                        .byte 0     ; cached object for display using player0 sprite
+object2:                        .byte 0     ; cached object for display using player1 sprite
 obj_collided_with:              .byte 0
 unused1:                        .byte 0
 cached_joystick:                .byte 0
 portcullis_number:              .byte 0
 direction_wanted:               .byte 0
-obj_counter:                    .byte 0
+obj_counter:                    .byte 0     ; last cached object for display
 object_carried:                 .byte 0     ; object carried by the man
 objman_x_delta:                 .byte 0
 objman_y_delta:                 .byte 0
@@ -416,56 +415,55 @@ DoVSYNC:
 ;; Set up a room for print
 SetupRoomPrint:
             lda ManDynamic+DynamicType::room
-            jsr RoomNumToAddress  ;convert to room address in dr_ptr
+            jsr RoomNumToAddress      ;convert to room address in dr_ptr
             ldy #RoomType::gfx_ptr
             lda (dr_ptr),y
             sta roomgfx_base
-            ldy #RoomType::gfx_ptr+1
-            lda (dr_ptr),y        ;get high pointer to room graphics
+            ldy #RoomType::gfx_ptr+1  ;FIXME: change to iny
+            lda (dr_ptr),y
             sta roomgfx_base+1
-; check B&W switch for room graphics
-            lda SWCHB             ;get console switches
+
+            lda SWCHB                 ;get console switches
             and #ConsoleSwitchType::bw
             beq :+
-; use color
             ldy #RoomType::color
             lda (dr_ptr),y
-            jsr ChangeColor       ;change if necessary
-            sta COLUPF            ;put in playfield color register
+            jsr ChangeColorIfNeeded
+            sta COLUPF                ;set playfield color
             jmp :++
-; use b&w
 :           ldy #RoomType::bw_color
             lda (dr_ptr),y
-            jsr ChangeColor       ;change if necessary
-            sta COLUPF            ;put in the playfield color register
-; color background
+            jsr ChangeColorIfNeeded
+            sta COLUPF                ;set playfield color
+
 :           lda #ColorType::lightgray
-            jsr ChangeColor       ;change if necessary
-            sta COLUBK            ;background color register
-; playfield control
+            jsr ChangeColorIfNeeded
+            sta COLUBK                ;set background color
+
             ldy #RoomType::pf_control
             lda (dr_ptr),y
-            sta CTRLPF            ;playfield control register
-            and #$c0              ;get the wall flags
+            sta CTRLPF                ;set playfield control
+            and #%11000000
             lsr a
             lsr a
-            lsr a                 ;get the first bit into position
             lsr a
             lsr a
-            sta ENAM1             ;enable right hand thin wall (if wanted - Missile01)
             lsr a
-            sta ENAM0             ;enable left hand thin wall (if wanted - Missile00)
-; get objects to display
-            jsr CacheObjects      ;get next two objects to display
-; sort out their order
+            sta ENAM1                 ;enable right hand thin wall (if wanted - Missile1)
+            lsr a
+            sta ENAM0                 ;enable left hand thin wall (if wanted - Missile0)
+
+            jsr CacheObjects          ;get next two objects to display
+
             lda object1
             cmp #objoffset_InvisibleSurround
-            beq SwapPrintObjects  ; then branch to swap (we want it was Player1)
+            beq SwapPrintObjects      ;swap to move InvisibleSurround to object2/Player1
             cmp #objoffset_Bridge
-            bne SetupObjectPrint  ; swap the objects (we want it as Player1)
+            bne SetupObjectPrint      ;carry on if not Bridge in object1/Player0
             lda object2
             cmp #objoffset_InvisibleSurround
-            beq SetupObjectPrint  ; (we want it as Player1)
+            beq SetupObjectPrint      ;InvisibleSurround in object2/Player1 OK, else swap to move Bridge to object2/Player1
+
 SwapPrintObjects:
             lda object1
             sta tmp1
@@ -473,8 +471,9 @@ SwapPrintObjects:
             sta object1
             lda tmp1
             sta object2
-; setup Object1 to print
+
 SetupObjectPrint:
+; set up Object1 to print
             ldx object1
             lda Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr
@@ -497,30 +496,29 @@ SetupObjectPrint:
             sta dr_ptr
             lda Objects+ObjectType::states_ptr+1,x
             sta dr_ptr+1
-            jsr GetObjectState    ;find current state in the state information
+            jsr GetObjectState    ;find current state, put in y
             iny                   ;index to the state's corresponding graphic pointer
             lda (dr_ptr),y        ;get Object1's low graphic address
             sta p0gfx_base        ; and store for print
             iny
             lda (dr_ptr),y        ;get Object1's high graphic address
             sta p0gfx_base+1      ; and store for print
-; check B&W for Object1
+
             lda SWCHB             ;get console switches
             and #ConsoleSwitchType::bw
             beq :+
-; color
             lda Objects+ObjectType::color,x
-            jsr ChangeColor       ;change if necessary
-            sta COLUP0            ; and set color luminance00
+            jsr ChangeColorIfNeeded
+            sta COLUP0            ;set player0 color
             jmp :++
-; B&W
 :           lda Objects+ObjectType::bw_color,x
-            jsr ChangeColor       ;change if necessary
-            sta COLUP0            ;set color luminance00
-; Object1 resize
+            jsr ChangeColorIfNeeded
+            sta COLUP0            ;set player0 color
+
 :           lda Objects+ObjectType::size,x
-            ora #$10              ;and set to larger size if necessary
-            sta NUSIZ0            ;(used by bridge and invisible surround)
+            ora #%00010000        ;and set to larger size if necessary
+            sta NUSIZ0            ;used by bridge and invisible surround
+
 ; set up Object2 to print
             ldx object2
             lda Objects+ObjectType::dynamic_ptr,x
@@ -544,70 +542,66 @@ SetupObjectPrint:
             sta dr_ptr
             lda Objects+ObjectType::states_ptr+1,x
             sta dr_ptr+1
-            jsr GetObjectState    ;find the current state in the state information
+            jsr GetObjectState    ;find current state, put in y
             iny                   ;index to the state's corresponding graphic pointer
             lda (dr_ptr),y
             sta p1gfx_base        ;get Object2's low graphic address
             iny
             lda (dr_ptr),y        ;get Object2's high graphic address
             sta p1gfx_base+1
-; check B&W for Object2
+
             lda SWCHB             ;get console switches
             and #ConsoleSwitchType::bw
             beq :+
-; color
             lda Objects+ObjectType::color,x
-            jsr ChangeColor       ;change if necessary
-            sta COLUP1            ;and set color luminance01
+            jsr ChangeColorIfNeeded
+            sta COLUP1            ;set player1 color
             jmp :++
-; B&W
 :           lda Objects+ObjectType::bw_color,x
-            jsr ChangeColor       ;change if necessary
-            sta COLUP1            ;and set color luminance01
-; Object2 size
+            jsr ChangeColorIfNeeded
+            sta COLUP1            ;set player1 color
+
 :           lda Objects+ObjectType::size,x
-            ora #$10              ;and set to large size if necessary
-            sta NUSIZ1            ;(used by bridge and invisible surround)
+            ora #%00010000        ;and set to larger size if necessary
+            sta NUSIZ1            ;used by bridge and invisible surround
             rts
 
 ; fill cache with two objects in this room
 CacheObjects:
-            ldy obj_counter       ;get last object
+            ldy obj_counter                   ;get last object
             lda #objoffset_Null
             sta object1
             sta object2
-MoveNextObject:
+@MoveNextObject:
             tya
-            clc                   ;goto the next object to check
+            clc                               ;goto the next object to check
             adc #.sizeof(ObjectType)
             cmp #objoffset_Null
-            bcc GetObjectsInfo
-            lda #0                ;if so, wrap to zero
-GetObjectsInfo:
-            tay
+            bcc :+
+            lda #0                            ;wrap around
+:           tay
             lda Objects+ObjectType::dynamic_ptr,y
             sta dr_ptr
             lda Objects+ObjectType::dynamic_ptr+1,y
             sta dr_ptr+1
-            ldx #0
-            lda (dr_ptr,x)          ;get object's current room
-            cmp ManDynamic+DynamicType::room  ; is it in this room?
-            bne CheckForMoreObjects ;if not lets try next object (branch)
-            lda object1             ;check first slot
+            ldx #DynamicType::room
+            lda (dr_ptr,x)
+            cmp ManDynamic+DynamicType::room  ;is object in this room?
+            bne @CheckForMoreObjects          ;if not lets try next object (branch)
+            lda object1                       ;check first slot
             cmp #objoffset_Null
-            bne StoreObjectToPrint  ; then branch
-            sty object1             ;store this object's number to print
-            jmp CheckForMoreObjects ; and try for more
+            bne :+
+            sty object1                       ;store this object's number to print
+            jmp @CheckForMoreObjects          ; and try for more
+:           sty object2                       ;store this object's number to print
+            jmp @StoreCount                   ; and then give up - no slots free
 
-StoreObjectToPrint:
-            sty object2           ;store this object's number to print
-            jmp StoreCount        ; and then give up - no slots free
-
-CheckForMoreObjects:
-            cpy obj_counter       ;have we done all the objects?
-            bne MoveNextObject    ;if not, continue
-StoreCount: sty obj_counter       ;if so, store current count
-            rts                   ; for next time
+@CheckForMoreObjects:
+            cpy obj_counter                   ;have we done all the objects?
+            bne @MoveNextObject               ;if not, continue
+@StoreCount:
+            sty obj_counter                   ;if so, store current count
+            rts                               ; for next time
 
 ; Get room address from room number
 ; input: a=room number
@@ -642,7 +636,7 @@ RoomNumToAddress:
             rts
 
 ; Get pointer to current state
-; input: dr_ptr
+; input: dr_ptr, GetObjectState_Arg
 ; returns: offset in y
 GetObjectState:
             ldy #0
@@ -677,8 +671,10 @@ MaintainInputCounter:
             sta input_counter+1     ; switches or joystick have been used
 @Done:      rts
 
-; Change color if necessary
-ChangeColor:
+; Change color if needed
+; input: a=color
+; returns: a=potentially updated color (flash, inactive)
+ChangeColorIfNeeded:
             .assert (ColorType::flash & 2) = 2, error, "Bad ColorType::flash value."
             lsr a                        ;if bit 0 of the color is set
             bcc @CheckRecentMovement     ; branch if clear, no flash
@@ -697,8 +693,10 @@ ChangeColor:
 @Done:      asl a                        ; and restore original color if necessary
             rts
 
-; load dr_ptr with address of object's dynamic info using x
-GetObjectAddress:
+; load dr_ptr with address of object's dynamic info
+; input: x=object number (which is an offset from Objects)
+; returns: dr_ptr with dynamic info address
+GetObjectDynamicInfoAddress:
             lda Objects+ObjectType::dynamic_ptr,x
             sta dr_ptr            ;get and store the low address
             lda Objects+ObjectType::dynamic_ptr+1,x
@@ -858,7 +856,7 @@ NotSelect:
 ; put objects in random rooms for level 3
 RandomizeLevel3:
             ldy #3*((Lvl3ObjRoomBoundsEnd-Lvl3ObjRoomBounds)/3 - 1)
-:           lda input_counter          ;  get the low input counter as seed
+:           lda input_counter          ;get the low input counter as seed
             lsr a
             lsr a
             lsr a                      ;generate a pseudo-random
@@ -1051,11 +1049,10 @@ PickupPutdown:
             lda #$ff              ;FIXME: remove
             sta unused1           ;FIXME: remove
 
-; check for collision
             lda CXP0FB            ;p0-pf, p0-bl collision
             and #%01000000        ;get p0-bl collision
             beq :+                ;if nothing occurred then branch
-; with Player0
+
             lda object1           ;get type of Player0
             sta obj_collided_with
             jmp CollisionDetected ;deal with collision
@@ -1063,14 +1060,14 @@ PickupPutdown:
 :           lda CXP1FB            ;p1-pf, p1-bl collision
             and #%01000000        ;get p1-bl collision
             beq :+                ;if no collision, exit
-            lda object2           ;get type of Player01
+            lda object2           ;get type of Player1
             sta obj_collided_with
             jmp CollisionDetected ;deal with collision
 :           jmp NoCollision       ;FIXME: change to rts
 
 CollisionDetected:
             ldx obj_collided_with
-            jsr GetObjectAddress  ;load dr_ptr with address of object's dynamic info using x
+            jsr GetObjectDynamicInfoAddress   ;loads dr_ptr
             lda obj_collided_with
             cmp #objoffset_StartOfCarriables  ;is it carriable?
             bcc NoCollision       ;not carriable, exit
@@ -1110,29 +1107,29 @@ MoveCarriedObject:
             ldx object_carried
             cpx #objoffset_Null
             beq :+
-            jsr GetObjectAddress  ;load dr_ptr with address of object's dynamic info using x
+            jsr GetObjectDynamicInfoAddress  ;loads dr_ptr
             ldy #DynamicType::room
-            lda ManDynamic+DynamicType::room  ;get the current room
-            sta (dr_ptr),y        ; and store the object's current room
+            lda ManDynamic+DynamicType::room
+            sta (dr_ptr),y          ;store the object's current room
             ldy #DynamicType::xcoord
             lda ManDynamic+DynamicType::xcoord
             clc
-            adc objman_x_delta    ;add the X difference
-            sta (dr_ptr),y        ; and store as the object's X coordinate
+            adc objman_x_delta      ;add the X difference
+            sta (dr_ptr),y          ; and store as the object's X coordinate
             ldy #DynamicType::ycoord
             lda ManDynamic+DynamicType::ycoord
             clc
-            adc objman_y_delta    ;add the Y difference
-            sta (dr_ptr),y        ; and store as the object's Y coordinate
+            adc objman_y_delta      ;add the Y difference
+            sta (dr_ptr),y          ; and store as the object's Y coordinate
             ldy #0                  ;set no delta
             lda #<~MoveTypes::none  ;set no movement
-            ldx dr_ptr            ;get the object's dynamic address
+            ldx dr_ptr              ;get the object's dynamic address
             jsr MoveGroundObject
 :           rts
 
 ; move the object in direction by delta
 ; move to next room if needed
-; a=MoveTypes/direction, x=object to move, y=move delta
+; input: a=MoveTypes/direction, x=object to move, y=move delta
 MoveGroundObject:
             jsr MoveObjectDelta     ;move the object by delta
             ldy #2                  ;set to do the three
@@ -1231,7 +1228,7 @@ MoveGroundObject:
             rts
 
 ; move the object in direction by delta
-; a=MoveTypes, x=object to move, y=delta
+; input: a=MoveTypes, x=object to move, y=delta
 MoveObjectDelta:
             sta direction_wanted
 @MoveObjectOneStep:
@@ -1258,8 +1255,8 @@ MoveObjectDelta:
             rts
 
 ; adjust room for different levels
-; a=original room
-; returns a=possibly different room
+; input: a=original room
+; returns: a=possibly different room
 AdjustRoomLevel:
             cmp #%10000000          ;does room number have
             bcc @NoChange           ; the hi bit set?
@@ -1275,8 +1272,8 @@ AdjustRoomLevel:
 @NoChange:  rts
 
 ; determine whether a player sprite is colliding with ball (The Man)
-; input a=object number
-; returns a=0 if no collision, a<>0 if collision
+; input: a=object number
+; returns: a=0 if no collision, a<>0 if collision
 PBCollision:
             cmp object1             ;is it the first object?
             beq @P0                 ; branch if yes
@@ -1292,8 +1289,8 @@ PBCollision:
             rts
 
 ; find which object has hit object wanted
-; input x=object number
-; returns hit object number in a
+; input: x=object number
+; returns: hit object number in a
 FindObjHit: lda CXPPMM              ;p0-p1, m0-m1 collision
             and #%10000000          ;get p0-p1 collision
             beq :+                  ;if nothing, branch
@@ -1321,8 +1318,8 @@ MoveGameObject:
             rts
 
 ; find linked object and get movement
-; input objstore_ptr, MoveGameObjectArg_Difficulty
-; returns direction_wanted
+; input: objstore_ptr, MoveGameObjectArg_Difficulty
+; returns: direction_wanted
 GetLinkedObject:
             lda #0
             sta linked_obj_index
@@ -1440,6 +1437,7 @@ GreenDragMatrix:
             .byte 0
 
 ; Move a dragon
+; input:
 ; x            = dragon object (objoffset_DragonRhindle, objoffset_DragonYorgle, objoffset_DragonGrundle)
 ; objstore_ptr = dragon matrix
 ; objdelta     = move speed
@@ -1656,7 +1654,7 @@ Portals:    ldy #2                ;for each portcullis
             beq :+                ;if so, branch
             ldx obj_collided_with
             sty portcullis_number
-            jsr GetObjectAddress  ;load dr_ptr with address of object's dynamic info using x
+            jsr GetObjectDynamicInfoAddress  ;loads dr_ptr
             ldy portcullis_number
             ldx dr_ptr            ;load address of object's dynamic info to x
             jmp @PutManInCastle
