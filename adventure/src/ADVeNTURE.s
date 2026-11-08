@@ -1,6 +1,7 @@
 ;
 ; Adventure for the Atari 2600, by Warren Robinett
 ; Copyright 1979 Atari, Inc.
+; http://www.warrenrobinett.com/adventure/
 ;
 
 ; Derived from prior disassembly work at https://6502disassembly.com/2600-adventure/Adventure.bin.html
@@ -73,10 +74,10 @@ FIXME = 1
 .endenum
 
 .enum DragonState
-    normal   = 0
-    dead     = 1
-    ateman   = 2
-    roaring  = 255
+    normal  = 0
+    dead    = 1
+    ateman  = 2
+    roaring = 255
 .endenum
 
 .enum PortCullisState
@@ -86,18 +87,18 @@ FIXME = 1
 .endenum
 
 .enum MoveTypes
-    none   = 0
-    up     = %00010000
-    down   = %00100000
-    left   = %01000000
-    right  = %10000000
+    none  = 0
+    up    = %00010000
+    down  = %00100000
+    left  = %01000000
+    right = %10000000
 .endenum
 
 .struct RoomType
     gfx_ptr       .word
     color         .byte ; ColorType enum
     bw_color      .byte ; ColorType enum
-    pf_control    .byte
+    pf_control    .byte ; RoomControlType enum
     room_up       .byte
     room_right    .byte
     room_down     .byte
@@ -128,8 +129,8 @@ FIXME = 1
     dynamic_ptr   .word  ; pointer to a DynamicType
     currstate_ptr .word  ; pointer to a state byte
     states_ptr    .word  ; pointer to array of StateType
-    color         .byte  ; ColorType
-    bw_color      .byte  ; ColorType
+    color         .byte  ; ColorType enum
+    bw_color      .byte  ; ColorType enum
     size          .byte
 .endstruct
 
@@ -383,16 +384,13 @@ PosSpriteX: ldy #2              ;start with 2*15=30 color clocks
             rts
 
 ;; Handle vertical sync
-
 DoVSYNC:
 
 ; Spin until middle of line offset 255 (64t timer previously set to 32, 26.9 lines)
-
             lda INTIM           ;get timer output
             bne DoVSYNC         ;wait for time-out
 
 ; Line offset 255, 159-165 color clocks
-
             lda #%10
             sta WSYNC           ;wait for horizontal blank
             sta VBLANK          ;turn on VBLANK, line offset 256
