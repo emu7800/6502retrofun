@@ -1,3 +1,16 @@
+; VCS/2600 Memory Map
+; -------------------
+; 0000-007f TIA Mirrored every $100 [$000-$900]
+; 0080-00ff PIA RAM Mirrored every $100 [$080-$980]
+; 0180-01ff PIA Stack location, grows downward from $1ff, mapped into PIA RAM $80-$ff
+; 0280-02ff PIA
+; 0280      PIA SWCHA      RW Port A data register (joysticks...)
+; 0282      PIA SWCHB      RW Port B data (console switches)
+; 0284      PIA INTIM      R Timer output
+; 0296      PIA TIM64T     W set 64 clock interval
+; 1000-1fff ROM
+
+
 ; TIA write registers
 
 VSYNC  := $00 ; ---- --1- This address controls vertical sync time by writing D1 into the VSYNC latch.
