@@ -1,24 +1,17 @@
 .PHONY: all clean
 .DEFAULT_GOAL: all
-includes = inc/*.inc
-
 
 all: ADVNTURE.BIN ADVeNTURE.BIN ADVeNTURE8k.BIN
 
-ADVNTURE.BIN: ADVNTURE.o $(includes)
-	ld65 -o ADVNTURE.BIN  -C ADVNTURE.cfg -m ADVNTURE.map.txt -Ln ADVNTURE.labels.txt ADVNTURE.o
-	../convert_sym.py ADVNTURE.labels.txt ADVNTURE.sym
-
-ADVeNTURE.BIN: ADVeNTURE.o $(includes)
-	ld65 -o ADVeNTURE.BIN -C ADVeNTURE.cfg -m ADVeNTURE.map.txt -Ln ADVeNTURE.labels.txt ADVeNTURE.o
-	../convert_sym.py ADVeNTURE.labels.txt ADVeNTURE.sym
-
-ADVeNTURE8k.BIN: ADVeNTURE8k.o $(includes)
-	ld65 -o ADVeNTURE8k.BIN -C ADVeNTURE8k.cfg -m ADVeNTURE8k.map.txt -Ln ADVeNTURE8k.labels.txt ADVeNTURE8k.o
-	../convert_sym.py ADVeNTURE8k.labels.txt ADVeNTURE8k.sym
+%.BIN: %.o
+	ld65 -o $@ -C $*.cfg -m $*.map.txt -Ln $*.labels.txt $<
+	../convert_sym.py $*.labels.txt $*.sym
 
 %.o: %.s
-	ca65 -o $@ -t c64 -I inc -g -l $*.listing.txt $<
+	ca65 -o $@ -I inc -g -l $*.listing.txt $<
+
+ADVeNTURE.o: ADVNTURE.s
+	ca65 -o $@ -I inc -g -l $*.listing.txt $< -D FIXME
 
 clean:
 	-rm -f *.o *.BIN *.txt *.sym

@@ -11,8 +11,8 @@
 ; Uncomment to apply minor fixes.
 ; FIXME = 1
 
- .setcpu "6502"
- .include "vcs.inc"
+.setcpu "6502"
+.include "vcs.inc"
 
 .enum ColorType                         ; NTSC RGB Color
     black        = $00                  ; #000000
@@ -183,17 +183,17 @@ PortCurrStateBase:              .byte 0, 0, 0
 BlackBatDynamic:                .byte 0, 0, 0, 0, 0, 0, 0
 
 linked_objtable_ptr:            .word 0
-objdelta:                       .byte 0      ; velocity for MoveGameObject to use
-MoveGameObjectArg_ObjNumber:    .byte 0      ; identifies the object for MoveGameObject to move
-MoveGameObjectArg_Difficulty:   .byte 0      ; difficulty for MoveGameObject to use
-joystick_record:                .byte 0      ; used by PickupPutdown
+objdelta:                       .byte 0     ; velocity for MoveGameObject to use
+MoveGameObjectArg_ObjNumber:    .byte 0     ; identifies the object for MoveGameObject to move
+MoveGameObjectArg_Difficulty:   .byte 0     ; difficulty for MoveGameObject to use
+joystick_record:                .byte 0     ; used by PickupPutdown
 tmp1:                           .byte 0
 SurroundDynamic:                .byte 0, 0, 0
 GetObjectState_Arg:             .byte 0
-NumberCurrState:                .byte 0      ; 0=lvl1, 2=lvl2, 4=lvl3
-is_game_complete:               .byte 0      ; $ff=yes, 0=no
+NumberCurrState:                .byte 0     ; 0=lvl1, 2=lvl2, 4=lvl3
+is_game_complete:               .byte 0     ; $ff=yes, 0=no
 sound_duration_counter:         .byte 0
-sound_type:                     .byte 0      ; NoiseType
+sound_type:                     .byte 0     ; NoiseType enum
 linked_objtable_index:          .byte 0
 PrevManDynamic:                 .byte 0, 0, 0
 input_counter:                  .word 0
@@ -2395,76 +2395,6 @@ DragonDeadLeftGfx:
  .byte %01111110 ;  XXXXXX
  .byte 0
  .assert >(*-1) = >(DragonDeadLeftGfx), error, "Sprite spans page."
-.if 0=1
-DragonNormRightGfx:
- .byte %01100000 ;  XX
- .byte %11110000 ; XXXX
- .byte %11001111 ; XX  XXXX
- .byte %01111111 ;  XXXXXXX
- .byte %01110000 ;  XXX
- .byte %00100000 ;   X
- .byte %00100000 ;   X
- .byte %01111000 ;  XXXX
- .byte %11111100 ; XXXXXX
- .byte %11111110 ; XXXXXXX
- .byte %11000111 ; XX   XXX
- .byte %11000011 ; XX    XX
- .byte %11000011 ; XX    XX
- .byte %11100011 ; XXX   XX
- .byte %11111111 ; XXXXXXXX
- .byte %00111100 ;   XXXX
- .byte %00010000 ;    X
- .byte %11110001 ; XXXX   X
- .byte %10000111 ; X    XXX
- .byte %11111100 ; XXXXXX
- .byte 0
- .assert >(*-1) = >(DragonNormRightGfx), error, "Sprite spans page."
-DragonRoarRightGfx:
- .byte %00000001 ;        X
- .byte %00000010 ;       X
- .byte %01100100 ;  XX  X
- .byte %11111000 ; XXXXX
- .byte %11010000 ; XX X
- .byte %01110000 ;  XXX
- .byte %01111000 ;  XXXX
- .byte %00100100 ;   X  X
- .byte %00100010 ;   X   X
- .byte %01110001 ;  XXX   X
- .byte %01111000 ;  XXXX
- .byte %11111100 ; XXXXXX
- .byte %11111110 ; XXXXXXX
- .byte %11111110 ; XXXXXXX
- .byte %11111110 ; XXXXXXX
- .byte %11111110 ; XXXXXXX
- .byte %01111100 ;  XXXXX
- .byte %00111000 ;   XXX
- .byte %00010000 ;    X
- .byte %00011111 ;    XXXXX
- .byte %00000001 ;        X
- .byte %00000111 ;      XXX
- .byte 0
- .assert >(*-1) = >(DragonRoarRightGfx), error, "Sprite spans page."
-DragonDeadRightGfx:
- .byte %00110000 ;   XX
- .byte %00110000 ;   XX
- .byte %00110000 ;   XX
- .byte %01110000 ;  XXX
- .byte %11011000 ; XX XX
- .byte %11111110 ; XXXXXXX
- .byte %01110011 ;  XXX  XX
- .byte %00000001 ;        X
- .byte %00111111 ;   XXXXXX
- .byte %01111111 ;  XXXXXXX
- .byte %01111111 ;  XXXXXXX
- .byte %01111110 ;  XXXXXX
- .byte %00011110 ;    XXXX
- .byte %00000100 ;      X
- .byte %01110110 ;  XXX XX
- .byte %01000010 ;  X    X
- .byte %01111110 ;  XXXXXX
- .byte 0
- .assert >(*-1) = >(DragonDeadRightGfx), error, "Sprite spans page."
-.endif
 
 SwordCurrState:     .byte 0
 SwordStates:        .byte $ff
@@ -2477,16 +2407,6 @@ SwordLeftGfx:
  .byte %00100000 ;   X
  .byte 0
  .assert >(*-1) = >(SwordLeftGfx), error, "Sprite spans page."
-.if 0=1
-SwordRightGfx:
- .byte %00000100 ;      X
- .byte %00000010 ;       X
- .byte %11111111 ; XXXXXXXX
- .byte %00000010 ;       X
- .byte %00000100 ;      X
- .byte 0
- .assert >(*-1) = >(SwordRightGfx), error, "Sprite spans page."
-.endif
 
 DotCurrState:       .byte 0
 DotStates:          .byte $ff
@@ -2593,106 +2513,7 @@ EasterEggGfx:
  .byte %00000100 ;      X
  .byte 0
  .assert >(*-1) = >(EasterEggGfx), error, "Sprite spans page."
-.if 0=1
-EasterEggGfx2:
- .byte %01000100 ;  X   X
- .byte %01101100 ;  XX XX
- .byte %01010100 ;  X X X
- .byte %01000100 ;  X   X
- .byte %01000100 ;  X   X
- .byte %00000001 ;        X
- .byte %00010000 ;    X
- .byte %00010000 ;    X
- .byte %00010000 ;    X
- .byte %00010000 ;    X
- .byte %00000001 ;        X
- .byte %01001000 ;  X  X
- .byte %01010000 ;  X X
- .byte %01100000 ;  XX
- .byte %01010000 ;  X X
- .byte %01001000 ;  X  X
- .byte %00000001 ;        X
- .byte %01111000 ;  XXXX
- .byte %01000000 ;  X
- .byte %01111000 ;  XXXX
- .byte %01000000 ;  X
- .byte %01111000 ;  XXXX
- .byte %00000001 ;        X
- .byte %01000100 ;  X   X
- .byte %01101100 ;  XX XX
- .byte %01010100 ;  X X X
- .byte %01000100 ;  X   X
- .byte %01000100 ;  X   X
- .byte %00000001 ;        X
- .byte %01001000 ;  X  X
- .byte %01001000 ;  X  X
- .byte %01111000 ;  XXXX
- .byte %00000001 ;        X
- .byte %01000000 ;  X
- .byte %01110000 ;  XXX
- .byte %01000000 ;  X
- .byte %01000000 ;  X
- .byte %00000001 ;        X
- .byte %01111000 ;  XXXX
- .byte %01001000 ;  X  X
- .byte %01111000 ;  XXXX
- .byte %01000000 ;  X
- .byte %01000000 ;  X
- .byte %00000001 ;        X
- .byte %01000000 ;  X
- .byte %01000000 ;  X
- .byte %01111000 ;  XXXX
- .byte %01001000 ;  X  X
- .byte %01001000 ;  X  X
- .byte %00000001 ;        X
- .byte %01001000 ;  X  X
- .byte %01001000 ;  X  X
- .byte %01111000 ;  XXXX
- .byte %00001000 ;     X
- .byte %01111000 ;  XXXX
- .byte %00000001 ;        X
- .byte %01000100 ;  X   X
- .byte %01000100 ;  X   X
- .byte %01010100 ;  X X X
- .byte %01101100 ;  XX XX
- .byte %01000100 ;  X   X
- .byte %00000001 ;        X
- .byte %01111000 ;  XXXX
- .byte %01001000 ;  X  X
- .byte %01111100 ;  XXXXX
- .byte %00000001 ;        X
- .byte %01111000 ;  XXXX
- .byte %01000000 ;  X
- .byte %01111000 ;  XXXX
- .byte %00001000 ;     X
- .byte %01111000 ;  XXXX
- .byte %00000001 ;        X
- .byte %01001000 ;  X  X
- .byte %01001000 ;  X  X
- .byte %01111000 ;  XXXX
- .byte %01001000 ;  X  X
- .byte %01001000 ;  X  X
- .byte %00000001 ;        X
- .byte %01111000 ;  XXXX
- .byte %01001000 ;  X  X
- .byte %01111000 ;  XXXX
- .byte %01000000 ;  X
- .byte %01111000 ;  XXXX
- .byte %00000001 ;        X
- .byte %01000000 ;  X
- .byte %01110000 ;  XXX
- .byte %01000000 ;  X
- .byte %01000000 ;  X
- .byte %00000001 ;        X
- .byte %01111000 ;  XXXX
- .byte %01001000 ;  X  X
- .byte %01111000 ;  XXXX
- .byte %01000000 ;  X
- .byte %01111000 ; .XXXX
- .byte %00000001 ;        X
- .byte 0
- .assert >(*-1) = >(EasterEggGfx2), error, "Sprite spans page."
-.endif
+
 EasterEggDynamic:   .byte roomnum_SecretRoom, 80, 105
 EasterEggCurrState: .byte 0
 EasterEggStates:    .byte $ff
@@ -3111,14 +2932,13 @@ objoffset_Null = (* - Objects)
     .byte ColorType::black, ColorType::black
     .byte 0
 
-; 6502 startup vectors
 .segment "VECTORS"
 .ifdef FIXME
-    .word StartGame
-    .word StartGame
-    .word StartGame
+    .word StartGame ; NMI
+    .word StartGame ; RESET
+    .word StartGame ; IRQ
 .else
-    .word START
-    .word START
-    .word START
+    .word START     ; NMI
+    .word START     ; RESET
+    .word START     ; IRQ
 .endif
