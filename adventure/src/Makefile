@@ -1,7 +1,7 @@
 .PHONY: all clean
 .DEFAULT_GOAL: all
 
-all: ADVNTURE.BIN ADVeNTURE.BIN ADVeNTURE8k.BIN
+all: ADVNTURE.BIN ADVeNTURE.BIN ADVeNTURE8K.BIN
 
 %.BIN: %.o
 	ld65 -o $@ -C $*.cfg -m $*.map.txt -Ln $*.labels.txt $<

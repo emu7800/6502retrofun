@@ -710,9 +710,9 @@ GetObjectDynamicInfoAddress:
 StartGame:  sei                   ;disable interrupts
             cld
             ldx #$28              ;clear TIA registers $04-$2c
-            lda #0                ; i.e. blank
-:           sta 4,x               ; everything and turn
-            dex                   ; everything off
+            lda #0
+:           sta 4,x
+            dex
             bpl :-
             txs                   ;reset stack to $ff
 :           sta 0,x               ;clear $80 to $ff user vars
@@ -726,16 +726,19 @@ MainGameLoop:
             jsr CheckGameStart
             jsr MakeSound
             jsr MaintainInputCounter
-            lda is_game_complete  ;ff = yes
-            bne NonActiveLoop
+            lda is_game_complete
+            bne NonActiveLoop     ;branch if yes
             lda ChaliceDynamic+DynamicType::room
             cmp #roomnum_YellowCastleEntry
-            bne :+                ;branch if not in the yellow castle
+            bne :+                ;branch if chalice not in the yellow castle
+
+@GameCompleted:
             lda #$ff
-            sta sound_duration_counter  ;set the note count to maximum
+            sta sound_duration_counter
             sta is_game_complete  ;complete the game since chalice is returned
             lda #NoiseType::game_over
             sta sound_type
+
 :           ldy #0                ;allow joystick read - all movement
             jsr BallMovement      ;check ball collisions and move ball
             jsr MoveCarriedObject ;move the carried object
@@ -763,7 +766,6 @@ MainGameLoop:
             jsr PrintDisplay      ;display the room and objects
             jmp MainGameLoop
 
-; non-active game loop
 NonActiveLoop:
             jsr DoVSYNC           ;wait for VSYNC
             jsr PrintDisplay      ;display the room and objects
@@ -931,6 +933,7 @@ Game1ObjectLocationsEnd:
             .byte 0
 .endif
 
+; object locations (room and coordinates) for game 2
 Game2ObjectLocations:
 ;                 Location                                X    Y   Mvt    State   Object
             .byte roomnum_BlackMazeBottomLeft,           81,  18                  ;dot
@@ -1415,7 +1418,7 @@ GetLinkedObject:
             sta direction_wanted
             lda DynamicType::room,y      ;compare Object2's room
             cmp z:DynamicType::room,x    ; w/ Object1's room
-            bne @Exit                    ;if not the same, forget it
+            bne @Done                    ;if not the same, forget it
             lda DynamicType::xcoord,y    ;compare Object2's X coordinate
             cmp z:DynamicType::xcoord,x  ; w/ Object1's X coordinate
             bcc @SetLeft                 ;if Object2 X < Object1 X then branch
@@ -1430,15 +1433,15 @@ GetLinkedObject:
 @CmpY:      lda DynamicType::ycoord,y    ;compare Object2's Y coordinate
             cmp z:DynamicType::ycoord,x  ; w/ Object1's Y coordinate
             bcc @SetDown                 ;if Object2 Y < Object1 Y then branch
-            beq @Exit                    ;if Object2 Y = Object1 Y then branch
+            beq @Done                    ;if Object2 Y = Object1 Y then branch
             lda direction_wanted
             and #<~MoveTypes::up         ;move Object1 up
             sta direction_wanted
-            jmp @Exit
+            jmp @Done
 @SetDown:   lda direction_wanted
             and #<~MoveTypes::down       ;move Object1 down
             sta direction_wanted
-@Exit:      lda direction_wanted
+@Done:      lda direction_wanted
             rts
 
 ;; Move the red dragon "Rhindle"
@@ -1765,7 +1768,7 @@ Portals:    ldy #2                      ;for each portcullis
 @PortalsDone:
             rts
 
-PortOffsets:       .byte  objoffset_PortCullis1,     objoffset_PortCullis2,    objoffset_PortCullis3
+PortOffsets:       .byte  objoffset_PortCullisYlw,   objoffset_PortCullisWht,  objoffset_PortCullisBlk
 KeyOffsets:        .byte  objoffset_YellowKey,       objoffset_WhiteKey,       objoffset_BlackKey
 EntryRoomOffsets:  .byte  roomnum_YellowCastleEntry, roomnum_WhiteCastleEntry, roomnum_BlackCastleEntry
 CastleRoomOffsets: .byte  roomnum_YellowCastle,      roomnum_WhiteCastle,      roomnum_BlackCastle
@@ -2111,9 +2114,9 @@ CastleDef:
  .byte $f0, $ff, $0f   ; 1111111111111111.... ....1111111111111111
  .assert >(*-1) = >(CastleDef), error, "Sprite spans page."
 
-PortDynamic1:       .byte roomnum_YellowCastle, 77, 49
-PortDynamic2:       .byte roomnum_WhiteCastle,  77, 49
-PortDynamic3:       .byte roomnum_BlackCastle,  77, 49
+PortDynamicYlw:     .byte roomnum_YellowCastle, 77, 49
+PortDynamicWht:     .byte roomnum_WhiteCastle,  77, 49
+PortDynamicBlk:     .byte roomnum_BlackCastle,  77, 49
 
 SurroundCurrState:  .byte 0
 SurroundStates:     .byte $ff
@@ -2805,22 +2808,22 @@ objoffset_InvisibleSurround = (* - Objects)
     .byte ColorType::orange, ColorType::lightestgray
     .byte 7
 
-objoffset_PortCullis1 = (* - Objects)
-    .word PortDynamic1
+objoffset_PortCullisYlw = (* - Objects)
+    .word PortDynamicYlw
     .word PortCurrStateBase+0
     .word PortCullisStates
     .byte ColorType::black, ColorType::black
     .byte 0
 
-objoffset_PortCullis2 = (* - Objects)
-    .word PortDynamic2
+objoffset_PortCullisWht = (* - Objects)
+    .word PortDynamicWht
     .word PortCurrStateBase+1
     .word PortCullisStates
     .byte ColorType::black, ColorType::black
     .byte 0
 
-objoffset_PortCullis3 = (* - Objects)
-    .word PortDynamic3
+objoffset_PortCullisBlk = (* - Objects)
+    .word PortDynamicBlk
     .word PortCurrStateBase+2
     .word PortCullisStates
     .byte ColorType::black, ColorType::black
