@@ -127,35 +127,47 @@
 .endstruct
 
 
-.zeropage   ; segment mapped to $80
+.zeropage
 
 roomgfx_base:                   .word 0
+roomgfx_offset:                 .byte 0
 p0gfx_base:                     .word 0
+p0gfx_offset:                   .byte 0
 p1gfx_base:                     .word 0
+p1gfx_offset:                   .byte 0
 player0pos:                     .byte 0, 0
 player1pos:                     .byte 0, 0
 ManDynamic:                     .byte 0, 0, 0
 PrevManDynamic:                 .byte 0, 0, 0
 SurroundDynamic:                .byte 0, 0, 0
-man_y2:                         .byte 0     ; man's adjusted y coordinate?
+man_y2:                         .byte 0     ; man's adjusted y coordinate
 scan_line:                      .byte 0     ; current scan line
-roomgfx_offset:                 .byte 0     ; room graphics offset
-p0gfx_offset:                   .byte 0     ; player0 graphics offset
-p1gfx_offset:                   .byte 0     ; player1 graphics offset
 cached_swchb:                   .byte 0     ; cached console switches
-cached_joystick:                .byte 0
+cached_joystick:                .byte 0     ; cached joystick switches
 joystick_record:                .byte 0     ; used by PickupPutdown
+direction_wanted:               .byte 0
 dr_ptr:                         .word 0     ; pointer for dereferencing
 object1:                        .byte 0     ; cached object for display using player0 sprite
 object2:                        .byte 0     ; cached object for display using player1 sprite
 obj_collided_with:              .byte 0     ; object1 or object2 that collided with the man
-portcullis_number:              .byte 0
-direction_wanted:               .byte 0
 obj_counter:                    .byte 0     ; last cached object for display
 object_carried:                 .byte 0     ; object carried by the man
 objman_x_delta:                 .byte 0
 objman_y_delta:                 .byte 0
 curr_dragon_objoffset:          .byte 0     ; current dragon being serviced
+portcullis_number:              .byte 0
+linked_objtable_ptr:            .word 0
+linked_objtable_index:          .byte 0
+objdelta:                       .byte 0     ; velocity for MoveGameObject to use
+MoveGameObjectArg_ObjNumber:    .byte 0     ; identifies the object for MoveGameObject to move
+MoveGameObjectArg_Difficulty:   .byte 0     ; difficulty for MoveGameObject to use
+GetObjectState_Arg:             .byte 0     ; used by GetObjectState to get actual state <= this value
+NumberCurrState:                .byte 0     ; 0=lvl1, 2=lvl2, 4=lvl3
+is_game_complete:               .byte 0     ; $ff=yes, 0=no
+sound_duration_counter:         .byte 0
+sound_type:                     .byte 0     ; NoiseType enum
+input_counter:                  .word 0
+tmp:                            .byte 0, 0
 
 GameObjectsWorkingArea:
 DotDynamic:                     .byte 0, 0, 0
@@ -171,19 +183,6 @@ WhiteKeyDynamic:                .byte 0, 0, 0
 BlackKeyDynamic:                .byte 0, 0, 0
 PortCurrStateBase:              .byte 0, 0, 0
 BlackBatDynamic:                .byte 0, 0, 0, 0, 0, 0, 0
-
-linked_objtable_ptr:            .word 0
-linked_objtable_index:          .byte 0
-objdelta:                       .byte 0     ; velocity for MoveGameObject to use
-MoveGameObjectArg_ObjNumber:    .byte 0     ; identifies the object for MoveGameObject to move
-MoveGameObjectArg_Difficulty:   .byte 0     ; difficulty for MoveGameObject to use
-tmp1:                           .byte 0
-GetObjectState_Arg:             .byte 0
-NumberCurrState:                .byte 0     ; 0=lvl1, 2=lvl2, 4=lvl3
-is_game_complete:               .byte 0     ; $ff=yes, 0=no
-sound_duration_counter:         .byte 0
-sound_type:                     .byte 0     ; NoiseType enum
-input_counter:                  .word 0
 
 stack_space:                    ; $e7-$ff (12 frames)
 
@@ -1337,10 +1336,10 @@ SetupRoomPrint:
 
 SwapPrintObjects:
             lda object1
-            sta tmp1
+            sta tmp
             lda object2
             sta object1
-            lda tmp1
+            lda tmp
             sta object2
 
 SetupObjectPrint:
@@ -1479,7 +1478,7 @@ CacheObjects:
 ; returns: dr_ptr set to room address
 RoomNumToAddress:
             .assert .sizeof(RoomType) = 9, error, "This subroutine assumes RoomType is 9 bytes long."
-            sta tmp1              ;store room number wanted
+            sta tmp               ;store room number wanted
             sta dr_ptr
             lda #0                ;zero the high byte of the
             sta dr_ptr+1          ; offset
@@ -1490,7 +1489,7 @@ RoomNumToAddress:
             rol dr_ptr+1
             rol dr_ptr
             rol dr_ptr+1
-            lda tmp1              ;get the original room number
+            lda tmp               ;get the original room number
             clc
             adc dr_ptr
             sta dr_ptr            ;and add it to the offset
@@ -1873,11 +1872,11 @@ AdjustRoomLevel:
             bcc @NoChange           ; the hi bit set?
             sec                     ;yes
             sbc #%10000000          ;remove the hi bit and
-            sta tmp1                ; store the room number
+            sta tmp                 ; store the room number
             lda NumberCurrState     ;get the level number
             lsr a                   ;divide it by two
             clc
-            adc tmp1                ;add to the original room
+            adc tmp                 ;add to the original room
             tay
             lda RoomDiffs,y         ;use as an offset to get the next room
 @NoChange:  rts

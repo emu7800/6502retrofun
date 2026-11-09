@@ -135,7 +135,7 @@
 .endstruct
 
 
-.zeropage   ; segment mapped to $80
+.zeropage
 
 roomgfx_base:                   .word 0
 p0gfx_base:                     .word 0
@@ -143,11 +143,11 @@ p1gfx_base:                     .word 0
 player0pos:                     .byte 0, 0
 player1pos:                     .byte 0, 0
 ManDynamic:                     .byte 0, 0, 0
-man_y2:                         .byte 0     ; man's adjusted y coordinate?
+man_y2:                         .byte 0     ; man's adjusted y coordinate
 scan_line:                      .byte 0     ; current scan line
-roomgfx_offset:                 .byte 0     ; room graphics offset
-p0gfx_offset:                   .byte 0     ; player0 graphics offset
-p1gfx_offset:                   .byte 0     ; player1 graphics offset
+roomgfx_offset:                 .byte 0
+p0gfx_offset:                   .byte 0
+p1gfx_offset:                   .byte 0
 cached_swchb:                   .byte 0     ; cached console switches
 dr_ptr:                         .word 0     ; pointer for dereferencing
 object1:                        .byte 0     ; cached object for display using player0 sprite
