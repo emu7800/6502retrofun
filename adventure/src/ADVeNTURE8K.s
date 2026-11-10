@@ -163,10 +163,12 @@ MoveGameObjectArg_ObjNumber:    .byte 0     ; identifies the object for MoveGame
 MoveGameObjectArg_Difficulty:   .byte 0     ; difficulty for MoveGameObject to use
 GetObjectState_Arg:             .byte 0     ; used by GetObjectState to get actual state <= this value
 NumberCurrState:                .byte 0     ; 0=lvl1, 1=lvl2, 2=lvl3
+SwordCurrState:                 .byte 0
 is_game_complete:               .byte 0     ; $ff=yes, 0=no
 sound_duration_counter:         .byte 0
 sound_type:                     .byte 0     ; NoiseType enum
 input_counter:                  .word 0
+                                .byte 0     ; unused
 
 GameObjectsWorkingArea:
 DotDynamic:                     .byte 0, 0, 0
@@ -183,7 +185,7 @@ BlackKeyDynamic:                .byte 0, 0, 0
 PortCurrStateBase:              .byte 0, 0, 0
 BlackBatDynamic:                .byte 0, 0, 0, 0, 0, 0, 0
 
-stack_space:                    ; $e5-$ff (13 frames)
+stack_space:                    ; $e7-$ff (12 frames)
 
 .segment "CODE0"
 LeftOfName:
@@ -1689,7 +1691,7 @@ CollisionDetected:
             bcc @Done                         ;not carriable, exit
             ldy #DynamicType::room
             lda (dr_ptr),y                    ;get the object's room
-            cmp ManDynamic+DynamicType::room  ;compare the w/man's room
+            cmp ManDynamic+DynamicType::room  ;compare w/man's room
             bne @Done                         ; if not same room, exit
             lda obj_collided_with
             cmp object_carried
@@ -1715,6 +1717,22 @@ CollisionDetected:
             sec
             sbc ManDynamic+DynamicType::ycoord
             sta objman_y_delta                ; and store the difference wrt man's Y coordinate
+
+@FlipSwordAsNeeded:
+            lda object_carried
+            cmp #objoffset_Sword
+            bne @Done
+            lda objman_x_delta
+            beq @Done
+            and #%10000000
+            tay                               ; 0=sword to the right, else left
+            lda SwordCurrState
+            ora #%10000000                    ; point sword to the right
+            cpy #0
+            beq :+
+            and #%01111111                    ; point sword to the left
+:           sta SwordCurrState
+
 @Done:      rts
 
 ;; Move the carried object
@@ -2579,9 +2597,10 @@ BatStates:          .byte 3
                     .byte $ff
                     .word Bat2Gfx
 
-SwordCurrState:     .byte 0
-SwordStates:        .byte $ff
+SwordStates:        .byte 0
                     .word SwordLeftGfx
+                    .byte $ff
+                    .word SwordRightGfx
 
 DotCurrState:       .byte 0
 DotStates:          .byte $ff
