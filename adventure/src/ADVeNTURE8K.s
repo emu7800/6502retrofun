@@ -162,12 +162,11 @@ objdelta:                       .byte 0     ; velocity for MoveGameObject to use
 MoveGameObjectArg_ObjNumber:    .byte 0     ; identifies the object for MoveGameObject to move
 MoveGameObjectArg_Difficulty:   .byte 0     ; difficulty for MoveGameObject to use
 GetObjectState_Arg:             .byte 0     ; used by GetObjectState to get actual state <= this value
-NumberCurrState:                .byte 0     ; 0=lvl1, 2=lvl2, 4=lvl3
+NumberCurrState:                .byte 0     ; 0=lvl1, 1=lvl2, 2=lvl3
 is_game_complete:               .byte 0     ; $ff=yes, 0=no
 sound_duration_counter:         .byte 0
 sound_type:                     .byte 0     ; NoiseType enum
 input_counter:                  .word 0
-tmp:                            .byte 0, 0
 
 GameObjectsWorkingArea:
 DotDynamic:                     .byte 0, 0, 0
@@ -184,7 +183,7 @@ BlackKeyDynamic:                .byte 0, 0, 0
 PortCurrStateBase:              .byte 0, 0, 0
 BlackBatDynamic:                .byte 0, 0, 0, 0, 0, 0, 0
 
-stack_space:                    ; $e7-$ff (12 frames)
+stack_space:                    ; $e5-$ff (13 frames)
 
 .segment "CODE0"
 LeftOfName:
@@ -1184,73 +1183,78 @@ CheckGameStart:
             eor #$ff              ;flip (as reset active low)
             and cached_swchb      ;compare with what was before
             and #ConsoleSwitchType::reset
-            beq NotReset          ;if no reset then branch
+            beq @CheckSelect      ;if no reset then branch
             lda is_game_complete
             cmp #$ff
             beq SetupRoomObjects  ;branch since game has been completed
 
-; Reincarnate player
+@Reincarnate:
             lda #roomnum_YellowCastle
-            sta ManDynamic+DynamicType::room                    ;make it the current room
-            sta PrevManDynamic+DynamicType::room                ;make it the previous room
+            sta ManDynamic+DynamicType::room            ;make it the current room
+            sta PrevManDynamic+DynamicType::room        ;make it the previous room
             lda #80
-            sta ManDynamic+DynamicType::xcoord                  ;make it the current man X coordinate
-            sta PrevManDynamic+DynamicType::xcoord              ;make it the previous man X coordinate
+            sta ManDynamic+DynamicType::xcoord          ;make it the current man X coordinate
+            sta PrevManDynamic+DynamicType::xcoord      ;make it the previous man X coordinate
             lda #32
-            sta ManDynamic+DynamicType::ycoord                  ;make it the current man Y coordinate
-            sta PrevManDynamic+DynamicType::ycoord              ;make it the previous man Y coordinate
+            sta ManDynamic+DynamicType::ycoord          ;make it the current man Y coordinate
+            sta PrevManDynamic+DynamicType::ycoord      ;make it the previous man Y coordinate
             lda #0
-            sta RedDragonDynamic+DynamicType::state             ;set the red dragon's state to OK
-            sta YellowDragonDynamic+DynamicType::state          ;set the yellow dragon's state to OK
-            sta GreenDragonDynamic+DynamicType::state           ;set the green dragon's state to OK
-            sta sound_duration_counter  ;set the note count to zero
+            sta RedDragonDynamic+DynamicType::state     ;set the red dragon's state to OK
+            sta YellowDragonDynamic+DynamicType::state  ;set the yellow dragon's state to OK
+            sta GreenDragonDynamic+DynamicType::state   ;set the green dragon's state to OK
+            sta sound_duration_counter                  ;set the note count to zero
             lda #objoffset_Null
             sta object_carried
 
-NotReset:   lda SWCHB             ;get the console switches
-            eor #$ff              ;flip (as select active low)
-            and cached_swchb      ;compare with what was before
+@CheckSelect:
+            lda SWCHB                         ;get the console switches
+            eor #$ff                          ;flip (as select is active low)
+            and cached_swchb                  ;compare with what was before
             and #ConsoleSwitchType::select
-            beq NotSelect         ;branch if select not being used
+            beq SaveConSwitchesAndExit        ;branch if select not being used
             lda ManDynamic+DynamicType::room  ;get the current room
             cmp #roomnum_NumberRoom
-            bne SetupRoomObjects  ;branch if not
-            lda NumberCurrState   ;increment the level
-            clc                   ; number (by two)
-            adc #2
-            cmp #6                ;have we reached the maximum?
-            bcc ResetSetup
-            lda #0                ;if yep then set back to zero
-ResetSetup: sta NumberCurrState   ;store the new level number
+            bne SetupRoomObjects              ;branch if not
+            inc NumberCurrState
+            lda NumberCurrState
+            cmp #3                            ;have we reached the maximum?
+            bcc SetupRoomObjects
+            lda #0                            ;if yep then set back to zero
+            sta NumberCurrState               ;store the new level number
 SetupRoomObjects:
             lda #roomnum_NumberRoom
             sta ManDynamic+DynamicType::room
             sta PrevManDynamic+DynamicType::room
-            lda #0                ;set man ycoord to 0 so can't be seen
+            lda #0                            ;set man ycoord to 0 so can't be seen
             sta ManDynamic+DynamicType::ycoord
             sta PrevManDynamic+DynamicType::ycoord
-            ldy NumberCurrState    ;get the level number
-            lda GameObjectLocations,y     ;get the low pointer to object locations
+            lda NumberCurrState               ;get the level number
+            asl a
+            tay
+            lda GameObjectLocations,y         ;get the low pointer to object locations
             sta dr_ptr
-            lda GameObjectLocations+1,y   ;get the high pointer to object locations
+            lda GameObjectLocations+1,y       ;get the high pointer to object locations
             sta dr_ptr+1
-            ldy #(Game1ObjectLocationsEnd - Game1ObjectLocations)  ;copy all the objects dynamic information
-:           lda (dr_ptr),y                ; (the rooms and positions) into the working area
+
+@CopyToGameObjectsWorkingArea:
+            ldy #(Game1ObjectLocationsEnd - Game1ObjectLocations)
+:           lda (dr_ptr),y
             sta GameObjectsWorkingArea,y
             dey
             bpl :-
-            lda NumberCurrState   ;get the level number
-            cmp #4                ;branch if level one
-            bcc :+                ;or two (where all objects are in defined areas)
-            jsr RandomizeLevel3   ;put some objects in random rooms
-            jsr DoVSYNC           ;wait for VSYNC
-            jsr PrintDisplay      ;display rooms and objects
-:           lda #0                ;signal that the game has started
+
+            lda NumberCurrState               ;get the level number
+            cmp #2
+            bcc :+                            ;branch if level one or two (where all objects are in defined areas)
+            jsr RandomizeLevel3               ;put some objects in random rooms
+            jsr DoVSYNC                       ;wait for VSYNC
+            jsr PrintDisplay                  ;display rooms and objects
+:           lda #0                            ;signal that the game has started
             sta is_game_complete
             lda #objoffset_Null
             sta object_carried
-NotSelect:
-            lda SWCHB             ;store the current console switches
+SaveConSwitchesAndExit:
+            lda SWCHB                         ;store the current console switches
             sta cached_swchb
             rts
 
@@ -1336,10 +1340,10 @@ SetupRoomPrint:
 
 SwapPrintObjects:
             lda object1
-            sta tmp
+            pha
             lda object2
             sta object1
-            lda tmp
+            pla
             sta object2
 
 SetupObjectPrint:
@@ -1478,7 +1482,7 @@ CacheObjects:
 ; returns: dr_ptr set to room address
 RoomNumToAddress:
             .assert .sizeof(RoomType) = 9, error, "This subroutine assumes RoomType is 9 bytes long."
-            sta tmp               ;store room number wanted
+            pha                   ;store room number wanted
             sta dr_ptr
             lda #0                ;zero the high byte of the
             sta dr_ptr+1          ; offset
@@ -1489,7 +1493,7 @@ RoomNumToAddress:
             rol dr_ptr+1
             rol dr_ptr
             rol dr_ptr+1
-            lda tmp               ;get the original room number
+            pla                   ;get the original room number
             clc
             adc dr_ptr
             sta dr_ptr            ;and add it to the offset
@@ -1870,13 +1874,9 @@ MoveObjectDelta:
 AdjustRoomLevel:
             cmp #%10000000          ;does room number have
             bcc @NoChange           ; the hi bit set?
-            sec                     ;yes
-            sbc #%10000000          ;remove the hi bit and
-            sta tmp                 ; store the room number
-            lda NumberCurrState     ;get the level number
-            lsr a                   ;divide it by two
+            and #%01111111          ;remove the hi bit and
             clc
-            adc tmp                 ;add to the original room
+            adc NumberCurrState     ;room number + level
             tay
             lda RoomDiffs,y         ;use as an offset to get the next room
 @NoChange:  rts
@@ -2054,14 +2054,14 @@ MoveDragon: stx curr_dragon_objoffset
             lda curr_dragon_objoffset
             jsr PBCollision              ; and check player-ball collision
             beq @CheckSwordContact       ;branch if no collision
+            lda NumberCurrState
+            asl a
+            tay
             lda SWCHB                    ;get console switches
-            rol a                        ;move P0 difficulty to
-            rol a                        ; bit 0 position
-            rol a
-            and #1                       ;mask out everything else
-            ora NumberCurrState          ;merge in the level number
-            tay                          ;create lookup
-            lda DragonDiff,y             ;get new state
+            and #%01000000               ;left difficulty (P0)
+            beq :+                       ;branch if Amateur
+            iny
+:           lda DragonDiff,y             ;get new state
             sta z:DynamicType::state,x   ;store as dragon's state (roaring)
             lda PrevManDynamic+DynamicType::xcoord
             sta z:DynamicType::xcoord,x  ;get temp ball X coord and store as dragon's
@@ -2400,10 +2400,10 @@ GetObjectNoise:
             jmp :-                ;make same noise as drop
 
 
-; dragon difficulty: index = NumberCurrentState + p0 difficulty
-DragonDiff: .byte $d0, $e8       ;level 1: Amateur (B), Pro (A)
-            .byte $f0, $f6       ;level 2: Amateur (B), Pro (A)
-            .byte $f0, $f6       ;level 3: Amateur (B), Pro (A)
+; dragon difficulty: index = 2*NumberCurrState + p0 difficulty
+DragonDiff: .byte $d0, $e8       ;level 1: 0=Amateur (B), 1=Pro (A)
+            .byte $f0, $f6       ;level 2: 0=Amateur (B), 1=Pro (A)
+            .byte $f0, $f6       ;level 3: 0=Amateur (B), 1=Pro (A)
 
 RedDragonLinkedObjectTable:
             .byte SwordDynamic,        RedDragonDynamic
@@ -2601,9 +2601,9 @@ NullStates:         .byte $ff
                     .word NullGfx
 
 NumberDynamic:      .byte roomnum_NumberRoom, 80, 64
-NumberStates:       .byte 1
+NumberStates:       .byte 0
                     .word Number1Gfx
-                    .byte 3
+                    .byte 1
                     .word Number2Gfx
                     .byte $ff
                     .word Number3Gfx

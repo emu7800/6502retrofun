@@ -788,73 +788,77 @@ CheckGameStart:
             eor #$ff              ;flip (as reset active low)
             and cached_swchb      ;compare with what was before
             and #ConsoleSwitchType::reset
-            beq NotReset          ;if no reset then branch
+            beq @CheckSelect      ;if no reset then branch
             lda is_game_complete
             cmp #$ff
             beq SetupRoomObjects  ;branch since game has been completed
 
-; Reincarnate player
+@Reincarnate:
             lda #roomnum_YellowCastle
-            sta ManDynamic+DynamicType::room                    ;make it the current room
-            sta PrevManDynamic+DynamicType::room                ;make it the previous room
+            sta ManDynamic+DynamicType::room            ;make it the current room
+            sta PrevManDynamic+DynamicType::room        ;make it the previous room
             lda #80
-            sta ManDynamic+DynamicType::xcoord                  ;make it the current man X coordinate
-            sta PrevManDynamic+DynamicType::xcoord              ;make it the previous man X coordinate
+            sta ManDynamic+DynamicType::xcoord          ;make it the current man X coordinate
+            sta PrevManDynamic+DynamicType::xcoord      ;make it the previous man X coordinate
             lda #32
-            sta ManDynamic+DynamicType::ycoord                  ;make it the current man Y coordinate
-            sta PrevManDynamic+DynamicType::ycoord              ;make it the previous man Y coordinate
+            sta ManDynamic+DynamicType::ycoord          ;make it the current man Y coordinate
+            sta PrevManDynamic+DynamicType::ycoord      ;make it the previous man Y coordinate
             lda #0
-            sta RedDragonDynamic+DynamicType::state             ;set the red dragon's state to OK
-            sta YellowDragonDynamic+DynamicType::state          ;set the yellow dragon's state to OK
-            sta GreenDragonDynamic+DynamicType::state           ;set the green dragon's state to OK
-            sta sound_duration_counter  ;set the note count to zero
+            sta RedDragonDynamic+DynamicType::state     ;set the red dragon's state to OK
+            sta YellowDragonDynamic+DynamicType::state  ;set the yellow dragon's state to OK
+            sta GreenDragonDynamic+DynamicType::state   ;set the green dragon's state to OK
+            sta sound_duration_counter                  ;set the note count to zero
             lda #objoffset_Null
             sta object_carried
 
-NotReset:   lda SWCHB             ;get the console switches
-            eor #$ff              ;flip (as select active low)
-            and cached_swchb      ;compare with what was before
+@CheckSelect:
+            lda SWCHB                         ;get the console switches
+            eor #$ff                          ;flip (as select is active low)
+            and cached_swchb                  ;compare with what was before
             and #ConsoleSwitchType::select
-            beq NotSelect         ;branch if select not being used
+            beq SaveConSwitchesAndExit        ;branch if select not being used
             lda ManDynamic+DynamicType::room  ;get the current room
             cmp #roomnum_NumberRoom
-            bne SetupRoomObjects  ;branch if not
-            lda NumberCurrState   ;increment the level
-            clc                   ; number (by two)
+            bne SetupRoomObjects              ;branch if not
+            lda NumberCurrState               ;increment the level
+            clc                               ; number (by two)
             adc #2
-            cmp #6                ;have we reached the maximum?
-            bcc ResetSetup
-            lda #0                ;if yep then set back to zero
-ResetSetup: sta NumberCurrState   ;store the new level number
+            cmp #6                            ;have we reached the maximum?
+            bcc :+
+            lda #0                            ;if yep then set back to zero
+:           sta NumberCurrState               ;store the new level number
 SetupRoomObjects:
             lda #roomnum_NumberRoom
             sta ManDynamic+DynamicType::room
             sta PrevManDynamic+DynamicType::room
-            lda #0                ;set man ycoord to 0 so can't be seen
+            lda #0                            ;set man ycoord to 0 so can't be seen
             sta ManDynamic+DynamicType::ycoord
             sta PrevManDynamic+DynamicType::ycoord
-            ldy NumberCurrState    ;get the level number
-            lda GameObjectLocations,y     ;get the low pointer to object locations
+            ldy NumberCurrState               ;get the level number
+            lda GameObjectLocations,y         ;get the low pointer to object locations
             sta dr_ptr
-            lda GameObjectLocations+1,y   ;get the high pointer to object locations
+            lda GameObjectLocations+1,y       ;get the high pointer to object locations
             sta dr_ptr+1
-            ldy #(Game1ObjectLocationsEnd - Game1ObjectLocations)  ;copy all the objects dynamic information
-:           lda (dr_ptr),y                ; (the rooms and positions) into the working area
+
+@CopyToGameObjectsWorkingArea:
+            ldy #(Game1ObjectLocationsEnd - Game1ObjectLocations)
+:           lda (dr_ptr),y
             sta GameObjectsWorkingArea,y
             dey
             bpl :-
-            lda NumberCurrState   ;get the level number
-            cmp #4                ;branch if level one
-            bcc :+                ;or two (where all objects are in defined areas)
-            jsr RandomizeLevel3   ;put some objects in random rooms
-            jsr DoVSYNC           ;wait for VSYNC
-            jsr PrintDisplay      ;display rooms and objects
-:           lda #0                ;signal that the game has started
+
+            lda NumberCurrState               ;get the level number
+            cmp #4
+            bcc :+                            ;branch if level one or two (where all objects are in defined areas)
+            jsr RandomizeLevel3               ;put some objects in random rooms
+            jsr DoVSYNC                       ;wait for VSYNC
+            jsr PrintDisplay                  ;display rooms and objects
+:           lda #0                            ;signal that the game has started
             sta is_game_complete
             lda #objoffset_Null
             sta object_carried
-NotSelect:
-            lda SWCHB             ;store the current console switches
+SaveConSwitchesAndExit:
+            lda SWCHB                         ;store the current console switches
             sta cached_swchb
             rts
 
