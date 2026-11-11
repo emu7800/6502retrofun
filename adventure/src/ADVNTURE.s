@@ -77,7 +77,7 @@
     normal  = 0
     dead    = 1
     ateman  = 2
-    roaring = 255
+    roaring = $ff
 .endenum
 
 .enum PortCullisState
@@ -1545,7 +1545,7 @@ MoveDragon: stx curr_dragon_objoffset
             stx MoveGameObjectArg_ObjNumber
             jsr MoveGameObject
             lda curr_dragon_objoffset
-            jsr PBCollision              ; and check player-ball collision
+            jsr PBCollision              ;check player-ball collision
             beq @CheckSwordContact       ;branch if no collision
             lda SWCHB                    ;get console switches
             rol a                        ;move P0 difficulty to
@@ -1554,7 +1554,7 @@ MoveDragon: stx curr_dragon_objoffset
             and #1                       ;mask out everything else
             ora NumberCurrState          ;merge in the level number
             tay                          ;create lookup
-            lda DragonDiff,y             ;get new state
+            lda DragonDifficulty,y       ;get new state
             sta z:DynamicType::state,x   ;store as dragon's state (roaring)
             lda PrevManDynamic+DynamicType::xcoord
             sta z:DynamicType::xcoord,x  ;get temp ball X coord and store as dragon's
@@ -1624,10 +1624,11 @@ MoveDragon: stx curr_dragon_objoffset
 @DoneWithDragon:
             rts
 
-; dragon difficulty: index = NumberCurrentState + p0 difficulty
-DragonDiff: .byte $d0, $e8       ;level 1: Amateur (B), Pro (A)
-            .byte $f0, $f6       ;level 2: Amateur (B), Pro (A)
-            .byte $f0, $f6       ;level 3: Amateur (B), Pro (A)
+; index = NumberCurrState + ConsoleSwitchType::leftdifficulty
+DragonDifficulty:
+            .byte DragonState::roaring-47, DragonState::roaring-23  ;level 1: 0=Amateur (B), 1=Pro (A)
+            .byte DragonState::roaring-15, DragonState::roaring-9   ;level 2: 0=Amateur (B), 1=Pro (A)
+            .byte DragonState::roaring-15, DragonState::roaring-9   ;level 3: 0=Amateur (B), 1=Pro (A)
 
 ;; Move the black bat "Knubberrub"
 MoveBat:    inc BlackBatDynamic+DynamicType::state ;put bat in the next state

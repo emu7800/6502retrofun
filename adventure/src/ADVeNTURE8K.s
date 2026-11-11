@@ -69,7 +69,12 @@
     normal  = 0
     dead    = 1
     ateman  = 2
-    roaring = 255
+    roaring = $7f
+.endenum
+
+.enum SwordState
+    left  = 0
+    right = $ff
 .endenum
 
 .enum PortCullisState
@@ -163,7 +168,7 @@ MoveGameObjectArg_ObjNumber:    .byte 0     ; identifies the object for MoveGame
 MoveGameObjectArg_Difficulty:   .byte 0     ; difficulty for MoveGameObject to use
 GetObjectState_Arg:             .byte 0     ; used by GetObjectState to get actual state <= this value
 NumberCurrState:                .byte 0     ; 0=lvl1, 1=lvl2, 2=lvl3
-SwordCurrState:                 .byte 0
+SwordCurrState:                 .byte 0     ; SwordState enum
 is_game_complete:               .byte 0     ; $ff=yes, 0=no
 sound_duration_counter:         .byte 0
 sound_type:                     .byte 0     ; NoiseType enum
@@ -1724,13 +1729,12 @@ CollisionDetected:
             bne @Done
             lda objman_x_delta
             beq @Done
-            and #%10000000
-            tay                               ; 0=sword to the right, else left
-            lda SwordCurrState
-            ora #%10000000                    ; point sword to the right
+            and #$80
+            tay                               ;0: sword is located to the right, ~0: sword is located to the left
+            lda #SwordState::right
             cpy #0
             beq :+
-            and #%01111111                    ; point sword to the left
+            lda #SwordState::left
 :           sta SwordCurrState
 
 @Done:      rts
@@ -2057,6 +2061,7 @@ MoveDragon: stx curr_dragon_objoffset
             lda Objects+ObjectType::dynamic_ptr,x
             tax
             lda z:DynamicType::state,x
+            and #$7f
             cmp #DragonState::normal
             bne @DragonStateNotNormal    ;branch if not normal
 @DragonStateNormal:
@@ -2069,17 +2074,34 @@ MoveDragon: stx curr_dragon_objoffset
 :           sta MoveGameObjectArg_Difficulty
             stx MoveGameObjectArg_ObjNumber
             jsr MoveGameObject
-            lda curr_dragon_objoffset
-            jsr PBCollision              ; and check player-ball collision
+
+@FlipDragonAsNeeded:
+            lda direction_wanted
+            eor #$ff
+            and #MoveTypes::left | MoveTypes::right
+            beq :++                      ;forget it if not moving left or right
+            and #MoveTypes::left
+            tay                          ;0: face right, ~0: face left
+            lda z:DynamicType::state,x
+            ora #$80                     ;face right
+            cpy #0
+            beq :+
+            and #$7f                     ;face left
+:           sta z:DynamicType::state,x
+
+:           lda curr_dragon_objoffset
+            jsr PBCollision              ;check player-ball collision
             beq @CheckSwordContact       ;branch if no collision
             lda NumberCurrState
             asl a
             tay
             lda SWCHB                    ;get console switches
             and #%01000000               ;left difficulty (P0)
-            beq :+                       ;branch if Amateur
+            beq :+                       ;branch if Amateur (B)
             iny
-:           lda DragonDiff,y             ;get new state
+:           lda z:DynamicType::state,x
+            and #$80
+            ora DragonDifficulty,y       ;get new state
             sta z:DynamicType::state,x   ;store as dragon's state (roaring)
             lda PrevManDynamic+DynamicType::xcoord
             sta z:DynamicType::xcoord,x  ;get temp ball X coord and store as dragon's
@@ -2096,7 +2118,9 @@ MoveDragon: stx curr_dragon_objoffset
             ldx portcullis_number
             cmp #objoffset_Sword         ;has the sword hit the dragon?
             bne :+                       ;if not, branch
-            lda #DragonState::dead
+            lda z:DynamicType::state,x
+            and #$80
+            ora #DragonState::dead
             sta z:DynamicType::state,x
             lda #NoiseType::dragon_died
             sta sound_type
@@ -2126,12 +2150,15 @@ MoveDragon: stx curr_dragon_objoffset
 @DragonRoaring:
             inc z:DynamicType::state,x   ;increment the dragon's state
             lda z:DynamicType::state,x   ;get its state
-            cmp #$fc                     ;is it near the end?
+            and #$7f
+            cmp #$7c                     ;is it near the end?
             bcc @DoneWithDragon          ;if not, branch
             lda curr_dragon_objoffset
             jsr PBCollision              ;check player-ball collision
             beq @DoneWithDragon          ;if not, branch
-            lda #DragonState::ateman
+            lda z:DynamicType::state,x
+            and #$80
+            ora #DragonState::ateman
             sta z:DynamicType::state,x
             lda #NoiseType::man_eaten
             sta sound_type
@@ -2418,10 +2445,11 @@ GetObjectNoise:
             jmp :-                ;make same noise as drop
 
 
-; dragon difficulty: index = 2*NumberCurrState + p0 difficulty
-DragonDiff: .byte $d0, $e8       ;level 1: 0=Amateur (B), 1=Pro (A)
-            .byte $f0, $f6       ;level 2: 0=Amateur (B), 1=Pro (A)
-            .byte $f0, $f6       ;level 3: 0=Amateur (B), 1=Pro (A)
+; index = 2*NumberCurrState + ConsoleSwitchType::leftdifficulty
+DragonDifficulty:
+            .byte DragonState::roaring-47, DragonState::roaring-23  ;level 1: 0=Amateur (B), 1=Pro (A)
+            .byte DragonState::roaring-15, DragonState::roaring-9   ;level 2: 0=Amateur (B), 1=Pro (A)
+            .byte DragonState::roaring-15, DragonState::roaring-9   ;level 3: 0=Amateur (B), 1=Pro (A)
 
 RedDragonLinkedObjectTable:
             .byte SwordDynamic,        RedDragonDynamic
@@ -2591,15 +2619,23 @@ DragonStates:       .byte DragonState::normal
                     .word DragonNormLeftGfx
                     .byte DragonState::roaring
                     .word DragonRoarLeftGfx
+                    .byte DragonState::normal  | $80
+                    .word DragonNormRightGfx
+                    .byte DragonState::dead    | $80
+                    .word DragonDeadRightGfx
+                    .byte DragonState::ateman  | $80
+                    .word DragonNormRightGfx
+                    .byte DragonState::roaring | $80
+                    .word DragonRoarRightGfx
 
 BatStates:          .byte 3
                     .word Bat1Gfx
                     .byte $ff
                     .word Bat2Gfx
 
-SwordStates:        .byte 0
+SwordStates:        .byte SwordState::left
                     .word SwordLeftGfx
-                    .byte $ff
+                    .byte SwordState::right
                     .word SwordRightGfx
 
 DotCurrState:       .byte 0
