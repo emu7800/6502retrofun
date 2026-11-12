@@ -29,21 +29,21 @@ XXXXXXXX    XXXXXXXXXXXXXXXX    XXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX
                                         XXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX                                        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                                                 XX    XX        XX    XX                                                XX                                    XX
                                         XXXX    XX    XXXX    XXXX    XX    XXXX                                        XX                                    XX
-                                        XXXX    XX                    XX    XXXX                                        XX                                    XX
+                                        XXXX    XX                    XX    XXXX                                        XX         YellowCastleEntry          XX
                                         XXXXXXXXXXXXXXXXXX    XXXXXXXXXXXXXXXXXX                                        XX                                    XX
                                               XX        XX    XX        XX                                              XX                                    XX
                                         XXXX  XX  XXXXXXXX    XXXXXXXX  XX  XXXX                                        XXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX
-                                        XXXX  XX  XXXXXXXX    XXXXXXXX  XX  XXXXXXXXXXXX  XX  XX  XXXX  XX  XX  XXXXXXXXXXXXXXXXXXX X X X      X X X XXXXXXXXXXX
-                                              XX      XXXX    XXXX      XX            XX  XX  XX        XX  XX  XX      XX        XXXXXXX      XXXXXXX        XX
-                                        XXXXXXXXXXXX  XXXX    XXXX  XXXXXXXXXXXXXXXX  XX  XX  XXXXXXXXXXXX  XX  XX  XXXXXX        XXXXXXXXXXXXXXXXXXXX        XX
-                                                  XX  XXXX    XXXX  XX                XX  XX                XX  XX      XX          XXXXXXXXXXXXXXXX          XX
-                                        XXXX  XX  XX  XXXX    XXXX  XX  XX  XXXXXXXXXXXX  XXXXXXXXXXXXXXXXXXXX  XXXXXXXXXX          XXXXXX    XXXXXX          XX
-                                              XX  XX  XX        XX  XX  XX                                              XX                                    XX
-                                        XXXXXXXX  XX  XX        XX  XX  XXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX
+                                        XXXX  XX  XXXXXXXX    XXXXXXXX  XX  XXXXXXXXXXXX  XX  XX  XXXX  XX  XX  XXXXXXXXXXXXXXXXXXX X X X      X X X XXXXXXXXXXX                                        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+                                              XX      XXXX    XXXX      XX            XX  XX  XX        XX  XX  XX      XX        XXXXXXX      XXXXXXX        XX                                        XX                                    XX
+                                        XXXXXXXXXXXX  XXXX    XXXX  XXXXXXXXXXXXXXXX  XX  XX  XXXXXXXXXXXX  XX  XX  XXXXXX        XXXXXXXXXXXXXXXXXXXX        XX                                        XX                                    XX
+                                                  XX  XXXX    XXXX  XX                XX  XX                XX  XX      XX          XXXXXXXXXXXXXXXX          XX                                        XX             NumberRoom             XX
+                                        XXXX  XX  XX  XXXX    XXXX  XX  XX  XXXXXXXXXXXX  XXXXXXXXXXXXXXXXXXXX  XXXXXXXXXX          XXXXXX    XXXXXX          XX                                        XX                                    XX
+                                              XX  XX  XX        XX  XX  XX                                              XX                                    XX                                        XX                                    XX
+                                        XXXXXXXX  XX  XX        XX  XX  XXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX                                        XXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX
 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  XX  XX        XX  XX  XXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX
                                               XX      XX        XX      XX
 XXXXXXXXXX  XXXXXXXXXXXXXXXX  XXXXXXXXXXXXXX  XXXXXXXXXX        XXXXXXXXXX  XXXX
-XXXX              XXXX              XXXXXXXX                                XXXX
+XXXX              XXXX              XXXXXXXX                                XXXX      BelowYellowCastleLeftThinWall                 BelowYellowCastle                BelowYellowCastleRightThinWall                    SecretRoom
 XXXX  XXXXXXXXXX  XXXX  XXXXXXXXXX  XXXXXXXXXXXX                        XXXXXXXX
       XX      XX  XXXX  XX      XX            XX                        XX
 XXXXXXXX  XX  XX  XXXX  XX  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -64,21 +64,21 @@ XXXXXXXX  XX  XX  XXXX  XX  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                                                                                                                         XXXXXXXXXXX X X X      X X X XXXXXXXXXXXXXXXXXXXXXXX  XX  XXXX  XX  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                                                                                                                         XX        XXXXXXX      XXXXXXX        XX              XX  XXXX  XX              XX                                    XX
                                                                                                                         XX        XXXXXXXXXXXXXXXXXXXX        XXXXXX      XXXXXX  XXXX  XXXXXX      XXXXXX                                    XX
-                                                                                                                        XX          XXXXXXXXXXXXXXXX          XX          XX                XX          XX                                    XX
+                                                                                                                        XX          XXXXXXXXXXXXXXXX          XX          XX                XX          XX          OtherPurpleRoom           XX
                                                                                                                         XX          XXXXXX    XXXXXX          XXXXXXXXXX  XX  XXXXXXXXXXXX  XX  XXXXXXXXXX                                    XX
                                                                                                                         XX                                    XX      XX  XX  XX        XX  XX  XX      XX                                    XX
                                                                                                                         XXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXXXXXX  XX  XX  XX  XXXX  XX  XX  XX  XXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX
                                                                                                                         XXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXXXXXX  XX  XX  XX  XXXX  XX  XX  XX  XXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX
                                                                                                                                                                       XX      XX  XXXX  XX      XX
                                                                                                                                                                       XXXXXXXXXX  XXXX  XXXXXXXXX
-                                                                                                                                                                                  XXXX
+                                                                                                                                     SideCorridor2                                XXXX                               SideCorridor1
                                                                                                                                                                       XXXXXXXX    XXXX    XXXXXXX
                                                                                                                                                                       XX          XXXX         XX
                                                                                                                         XXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX
                                                                                                                         XXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX                                        XXXXXXXXXXXXXXXX        XXXXXXXXXXXXXXXX
                                                                                                                         XX                                    XX                                        XX                                    XX
                                                                                                                         XX                                    XX                                        XX                                    XX
-                                                                                                                        XX                                    XX                                        XX                                    XX
+                                                                                                                        XX           TopEntryRoom1            XX                                        XX          TopEntryRoom2             XX
                                                                                                                         XX                                    XX                                        XX                                    XX
                                                                                                                         XX                                    XX                                        XX                                    XX
                                                                                                                         XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                                        XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX

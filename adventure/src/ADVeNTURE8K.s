@@ -77,6 +77,11 @@
     right = $ff
 .endenum
 
+.enum EasterEggState
+    tos = 0
+    tng = $ff
+.endenum
+
 .enum PortCullisState
     open           = 1
     closed         = 28
@@ -169,11 +174,11 @@ MoveGameObjectArg_Difficulty:   .byte 0     ; difficulty for MoveGameObject to u
 GetObjectState_Arg:             .byte 0     ; used by GetObjectState to get actual state <= this value
 NumberCurrState:                .byte 0     ; 0=lvl1, 1=lvl2, 2=lvl3
 SwordCurrState:                 .byte 0     ; SwordState enum
-is_game_complete:               .byte 0     ; $ff=yes, 0=no
+EasterEggCurrState:             .byte 0     ; EasterEgg enum
+is_game_complete:               .byte 0     ; $80=yes, $40=no/playing, $00=no/selecting
 sound_duration_counter:         .byte 0
 sound_type:                     .byte 0     ; NoiseType enum
 input_counter:                  .word 0
-                                .byte 0     ; unused
 
 GameObjectsWorkingArea:
 DotDynamic:                     .byte 0, 0, 0
@@ -1139,7 +1144,8 @@ MainGameLoop:
             jsr MakeSound
             jsr MaintainInputCounter
             lda is_game_complete
-            bne NonActiveLoop     ;branch if yes
+            bmi NonActiveLoop     ;branch if complete
+            beq NonActiveLoop     ;branch if selecting
             lda ChaliceDynamic+DynamicType::room
             cmp #roomnum_YellowCastleEntry
             bne :+                ;branch if chalice not in the yellow castle
@@ -1192,8 +1198,7 @@ CheckGameStart:
             and #ConsoleSwitchType::reset
             beq @CheckSelect      ;if no reset then branch
             lda is_game_complete
-            cmp #$ff
-            beq SetupRoomObjects  ;branch since game has been completed
+            bmi SetupRoomObjects  ;branch since game has been completed
 
 @Reincarnate:
             lda #roomnum_YellowCastle
@@ -1212,6 +1217,8 @@ CheckGameStart:
             sta sound_duration_counter                  ;set the note count to zero
             lda #objoffset_Null
             sta object_carried
+            lda #$40
+            sta is_game_complete
 
 @CheckSelect:
             lda SWCHB                         ;get the console switches
@@ -1228,6 +1235,7 @@ CheckGameStart:
             bcc SetupRoomObjects
             lda #0                            ;if yep then set back to zero
             sta NumberCurrState               ;store the new level number
+
 SetupRoomObjects:
             lda #roomnum_NumberRoom
             sta ManDynamic+DynamicType::room
@@ -1267,30 +1275,48 @@ SaveConSwitchesAndExit:
 
 ; put objects in random rooms for level 3
 RandomizeLevel3:
-            ldy #3*((Lvl3ObjRoomBoundsEnd-Lvl3ObjRoomBounds)/3 - 1)
+            ldy #3*((Level3ObjectsToRandomizeEnd-Level3ObjectsToRandomize)/3 - 1)
 @GetRandomRoom:
-            lda input_counter          ;get the low input counter as seed
+            ldx Level3ObjectsToRandomize,y  ;get object to randomize
+
+            lda input_counter               ;get the low input counter as seed
+            lsr a                           ;generate a pseudo-random room number
             lsr a
             lsr a
-            lsr a                      ;generate a pseudo-random
-            lsr a                      ; room number
+            lsr a
             lsr a
             sec
-            adc input_counter          ;store the low input counter
+            adc input_counter               ;store the low input counter
             sta input_counter
-            and #$1f                   ;trim so represents a room value
-            cmp Lvl3ObjRoomBounds+1,y
-            bcc @GetRandomRoom         ;if < lower bound for object then get another
-            cmp Lvl3ObjRoomBounds+2,y
-            beq @RandomRoomOk
-            bcs @GetRandomRoom         ;if > upper bound for object then get another
+            and #$1f                        ;trim so represents a room value
+
+            ;Exclude everything from NumberRoom, SecretRoom
+            cmp #roomnum_SecretRoom
+            bcc @GetRandomRoom
+            beq @GetRandomRoom
+            ;Exclude BlackKey from Black* rooms
+            cpx #BlackKeyDynamic
+            bne :+
+            cmp #roomnum_BlackMazeTopLeft
+            bcc @RandomRoomOk
+            cmp #roomnum_BlackCastleEntry
+            bcc @GetRandomRoom
+            beq @GetRandomRoom
+            ;Exclude WhiteKey from RedMaze*, WhiteCastleEntry rooms
+:           cpx #WhiteKeyDynamic
+            bne :+
+            cpx #roomnum_RedMazeTopLeft
+            bcs @GetRandomRoom
+            ;Limit to Black*, RedMaze*, WhiteCastleEntry, OtherPurpleRoom, TopEntryRoom* rooms
+:           cpx #ChaliceDynamic
+            bne @RandomRoomOk
+            cmp #roomnum_BlackMazeTopLeft
+            bcc @GetRandomRoom
+
 @RandomRoomOk:
-            ldx Lvl3ObjRoomBounds,y    ;get the object-room index value
-            sta DynamicType::room,x    ;store the new room value
-            dey                        ;goto the next object
+            sta DynamicType::room,x         ;store the new room value
             dey
-            dey
-            bpl @GetRandomRoom         ;until all done
+            bpl @GetRandomRoom              ;goto the next object until all done
             rts
 
 ;; Set up a room for print
@@ -1488,7 +1514,7 @@ CacheObjects:
 ; input: a=room number
 ; returns: dr_ptr set to room address
 RoomNumToAddress:
-            .assert .sizeof(RoomType) = 9, error, "This subroutine assumes RoomType is 9 bytes long."
+            .assert .sizeof(RoomType) = 9, error, "This subroutine expects RoomType to be 9 bytes long."
             pha                   ;store room number wanted
             sta dr_ptr
             lda #0                ;zero the high byte of the
@@ -1525,7 +1551,7 @@ GetObjectState:
 @Next:      cmp (dr_ptr),y        ;have we found it in the list of states?
             bcc @Done             ;if nearing it then found it and return
             beq @Done             ;if found it then return
-            .assert .sizeof(StateType) = 3, error, "This subroutine assumes StateType is 3 bytes long."
+            .assert .sizeof(StateType) = 3, error, "This subroutine expects StateType to be 3 bytes long."
             iny                   ;goto next state in list of states
             iny
             iny
@@ -1590,13 +1616,16 @@ BallMovement:
             bne @ManCollision     ; branch if collision
             lda CXM0FB            ;m0-pf, m0-bl collision
             and #%01000000        ;get m0-bl collision (man v. left thin wall)
+            beq :+
+            lda object2           ;if Object2 to print is
+            cmp #objoffset_Dot    ; then ignore man colliding w/left thin wall
             bne @ManCollision     ; branch if collision
-            lda CXM1FB            ;m1-pf, m1-bl collision
+:           lda CXM1FB            ;m1-pf, m1-bl collision
             and #%01000000        ;get m1-bl collision (man v. right thin wall)
             beq :+                ; branch if no collision
             lda object2           ;if Object2 to print is
             cmp #objoffset_Dot    ; then ignore man colliding w/right thin wall
-            bne @ManCollision
+            bne @ManCollision     ; branch if collision
 :           lda CXP0FB            ;p0-pf, p0-bl collision
             and #%01000000        ;get p0-bl collision (p0 v. man)
             beq :+                ; branch if no collision
@@ -1808,9 +1837,32 @@ MoveGroundObject:
 
 @DealWithLeft:
             lda DynamicType::xcoord,x
-            cmp #3                            ;is x < 3
+            cpx #ManDynamic                   ;are we dealing with the man?
+            bne @ChkLeft                      ; branch if not
+
+@ChkLeft2:  cmp #3                            ;is x < 3?
+            bcc :+
+            cmp #240                          ;is x >= 240
+            bcs :+
+            bcc @DealWithDown
+
+:           lda DynamicType::room,x           ;the man's room
+            cmp #roomnum_SideCorridor2        ; is right of secret room?
+            bne @GoLeft                       ; branch if not
+            lda DotDynamic+DynamicType::room  ;check the room of the dot
+            cmp #roomnum_BlackMazeBottomLeft  ;is it in the hidden room area?
+            beq @GoLeft                       ; if so, branch
+            lda #roomnum_SecretRoom
+            sta DynamicType::room,x           ;change to secret room
+            lda #158                          ;set the X coordinate
+            sta DynamicType::xcoord,x
+            lda #EasterEggState::tng
+            sta EasterEggCurrState
+            bne @MovementReturn
+
+@ChkLeft:   cmp #3                            ;is x < 3
             bcc @GoLeft                       ;if so, go left
-            cmp #240                          ;is x > 240
+            cmp #240                          ;is x >= 240
             bcs @GoLeft                       ;if so, go left
             bcc @DealWithDown
 
@@ -1825,7 +1877,7 @@ MoveGroundObject:
 
 @DealWithDown:
             lda DynamicType::ycoord,x
-            cmp #13                           ;is y <= 13
+            cmp #13                           ;is y < 13?
             bcs @DealWithRight
             lda #105                          ;set new Y coordinate
             sta DynamicType::ycoord,x
@@ -1835,23 +1887,27 @@ MoveGroundObject:
 @DealWithRight:
             lda DynamicType::xcoord,x
             cpx #ManDynamic                   ;are we dealing with the man?
-            bne @CheckX                       ; branch if not
-            cmp #159                          ;is x >= 159
+            bne @ChkRight                     ; branch if not
+            cmp #159                          ;is x >= 159?
             bcc @MovementReturn               ; branch if not
+
             lda DynamicType::room,x           ;the man's room
-            cmp #roomnum_BelowYellowCastleRightThinWall  ; left of secret room
-            bne @WrapX                        ; branch if not
+            cmp #roomnum_BelowYellowCastleRightThinWall  ;is left of secret room?
+            bne @GoRight                      ; branch if not
             lda DotDynamic+DynamicType::room  ;check the room of the dot
             cmp #roomnum_BlackMazeBottomLeft  ;is it in the hidden room area?
-            beq @WrapX                        ; if so, branch
+            beq @GoRight                      ; if so, branch
             lda #roomnum_SecretRoom
             sta DynamicType::room,x           ;change to secret room
             lda #3                            ;set the X coordinate
             sta DynamicType::xcoord,x
+            lda #EasterEggState::tos
+            sta EasterEggCurrState
             bne @MovementReturn
-@CheckX:    cmp #155                          ;is x >= 155
+
+@ChkRight:  cmp #155                          ;is x >= 155
             bcc @MovementReturn               ; branch if not, no room change
-@WrapX:     lda #3                            ;set new X coordinate
+@GoRight:   lda #3                            ;set new X coordinate
             sta DynamicType::xcoord,x
             ldy #RoomType::room_right
 @GetNewRoom:
@@ -2505,20 +2561,19 @@ JoystickMergeValues:
             ;     no change,  no horizontal, no vertical
             .byte 0,          %11000000,     %00110000
 
-; Object randomization room bounds data for level 3
-Lvl3ObjRoomBounds:
-            .byte ChaliceDynamic,      roomrange_chalice_start,      roomrange_chalice_end
-            .byte RedDragonDynamic,    roomrange_reddragon_start,    roomrange_reddragon_end
-            .byte YellowDragonDynamic, roomrange_yellowdragon_start, roomrange_yellowdragon_end
-            .byte GreenDragonDynamic,  roomrange_greendragon_start,  roomrange_greendragon_end
-            .byte SwordDynamic,        roomrange_sword_start,        roomrange_sword_end
-            .byte BridgeDynamic,       roomrange_bridge_start,       roomrange_bridge_end
-            .byte YellowKeyDynamic,    roomrange_yellowkey_start,    roomrange_yellowkey_end
-            .byte WhiteKeyDynamic,     roomrange_whitekey_start,     roomrange_whitekey_end
-            .byte BlackKeyDynamic,     roomrange_blackkey_start,     roomrange_blackkey_end
-            .byte BlackBatDynamic,     roomrange_bat_start,          roomrange_bat_end
-            .byte MagnetDynamic,       roomrange_magnet_start,       roomrange_magnet_end
-Lvl3ObjRoomBoundsEnd:
+Level3ObjectsToRandomize:
+            .byte RedDragonDynamic
+            .byte YellowDragonDynamic
+            .byte GreenDragonDynamic
+            .byte SwordDynamic
+            .byte BridgeDynamic
+            .byte YellowKeyDynamic
+            .byte BlackBatDynamic
+            .byte MagnetDynamic
+            .byte ChaliceDynamic
+            .byte WhiteKeyDynamic
+            .byte BlackKeyDynamic
+Level3ObjectsToRandomizeEnd:
 
 GameObjectLocations:
             .word Game1ObjectLocations
@@ -2643,9 +2698,10 @@ DotStates:          .byte $ff
                     .word DotGfx
 
 EasterEggDynamic:   .byte roomnum_SecretRoom, 80, 105
-EasterEggCurrState: .byte 0
-EasterEggStates:    .byte $ff
+EasterEggStates:    .byte 0
                     .word EasterEggGfx
+                    .byte $ff
+                    .word EasterEggGfx2
 
 ChaliceCurrState:   .byte 0
 ChaliceStates:      .byte $ff
@@ -2673,23 +2729,19 @@ roomnum_NumberRoom = (* - Rooms) / .sizeof(RoomType)
     .word NumberRoom
     .byte ColorType::purple, ColorType::lightergray
     .byte RoomControlType::pfref
-    .byte roomnum_NumberRoom, roomnum_NumberRoom, roomnum_NumberRoom, roomnum_NumberRoom
+    .byte roomnum_SecretRoom, roomnum_SecretRoom, roomnum_SecretRoom, roomnum_SecretRoom
+
+roomnum_SecretRoom = (* - Rooms) / .sizeof(RoomType)
+    .word BelowYellowCastle
+    .byte ColorType::purple, ColorType::lightergray
+    .byte RoomControlType::pfref
+    .byte roomnum_NumberRoom, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeBottom, roomnum_BelowYellowCastleRightThinWall
 
 roomnum_BelowYellowCastleLeftThinWall = (* - Rooms) / .sizeof(RoomType)
-roomrange_reddragon_start    = roomnum_BelowYellowCastleLeftThinWall
-roomrange_yellowdragon_start = roomnum_BelowYellowCastleLeftThinWall
-roomrange_greendragon_start  = roomnum_BelowYellowCastleLeftThinWall
-roomrange_sword_start        = roomnum_BelowYellowCastleLeftThinWall
-roomrange_bridge_start       = roomnum_BelowYellowCastleLeftThinWall
-roomrange_yellowkey_start    = roomnum_BelowYellowCastleLeftThinWall
-roomrange_whitekey_start     = roomnum_BelowYellowCastleLeftThinWall
-roomrange_blackkey_start     = roomnum_BelowYellowCastleLeftThinWall
-roomrange_bat_start          = roomnum_BelowYellowCastleLeftThinWall
-roomrange_magnet_start       = roomnum_BelowYellowCastleLeftThinWall
     .word BelowYellowCastle
     .byte ColorType::darkgreen, ColorType::lightergray
     .byte RoomControlType::leftthinwall_pfref
-    .byte roomnum_BlueMazeEntry, roomnum_BelowYellowCastle, roomnum_downfrom_BelowYellowCastleLeftThinWall, roomnum_BelowYellowCastleRightThinWall
+    .byte roomnum_BlueMazeEntry, roomnum_BelowYellowCastle, roomnum_downfrom_BelowYellowCastleLeftThinWall, roomnum_SideCorridor1
 
 roomnum_BelowYellowCastle = (* - Rooms) / .sizeof(RoomType)
     .word BelowYellowCastle
@@ -2701,7 +2753,7 @@ roomnum_BelowYellowCastleRightThinWall = (* - Rooms) / .sizeof(RoomType)
     .word LeftOfName
     .byte ColorType::darkyellow, ColorType::lightergray
     .byte RoomControlType::rightthinwall_pfref
-    .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleLeftThinWall, roomnum_downfrom_BelowYellowCastleRightThinWall, roomnum_BelowYellowCastle
+    .byte roomnum_BlueMazeBottom, roomnum_SideCorridor2, roomnum_downfrom_BelowYellowCastleRightThinWall, roomnum_BelowYellowCastle
 
 roomnum_BlueMazeTop = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeTop
@@ -2755,19 +2807,13 @@ roomnum_SideCorridor1 = (* - Rooms) / .sizeof(RoomType)
     .word SideCorridor
     .byte ColorType::lightblue, ColorType::lightergray
     .byte RoomControlType::rightthinwall_pfref
-    .byte roomnum_OtherPurpleRoom, roomnum_SideCorridor2, roomnum_TopEntryRoom2, roomnum_MazeSide
+    .byte roomnum_OtherPurpleRoom, roomnum_BelowYellowCastleLeftThinWall, roomnum_TopEntryRoom2, roomnum_MazeSide
 
 roomnum_SideCorridor2 = (* - Rooms) / .sizeof(RoomType)
     .word SideCorridor
     .byte ColorType::lightgreen, ColorType::lightergray
     .byte RoomControlType::leftthinwall_pfref
-    .byte roomnum_WhiteCastle, roomnum_MazeSide, roomnum_TopEntryRoom1, roomnum_SideCorridor1
-
-roomnum_TopEntryRoom1 = (* - Rooms) / .sizeof(RoomType)
-    .word TopEntryRoom
-    .byte ColorType::turquoise, ColorType::lightergray
-    .byte RoomControlType::pfref
-    .byte roomnum_SideCorridor2, roomnum_BlackCastle, roomnum_WhiteCastle, roomnum_BlackCastle
+    .byte roomnum_WhiteCastle, roomnum_MazeSide, roomnum_TopEntryRoom1, roomnum_BelowYellowCastleRightThinWall
 
 roomnum_WhiteCastle = (* - Rooms) / .sizeof(RoomType)
     .word CastleDef
@@ -2788,14 +2834,12 @@ roomnum_YellowCastle = (* - Rooms) / .sizeof(RoomType)
     .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleRightThinWall, roomnum_BelowYellowCastle, roomnum_BelowYellowCastleLeftThinWall
 
 roomnum_YellowCastleEntry = (* - Rooms) / .sizeof(RoomType)
-roomrange_blackkey_end = roomnum_YellowCastleEntry
     .word NumberRoom
     .byte ColorType::yellow, ColorType::lightergray
     .byte RoomControlType::pfref
     .byte roomnum_YellowCastleEntry, roomnum_YellowCastleEntry, roomnum_YellowCastleEntry, roomnum_YellowCastleEntry
 
 roomnum_BlackMazeTopLeft = (* - Rooms) / .sizeof(RoomType)
-roomrange_chalice_start = roomnum_BlackMazeTopLeft
     .word BlackMazeTopLeft
     .byte ColorType::invisible, ColorType::invisible
     .byte RoomControlType::pfref_pfp
@@ -2814,11 +2858,34 @@ roomnum_BlackMazeBottomLeft = (* - Rooms) / .sizeof(RoomType)
     .byte roomnum_BlackMazeTopLeft, roomnum_BlackMazeEntry, roomnum_BlackMazeTopLeft, roomnum_BlackMazeTopRight
 
 roomnum_BlackMazeEntry = (* - Rooms) / .sizeof(RoomType)
-roomrange_whitekey_end = roomnum_BlackMazeEntry
     .word BlackMazeEntry
     .byte ColorType::invisible, ColorType::invisible
     .byte RoomControlType::pfref_pfp
     .byte roomnum_BlackMazeTopRight, roomnum_BlackMazeTopLeft, roomnum_BlackCastleEntry, roomnum_BlackMazeBottomLeft
+
+roomnum_BlackCastleEntry = (* - Rooms) / .sizeof(RoomType)
+    .word TwoExitRoom
+    .byte ColorType::red, ColorType::lightergray
+    .byte RoomControlType::pfref
+    .byte roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry
+
+roomnum_OtherPurpleRoom = (* - Rooms) / .sizeof(RoomType)
+    .word NumberRoom
+    .byte ColorType::purple, ColorType::lightergray
+    .byte RoomControlType::pfref
+    .byte roomnum_TopEntryRoom2, roomnum_BlueMazeCenter, roomnum_downfrom_OtherPurpleRoom, roomnum_BlueMazeEntry
+
+roomnum_TopEntryRoom1 = (* - Rooms) / .sizeof(RoomType)
+    .word TopEntryRoom
+    .byte ColorType::turquoise, ColorType::lightergray
+    .byte RoomControlType::pfref
+    .byte roomnum_SideCorridor2, roomnum_BlackCastle, roomnum_WhiteCastle, roomnum_BlackCastle
+
+roomnum_TopEntryRoom2 = (* - Rooms) / .sizeof(RoomType)
+    .word TopEntryRoom
+    .byte ColorType::red, ColorType::lightergray
+    .byte RoomControlType::pfref
+    .byte roomnum_upfrom_TopEntryRoom, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlackCastle, roomnum_BelowYellowCastleRightThinWall
 
 roomnum_RedMazeTopLeft = (* - Rooms) / .sizeof(RoomType)
     .word RedMazeTopLeft
@@ -2839,43 +2906,10 @@ roomnum_RedMazeBottomLeft = (* - Rooms) / .sizeof(RoomType)
     .byte roomnum_RedMazeTopLeft, roomnum_WhiteCastleEntry, roomnum_RedMazeTopLeft, roomnum_WhiteCastleEntry
 
 roomnum_WhiteCastleEntry = (* - Rooms) / .sizeof(RoomType)
-roomrange_chalice_end = roomnum_WhiteCastleEntry
     .word WhiteCastleEntry
     .byte ColorType::red, ColorType::lightergray
     .byte RoomControlType::pfref
     .byte roomnum_RedMazeTopRight, roomnum_RedMazeBottomLeft, roomnum_RedMazeTopRight, roomnum_RedMazeBottomLeft
-
-roomnum_BlackCastleEntry = (* - Rooms) / .sizeof(RoomType)
-    .word TwoExitRoom
-    .byte ColorType::red, ColorType::lightergray
-    .byte RoomControlType::pfref
-    .byte roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry, roomnum_uprightdownleftfrom_BlackCastleEntry
-
-roomnum_OtherPurpleRoom = (* - Rooms) / .sizeof(RoomType)
-    .word NumberRoom
-    .byte ColorType::purple, ColorType::lightergray
-    .byte RoomControlType::pfref
-    .byte roomnum_TopEntryRoom2, roomnum_BlueMazeCenter, roomnum_downfrom_OtherPurpleRoom, roomnum_BlueMazeEntry
-
-roomnum_TopEntryRoom2 = (* - Rooms) / .sizeof(RoomType)
-roomrange_reddragon_end    = roomnum_TopEntryRoom2
-roomrange_yellowdragon_end = roomnum_TopEntryRoom2
-roomrange_greendragon_end  = roomnum_TopEntryRoom2
-roomrange_sword_end        = roomnum_TopEntryRoom2
-roomrange_bridge_end       = roomnum_TopEntryRoom2
-roomrange_yellowkey_end    = roomnum_TopEntryRoom2
-roomrange_bat_end          = roomnum_TopEntryRoom2
-roomrange_magnet_end       = roomnum_TopEntryRoom2
-    .word TopEntryRoom
-    .byte ColorType::red, ColorType::lightergray
-    .byte RoomControlType::pfref
-    .byte roomnum_upfrom_TopEntryRoom, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlackCastle, roomnum_BelowYellowCastleRightThinWall
-
-roomnum_SecretRoom = (* - Rooms) / .sizeof(RoomType)
-    .word BelowYellowCastle
-    .byte ColorType::purple, ColorType::lightergray
-    .byte RoomControlType::pfref
-    .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleLeftThinWall, roomnum_BlueMazeBottom, roomnum_BelowYellowCastleRightThinWall
 
 
 RoomDiffs:
