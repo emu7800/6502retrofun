@@ -3091,6 +3091,7 @@ objoffset_Null = (* - Objects)
             sta Bank+1
             jmp StartGame
 
+           .byte $32, $30, $32, $36, $31, $32, $30, $31 ; 20261201
            .byte 0, 1
            .word Reset
            .word Reset
@@ -3116,6 +3117,7 @@ Reset:
             sta Bank+1
             jmp StartGame
 
+Version:    .byte $32, $30, $32, $36, $31, $32, $30, $31 ; 20261201
 Bank:       .byte 0, 1
 NMI:        .word Reset
 RESET:      .word Reset
