@@ -1305,7 +1305,7 @@ RandomizeLevel3:
             ;Exclude WhiteKey from RedMaze*, WhiteCastleEntry rooms
 :           cpx #WhiteKeyDynamic
             bne :+
-            cpx #roomnum_RedMazeTopLeft
+            cmp #roomnum_RedMazeTopLeft
             bcs @GetRandomRoom
             ;Limit to Black*, RedMaze*, WhiteCastleEntry, OtherPurpleRoom, TopEntryRoom* rooms
 :           cpx #ChaliceDynamic
