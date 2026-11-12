@@ -1275,7 +1275,7 @@ SaveConSwitchesAndExit:
 
 ; put objects in random rooms for level 3
 RandomizeLevel3:
-            ldy #3*((Level3ObjectsToRandomizeEnd-Level3ObjectsToRandomize)/3 - 1)
+            ldy #Level3ObjectsToRandomizeEnd-Level3ObjectsToRandomize-1
 @GetRandomRoom:
             ldx Level3ObjectsToRandomize,y  ;get object to randomize
 
