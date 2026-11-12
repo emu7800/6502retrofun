@@ -2,8 +2,10 @@
 
 Annotated assembly source code for Adventure for the Atari 2600, created by Warren Robinett at Atari in 1979.
 
+<p float="left">
 <img src="https://atariage.com/2600/boxes/b_Adventure_Color_front.jpg" width="400">
 <img src="https://atariage.com/2600/boxes/b_Adventure_Color_back.jpg" width="400">
+</p>
 
 ## Contents
 
@@ -88,12 +90,16 @@ The three `*.BIN` files and related artifacts will be created.
 
 ## Original Game Program Instructions
 
+<p float="left">
 <img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_1.jpg" width="400">
-<img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_2.jpg" width="400"><br/>
+<img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_2.jpg" width="400">
+</p><p float="left">
 <img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_3.jpg" width="400">
-<img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_4.jpg" width="400"><br/>
+<img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_4.jpg" width="400">
+</p><p float="left">
 <img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_5.jpg" width="400">
-<img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_6.jpg" width="400"><br/>
+<img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_6.jpg" width="400">
+</p><p float="left">
 <img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_7.jpg" width="400">
-<img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_8.jpg" width="400"><br/>
-
+<img src="https://atariage.com/2600/manuals/Adventure_Black/m_Adventure_Black_8.jpg" width="400">
+</p>
