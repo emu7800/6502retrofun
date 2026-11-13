@@ -193,8 +193,8 @@ BridgeDynamic:                  .byte 0, 0, 0
 YellowKeyDynamic:               .byte 0, 0, 0
 WhiteKeyDynamic:                .byte 0, 0, 0
 BlackKeyDynamic:                .byte 0, 0, 0
-PortCurrStatesBase:             .byte 0, 0, 0
 BatDynamic:                     .byte 0, 0, 0, 0, 0, 0, 0
+PortCurrStatesBase:             .byte 0, 0, 0
 
 stack_space:                    ; $e7-$ff (12 frames)
 
@@ -1617,11 +1617,8 @@ BallMovement:
             bne @ManCollision     ; branch if collision
             lda CXM0FB            ;m0-pf, m0-bl collision
             and #%01000000        ;get m0-bl collision (man v. left thin wall)
-            beq :+
-            lda object2           ;if Object2 to print is
-            cmp #objoffset_Dot    ; then ignore man colliding w/left thin wall
             bne @ManCollision     ; branch if collision
-:           lda CXM1FB            ;m1-pf, m1-bl collision
+            lda CXM1FB            ;m1-pf, m1-bl collision
             and #%01000000        ;get m1-bl collision (man v. right thin wall)
             beq :+                ; branch if no collision
             lda object2           ;if Object2 to print is
@@ -1847,8 +1844,8 @@ MoveGroundObject:
             bcs :+
             bcc @DealWithDown
 
-:           lda DynamicType::room,x           ;the man's room
-            cmp #roomnum_SideCorridor2        ; is right of secret room?
+:           lda DynamicType::room,x           ;the man's room is right of secret room?
+            cmp #roomnum_BelowYellowCastleLeftThinWall
             bne @GoLeft                       ; branch if not
             lda DotDynamic+DynamicType::room  ;check the room of the dot
             cmp #roomnum_BlackMazeBottomLeft  ;is it in the hidden room area?
@@ -2596,11 +2593,10 @@ Game1ObjectLocations:
             .byte roomnum_YellowCastle,                  32,  64                  ;yellow key
             .byte roomnum_TopEntryRoom1,                 32,  64                  ;white key
             .byte roomnum_TopEntryRoom2,                 32,  64                  ;black key
+            .byte roomnum_WhiteCastleEntry,              32,  32,   0,   0,  $78  ;bat
             .byte PortCullisState::closed                                         ;portcullis state - Ylw
             .byte PortCullisState::closed                                         ;portcullis state - Wht
             .byte PortCullisState::closed                                         ;portcullis state - Blk
-            .byte roomnum_WhiteCastleEntry,              32,  32,   0,   0,  $78  ;bat
-
 Game1ObjectLocationsEnd:
 
 Game2ObjectLocations:
@@ -2616,11 +2612,10 @@ Game2ObjectLocations:
             .byte roomnum_MazeMiddle,                    32,  64                  ;yellow key
             .byte roomnum_BlueMazeBottom,                32,  64                  ;white key
             .byte roomnum_RedMazeBottomLeft,             32,  64                  ;black key
+            .byte roomnum_BelowYellowCastle,             32,  32,  $90,  0,  $78  ;bat
             .byte PortCullisState::closed                                         ;portcullis state - Ylw
             .byte PortCullisState::closed                                         ;portcullis state - Wht
             .byte PortCullisState::closed                                         ;portcullis state - Blk
-            .byte roomnum_BelowYellowCastle,             32,  32,  $90,  0,  $78  ;bat
-
 Game2ObjectLocationsEnd:
 
 PortCullisStates:   .byte 4                 ; open
@@ -2740,7 +2735,7 @@ roomnum_BelowYellowCastleLeftThinWall = (* - Rooms) / .sizeof(RoomType)
     .word BelowYellowCastle
     .byte ColorType::darkgreen, ColorType::lightergray
     .byte RoomControlType::leftthinwall_pfref
-    .byte roomnum_BlueMazeEntry, roomnum_BelowYellowCastle, roomnum_downfrom_BelowYellowCastleLeftThinWall, roomnum_SideCorridor1
+    .byte roomnum_BlueMazeEntry, roomnum_BelowYellowCastle, roomnum_downfrom_BelowYellowCastleLeftThinWall, roomnum_BelowYellowCastleRightThinWall
 
 roomnum_BelowYellowCastle = (* - Rooms) / .sizeof(RoomType)
     .word BelowYellowCastle
@@ -2752,7 +2747,7 @@ roomnum_BelowYellowCastleRightThinWall = (* - Rooms) / .sizeof(RoomType)
     .word LeftOfName
     .byte ColorType::darkyellow, ColorType::lightergray
     .byte RoomControlType::rightthinwall_pfref
-    .byte roomnum_BlueMazeBottom, roomnum_SideCorridor2, roomnum_downfrom_BelowYellowCastleRightThinWall, roomnum_BelowYellowCastle
+    .byte roomnum_BlueMazeBottom, roomnum_BelowYellowCastleLeftThinWall, roomnum_downfrom_BelowYellowCastleRightThinWall, roomnum_BelowYellowCastle
 
 roomnum_BlueMazeTop = (* - Rooms) / .sizeof(RoomType)
     .word BlueMazeTop
@@ -2806,13 +2801,13 @@ roomnum_SideCorridor1 = (* - Rooms) / .sizeof(RoomType)
     .word SideCorridor
     .byte ColorType::lightblue, ColorType::lightergray
     .byte RoomControlType::rightthinwall_pfref
-    .byte roomnum_OtherPurpleRoom, roomnum_BelowYellowCastleLeftThinWall, roomnum_TopEntryRoom2, roomnum_MazeSide
+    .byte roomnum_OtherPurpleRoom, roomnum_SideCorridor2, roomnum_TopEntryRoom2, roomnum_MazeSide
 
 roomnum_SideCorridor2 = (* - Rooms) / .sizeof(RoomType)
     .word SideCorridor
     .byte ColorType::lightgreen, ColorType::lightergray
     .byte RoomControlType::leftthinwall_pfref
-    .byte roomnum_WhiteCastle, roomnum_MazeSide, roomnum_TopEntryRoom1, roomnum_BelowYellowCastleRightThinWall
+    .byte roomnum_WhiteCastle, roomnum_MazeSide, roomnum_TopEntryRoom1, roomnum_SideCorridor1
 
 roomnum_WhiteCastle = (* - Rooms) / .sizeof(RoomType)
     .word CastleDef
