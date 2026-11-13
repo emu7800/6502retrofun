@@ -2438,60 +2438,60 @@ MakeSound:  lda sound_duration_counter  ;check noise count
 
 GameOverNoise:
             lda sound_duration_counter
-            sta COLUPF            ;color-luminance playfield
-            sta AUDC0             ;audio-control 0
+            sta COLUPF
+            sta AUDC0
             lsr a
-            sta AUDV0             ;audio-volume 0
+            sta AUDV0
             lsr a
             lsr a
-            sta AUDF0             ;audio-frequency 0
+            sta AUDF0
             rts
 
 RoarNoise:  lda sound_duration_counter
             lsr a
-            lda #3                ;if it was even then
-            bcs :+                ; branch
-            lda #8                ;get a different audio control value
-:           sta AUDC0             ;set audio control 0
-            lda sound_duration_counter  ;set the volume to the noise count
+            lda #3                ;5-bit polynomial feeding 4-bit polynomial
+            bcs :+                ;branch if it was odd
+            lda #8                ;9-bit polynomial
+:           sta AUDC0
+            lda sound_duration_counter
             sta AUDV0
-            lsr a                 ;divide by four
+            lsr a
             lsr a
             clc
-            adc #28               ;set the frequency
+            adc #28
             sta AUDF0
             rts
 
 EatenNoise:
-            lda #6
-            sta AUDC0             ;audio-control 0
+            lda #6                ;divide by 31, pure tone
+            sta AUDC0
             lda sound_duration_counter
             eor #%00001111
-            sta AUDF0             ;audio-frequency 0
+            sta AUDF0
             lda sound_duration_counter
             lsr a
             clc
             adc #8
-            sta AUDV0             ;audio-volume 0
+            sta AUDV0
             rts
 
 DragDieNoise:
-            lda #4                ;set the audio control
+            lda #4                ;divide by 2, pure tone
             sta AUDC0
-            lda sound_duration_counter  ;put the note count in
-            sta AUDV0             ; the volume
+            lda sound_duration_counter
+            sta AUDV0
             eor #%00011111
-            sta AUDF0             ;flip the count as store
-            rts                   ; as the frequency
+            sta AUDF0
+            rts
 
 DropObjectNoise:
             lda sound_duration_counter
-            eor #3                ;reverse it as noise does up
-:           sta AUDF0             ;store in frequency for channel 0
+            eor #3                ;reverse it as noise goes up
+:           sta AUDF0
             lda #5
-            sta AUDV0             ;set volume on channel 0
-            lda #6
-            sta AUDC0             ;set a noise on channel 0
+            sta AUDV0
+            lda #6                ;divide by 31, pure tone
+            sta AUDC0
             rts
 
 GetObjectNoise:
