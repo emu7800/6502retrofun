@@ -1,6 +1,7 @@
 ;
-; Adventure 8K for the Atari 2600 - Mike Murphy (mike@emu7800.net)
-; A homebrew hack of the 1979 classic Adventure by Warren Robinett.
+; Adventure 8K for the Atari 2600
+; An homebrew hack of the original Adventure by Warren Robinett.
+; Mike Murphy (mike@emu7800.net)
 ;
 
 .setcpu "6502"
@@ -192,8 +193,8 @@ BridgeDynamic:                  .byte 0, 0, 0
 YellowKeyDynamic:               .byte 0, 0, 0
 WhiteKeyDynamic:                .byte 0, 0, 0
 BlackKeyDynamic:                .byte 0, 0, 0
-PortCurrStateBase:              .byte 0, 0, 0
-BlackBatDynamic:                .byte 0, 0, 0, 0, 0, 0, 0
+PortCurrStatesBase:             .byte 0, 0, 0
+BatDynamic:                     .byte 0, 0, 0, 0, 0, 0, 0
 
 stack_space:                    ; $e7-$ff (12 frames)
 
@@ -1801,7 +1802,7 @@ MoveGroundObject:
             ldy #2                            ;set to do the three
 @HandlePortal:
             sty portcullis_number
-            lda PortCurrStateBase,y           ;get the port state
+            lda PortCurrStatesBase,y
             cmp #PortCullisState::closed
             beq @NextPortal                   ; next port if closed
 ; deal with object moving out of a castle
@@ -1819,7 +1820,7 @@ MoveGroundObject:
             lda #44
             sta DynamicType::ycoord,x
             lda #PortCullisState::open
-            sta PortCurrStateBase,y           ;set port state to open
+            sta PortCurrStatesBase,y
             rts
 @NextPortal:
             ldy portcullis_number
@@ -1993,7 +1994,7 @@ FindObjHit: lda CXPPMM              ;p0-p1, m0-m1 collision
 :           lda object1             ;therefore select the other
             rts
 
-; Move object (Dragon or BlackBat)
+; Move object (Dragon or Bat)
 ; input:
 ;    linked_objtable_ptr
 ;    MoveGameObjectArg_Difficulty
@@ -2232,22 +2233,22 @@ MoveDragon: stx curr_dragon_objoffset
 @DoneWithDragon:
             rts
 
-;; Move the black bat "Knubberrub"
-MoveBat:    inc BlackBatDynamic+DynamicType::state ;put bat in the next state
-            lda BlackBatDynamic+DynamicType::state
+;; Move the bat "Knubberrub"
+MoveBat:    inc BatDynamic+DynamicType::state ;put bat in the next state
+            lda BatDynamic+DynamicType::state
             cmp #8                       ;has it reached the maximum?
             bne :+
             lda #0                       ; reset the bat state if so
-            sta BlackBatDynamic+DynamicType::state
-:           lda BlackBatDynamic+DynamicType::fedup
+            sta BatDynamic+DynamicType::state
+:           lda BatDynamic+DynamicType::fedup
             beq @BatFedup                ;if bat fed-up then branch
-            inc BlackBatDynamic+DynamicType::fedup
-            lda z:BlackBatDynamic+DynamicType::move
-            ldx #BlackBatDynamic
+            inc BatDynamic+DynamicType::fedup
+            lda z:BatDynamic+DynamicType::move
+            ldx #BatDynamic
             ldy #3                       ;get the bat's delta
             jsr MoveGroundObject         ;move the bat
             jmp @MoveCarriedObject       ;update the bat's object
-@BatFedup:  lda #BlackBatDynamic
+@BatFedup:  lda #BatDynamic
             sta MoveGameObjectArg_ObjNumber
             lda #3
             sta objdelta
@@ -2255,7 +2256,7 @@ MoveBat:    inc BlackBatDynamic+DynamicType::state ;put bat in the next state
             sta linked_objtable_ptr
             lda #>BatLinkedObjectTable
             sta linked_objtable_ptr+1
-            lda BlackBatDynamic+DynamicType::carriedobject
+            lda BatDynamic+DynamicType::carriedobject
             sta MoveGameObjectArg_Difficulty
             jsr MoveGameObject
             ldy linked_objtable_index
@@ -2265,42 +2266,42 @@ MoveBat:    inc BlackBatDynamic+DynamicType::state ;put bat in the next state
             lda (linked_objtable_ptr),y  ;get the object wanted
             tax
             lda z:DynamicType::room,x
-            cmp BlackBatDynamic+DynamicType::room  ;is it the same as the bat's?
+            cmp BatDynamic+DynamicType::room  ;is it the same as the bat's?
             bne @MoveCarriedObject       ;if not forget it
 @SeeIfPickupPossible:
             lda z:DynamicType::xcoord,x
             sec
-            sbc z:BlackBatDynamic+DynamicType::xcoord  ;find the difference with the bat's X coordinate
+            sbc z:BatDynamic+DynamicType::xcoord  ;find the difference with the bat's X coordinate
             clc
             adc #4                       ;adjust so bat in middle of object
             and #%11111000               ;is bat within seven pixels?
             bne @MoveCarriedObject       ;if not, no pickup possible
             lda z:DynamicType::ycoord,x
             sec
-            sbc z:BlackBatDynamic+DynamicType::ycoord  ;find the difference with the bat's Y coordinate
+            sbc z:BatDynamic+DynamicType::ycoord  ;find the difference with the bat's Y coordinate
             clc
             adc #4                       ;adjust so bat in middle of object
             and #%11111000               ;is the bat within seven pixels?
             bne @MoveCarriedObject       ;if not, no pickup possible
 @PickupObject:
-            stx BlackBatDynamic+DynamicType::carriedobject  ;store wanted object as being carried
-            lda #16                                         ;reset the bat fed-up time
-            sta BlackBatDynamic+DynamicType::fedup
+            stx BatDynamic+DynamicType::carriedobject  ;store wanted object as being carried
+            lda #16                                    ;reset the bat fed-up time
+            sta BatDynamic+DynamicType::fedup
 @MoveCarriedObject:
-            ldx BlackBatDynamic+DynamicType::carriedobject  ;get object being carried by bat
-            lda BlackBatDynamic+DynamicType::room
+            ldx BatDynamic+DynamicType::carriedobject  ;get object being carried by bat
+            lda BatDynamic+DynamicType::room
             sta z:DynamicType::room,x
-            lda z:BlackBatDynamic+DynamicType::xcoord
+            lda z:BatDynamic+DynamicType::xcoord
             clc
-            adc #8                       ;adjust to the right +8x
+            adc #8                                     ;adjust to the right +8x
             sta z:DynamicType::xcoord,x
-            lda z:BlackBatDynamic+DynamicType::ycoord
+            lda z:BatDynamic+DynamicType::ycoord
             sta z:DynamicType::ycoord,x
 @ClearCarriedObjectIfNeeded:
-            lda BlackBatDynamic+DynamicType::carriedobject  ;get object being carried by bat
+            lda BatDynamic+DynamicType::carriedobject  ;get object being carried by bat
             ldy object_carried
-            cmp Objects+ObjectType::dynamic_ptr,y           ;are they the same?
-            bne :+                                          ; if not branch to exit
+            cmp Objects+ObjectType::dynamic_ptr,y      ;are they the same?
+            bne :+                                     ; if not branch to exit
             lda #objoffset_Null
             sta object_carried
 :           rts
@@ -2314,17 +2315,17 @@ Portals:    ldy #2                      ;for each portcullis
             bne :+                      ;if not then branch
             tya                         ;get the portcullis number
             tax
-            inc PortCurrStateBase,x     ;change its state to open it
+            inc PortCurrStatesBase,x    ;change its state to open it
 :           tya                         ;get the portcullis number
             tax
-            lda PortCurrStateBase,x     ;get the state
+            lda PortCurrStatesBase,x
             cmp #PortCullisState::closed
             beq @IncPortCullisState     ;yes - then branch
             lda PortOffsets,y           ;get portcullis number
             jsr PBCollision             ;check player-ball collision
             beq :+                      ;if not then branch
             lda #PortCullisState::open
-            sta PortCurrStateBase,x
+            sta PortCurrStatesBase,x
             ldx #ManDynamic
             jmp @PutManInCastle
 :           lda obj_collided_with       ;get the object that hit the portcullis
@@ -2345,17 +2346,17 @@ Portals:    ldy #2                      ;for each portcullis
 @IncPortCullisState:
             tya                         ;get the portcullis number
             tax
-            lda PortCurrStateBase,x
+            lda PortCurrStatesBase,x
             cmp #PortCullisState::open
             beq :+                      ; branch if open
             cmp #PortCullisState::closed
             beq :+                      ; branch if closed
-            inc PortCurrStateBase,x
-            lda PortCurrStateBase,x
+            inc PortCurrStatesBase,x
+            lda PortCurrStatesBase,x
             cmp #PortCullisState::wraparound_max
             bne :+                      ; branch if not reached wraparound max
             lda #PortCullisState::open  ;wrap around
-            sta PortCurrStateBase,x
+            sta PortCurrStatesBase,x
 :           dey                         ;go to the next portcullis
             bmi @PortalsDone            ;branch if finished
             jmp @DoNext                 ;do next portcullis
@@ -2531,17 +2532,17 @@ GreenDragonLinkedObjectTable:
             .byte 0
 
 BatLinkedObjectTable:
-            .byte  BlackBatDynamic,    ChaliceDynamic
-            .byte  BlackBatDynamic,    SwordDynamic
-            .byte  BlackBatDynamic,    BridgeDynamic
-            .byte  BlackBatDynamic,    YellowKeyDynamic
-            .byte  BlackBatDynamic,    WhiteKeyDynamic
-            .byte  BlackBatDynamic,    BlackKeyDynamic
-            .byte  BlackBatDynamic,    RedDragonDynamic
-            .byte  BlackBatDynamic,    YellowDragonDynamic
-            .byte  BlackBatDynamic,    GreenDragonDynamic
-            .byte  BlackBatDynamic,    MagnetDynamic
-            .byte  0
+            .byte BatDynamic,          ChaliceDynamic
+            .byte BatDynamic,          SwordDynamic
+            .byte BatDynamic,          BridgeDynamic
+            .byte BatDynamic,          YellowKeyDynamic
+            .byte BatDynamic,          WhiteKeyDynamic
+            .byte BatDynamic,          BlackKeyDynamic
+            .byte BatDynamic,          RedDragonDynamic
+            .byte BatDynamic,          YellowDragonDynamic
+            .byte BatDynamic,          GreenDragonDynamic
+            .byte BatDynamic,          MagnetDynamic
+            .byte 0
 
 MagnetLinkedObjectTable:
             .byte YellowKeyDynamic,    MagnetDynamic
@@ -2568,7 +2569,7 @@ Level3ObjectsToRandomize:
             .byte SwordDynamic
             .byte BridgeDynamic
             .byte YellowKeyDynamic
-            .byte BlackBatDynamic
+            .byte BatDynamic
             .byte MagnetDynamic
             .byte ChaliceDynamic
             .byte WhiteKeyDynamic
@@ -2582,13 +2583,12 @@ GameObjectLocations:
 
 .assert (Game1ObjectLocationsEnd - Game1ObjectLocations) = (Game2ObjectLocationsEnd - Game2ObjectLocations), error, "Game object locations sizes not equal"
 
-; object locations (room and coordinates) for game 1
 Game1ObjectLocations:
-;                 Location                                X    Y    Mvt   State   Object
+; DynamicType     Location                                X    Y    Mvt  State    Object
             .byte roomnum_BlackMazeBottomLeft,           81,  18                  ;dot
-            .byte roomnum_TopEntryRoom1,                 80,  32,    0,   0       ;red dragon
-            .byte roomnum_BelowYellowCastleLeftThinWall, 80,  32,    0,   0       ;yellow dragon
-            .byte roomnum_TopEntryRoom2,                 80,  32,    0,   0       ;green dragon
+            .byte roomnum_TopEntryRoom1,                 80,  32,   0,   0        ;red dragon
+            .byte roomnum_BelowYellowCastleLeftThinWall, 80,  32,   0,   0        ;yellow dragon
+            .byte roomnum_TopEntryRoom2,                 80,  32,   0,   0        ;green dragon
             .byte roomnum_BlackCastleEntry,             128,  32                  ;magnet
             .byte roomnum_YellowCastleEntry,             32,  32                  ;sword
             .byte roomnum_OtherPurpleRoom,               48,  32                  ;chalice
@@ -2596,20 +2596,19 @@ Game1ObjectLocations:
             .byte roomnum_YellowCastle,                  32,  64                  ;yellow key
             .byte roomnum_TopEntryRoom1,                 32,  64                  ;white key
             .byte roomnum_TopEntryRoom2,                 32,  64                  ;black key
-            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
-            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
-            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
-            .byte roomnum_WhiteCastleEntry,              32,  32,    0,   0       ;bat
-            .byte $78                                                             ;bat (carrying, fed-up)
+            .byte PortCullisState::closed                                         ;portcullis state - Ylw
+            .byte PortCullisState::closed                                         ;portcullis state - Wht
+            .byte PortCullisState::closed                                         ;portcullis state - Blk
+            .byte roomnum_WhiteCastleEntry,              32,  32,   0,   0,  $78  ;bat
+
 Game1ObjectLocationsEnd:
 
-; object locations (room and coordinates) for game 2
 Game2ObjectLocations:
-;                 Location                                X    Y   Mvt    State   Object
+; DynamicType     Location                                X    Y    Mvt  State    Object
             .byte roomnum_BlackMazeBottomLeft,           81,  18                  ;dot
-            .byte roomnum_BlackMazeTopRight,             80,  32,  $a0,   0       ;red dragon
-            .byte roomnum_RedMazeBottomLeft,             80,  32,  $a0,   0       ;yellow dragon
-            .byte roomnum_BlueMazeTop,                   80,  32,  $a0,   0       ;green dragon
+            .byte roomnum_BlackMazeTopRight,             80,  32,  $a0,  0        ;red dragon
+            .byte roomnum_RedMazeBottomLeft,             80,  32,  $a0,  0        ;yellow dragon
+            .byte roomnum_BlueMazeTop,                   80,  32,  $a0,  0        ;green dragon
             .byte roomnum_TopEntryRoom1,                128,  32                  ;magnet
             .byte roomnum_YellowCastle,                  32,  32                  ;sword
             .byte roomnum_BlackMazeTopRight,             48,  32                  ;chalice
@@ -2617,11 +2616,11 @@ Game2ObjectLocations:
             .byte roomnum_MazeMiddle,                    32,  64                  ;yellow key
             .byte roomnum_BlueMazeBottom,                32,  64                  ;white key
             .byte roomnum_RedMazeBottomLeft,             32,  64                  ;black key
-            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
-            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
-            .byte roomnum_OtherPurpleRoom                                         ;portcullis state
-            .byte roomnum_BelowYellowCastle,             32,  32,  $90,   0       ;bat
-            .byte $78                                                             ;bat (carrying, fed-up)
+            .byte PortCullisState::closed                                         ;portcullis state - Ylw
+            .byte PortCullisState::closed                                         ;portcullis state - Wht
+            .byte PortCullisState::closed                                         ;portcullis state - Blk
+            .byte roomnum_BelowYellowCastle,             32,  32,  $90,  0,  $78  ;bat
+
 Game2ObjectLocationsEnd:
 
 PortCullisStates:   .byte 4                 ; open
@@ -2945,21 +2944,21 @@ objoffset_InvisibleSurround = (* - Objects)
 
 objoffset_PortCullisYlw = (* - Objects)
     .word PortDynamicYlw
-    .word PortCurrStateBase+0
+    .word PortCurrStatesBase+0
     .word PortCullisStates
     .byte ColorType::black, ColorType::black
     .byte 0
 
 objoffset_PortCullisWht = (* - Objects)
     .word PortDynamicWht
-    .word PortCurrStateBase+1
+    .word PortCurrStatesBase+1
     .word PortCullisStates
     .byte ColorType::black, ColorType::black
     .byte 0
 
 objoffset_PortCullisBlk = (* - Objects)
     .word PortDynamicBlk
-    .word PortCurrStateBase+2
+    .word PortCurrStatesBase+2
     .word PortCullisStates
     .byte ColorType::black, ColorType::black
     .byte 0
@@ -3035,9 +3034,9 @@ objoffset_BlackKey = (* - Objects)
     .byte ColorType::black, ColorType::black
     .byte 0
 
-objoffset_BlackBatKnubberrub = (* - Objects)
-    .word BlackBatDynamic
-    .word BlackBatDynamic+DynamicType::state
+objoffset_Bat = (* - Objects)
+    .word BatDynamic
+    .word BatDynamic+DynamicType::state
     .word BatStates
     .byte ColorType::black, ColorType::black
     .byte 0
