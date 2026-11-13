@@ -2559,20 +2559,6 @@ JoystickMergeValues:
             ;     no change,  no horizontal, no vertical
             .byte 0,          %11000000,     %00110000
 
-Level3ObjectsToRandomize:
-            .byte RedDragonDynamic
-            .byte YellowDragonDynamic
-            .byte GreenDragonDynamic
-            .byte SwordDynamic
-            .byte BridgeDynamic
-            .byte YellowKeyDynamic
-            .byte BatDynamic
-            .byte MagnetDynamic
-            .byte ChaliceDynamic
-            .byte WhiteKeyDynamic
-            .byte BlackKeyDynamic
-Level3ObjectsToRandomizeEnd:
-
 GameObjectLocations:
             .word Game1ObjectLocations
             .word Game2ObjectLocations
@@ -2617,6 +2603,20 @@ Game2ObjectLocations:
             .byte PortCullisState::closed                                         ;portcullis state - Wht
             .byte PortCullisState::closed                                         ;portcullis state - Blk
 Game2ObjectLocationsEnd:
+
+Level3ObjectsToRandomize:
+            .byte RedDragonDynamic
+            .byte YellowDragonDynamic
+            .byte GreenDragonDynamic
+            .byte MagnetDynamic
+            .byte SwordDynamic
+            .byte ChaliceDynamic
+            .byte BridgeDynamic
+            .byte YellowKeyDynamic
+            .byte WhiteKeyDynamic
+            .byte BlackKeyDynamic
+            .byte BatDynamic
+Level3ObjectsToRandomizeEnd:
 
 PortCullisStates:   .byte 4                 ; open
                     .word PortGfx+12
