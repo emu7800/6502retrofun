@@ -13,7 +13,7 @@ Three binaries are built:
 
 - `ADVNTURE.BIN` - An exact match of the original cartridge ROM, built from `ADVNTURE.s`
 - `ADVeNTURE.BIN` - Minor updates to the original cartridge, denoted by FIXME conditional compilation directives in `ADVNTURE.s`
-- `ADVeNTURE8K.BIN` - Enhanced version (`20261201`) using an 8KB bankswitched cartridge, built from `ADVeNTURE8K.s` (available on [EMU7800](http://emu7800.net/) as Adventure 8K)
+- `ADVeNTURE8K.BIN` - Enhanced version (`20261201`) using an 8KB bankswitched cartridge, built from `ADVeNTURE8K.s` (available on [EMU7800](http://emu7800.net/) as Adventure 8K) *implementing a few minor updates we were all wanting but would not fit within the original 4KB ROM*
 
 Also, an ASCII-art `map.txt` file is included in the folder for reference.
 
@@ -37,7 +37,7 @@ sudo apt install gcc
 
 Obtain the [cc65](https://cc65.github.io/) tool chain source:
 ```
-cd /srv/git/cc65
+cd /srv/git
 git clone https://github.com/cc65/cc65
 ```
 
