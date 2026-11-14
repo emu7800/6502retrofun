@@ -842,7 +842,7 @@ SetupRoomObjects:
             sta dr_ptr+1
 
 @CopyToGameObjectsWorkingArea:
-            ldy #(Game1ObjectLocationsEnd - Game1ObjectLocations)
+            ldy #Game1ObjectLocationsEnd - Game1ObjectLocations - 1
 :           lda (dr_ptr),y
             sta GameObjectsWorkingArea,y
             dey
@@ -923,50 +923,42 @@ GameObjectLocations:
 .assert (Game1ObjectLocationsEnd - Game1ObjectLocations) = (Game2ObjectLocationsEnd - Game2ObjectLocations), error, "Game object locations sizes not equal"
 
 Game1ObjectLocations:
-; DynamicType     Location                                X    Y    Mvt  State    Object
-            .byte roomnum_BlackMazeBottomLeft,           81,  18                  ;dot
-            .byte roomnum_TopEntryRoom1,                 80,  32,   0,   0        ;red dragon
-            .byte roomnum_BelowYellowCastleLeftThinWall, 80,  32,   0,   0        ;yellow dragon
-            .byte roomnum_TopEntryRoom2,                 80,  32,   0,   0        ;green dragon
-            .byte roomnum_BlackCastleEntry,             128,  32                  ;magnet
-            .byte roomnum_YellowCastleEntry,             32,  32                  ;sword
-            .byte roomnum_OtherPurpleRoom,               48,  32                  ;chalice
-            .byte roomnum_BlueMazeTop,                   41,  55                  ;bridge
-            .byte roomnum_YellowCastle,                  32,  64                  ;yellow key
-            .byte roomnum_TopEntryRoom1,                 32,  64                  ;white key
-            .byte roomnum_TopEntryRoom2,                 32,  64                  ;black key
-            .byte PortCullisState::closed                                         ;portcullis state - Ylw
-            .byte PortCullisState::closed                                         ;portcullis state - Wht
-            .byte PortCullisState::closed                                         ;portcullis state - Blk
-            .byte roomnum_WhiteCastleEntry,              32,  32,   0,   0,  $78  ;bat
+; DynamicType     Location                                X    Y    Mvt  State      Object
+            .byte roomnum_BlackMazeBottomLeft,           81,  18                    ;dot
+            .byte roomnum_TopEntryRoom1,                 80,  32,   0,   0          ;red dragon
+            .byte roomnum_BelowYellowCastleLeftThinWall, 80,  32,   0,   0          ;yellow dragon
+            .byte roomnum_TopEntryRoom2,                 80,  32,   0,   0          ;green dragon
+            .byte roomnum_BlackCastleEntry,             128,  32                    ;magnet
+            .byte roomnum_YellowCastleEntry,             32,  32                    ;sword
+            .byte roomnum_OtherPurpleRoom,               48,  32                    ;chalice
+            .byte roomnum_BlueMazeTop,                   41,  55                    ;bridge
+            .byte roomnum_YellowCastle,                  32,  64                    ;yellow key
+            .byte roomnum_TopEntryRoom1,                 32,  64                    ;white key
+            .byte roomnum_TopEntryRoom2,                 32,  64                    ;black key
+            .byte PortCullisState::closed                                           ;portcullis state - Ylw
+            .byte PortCullisState::closed                                           ;portcullis state - Wht
+            .byte PortCullisState::closed                                           ;portcullis state - Blk
+            .byte roomnum_WhiteCastleEntry,              32,  32,   0,   0, $78, 0  ;bat
 Game1ObjectLocationsEnd:
-.ifdef FIXME
-.else
-            .byte 0
-.endif
 
 Game2ObjectLocations:
-; DynamicType     Location                                X    Y   Mvt   State    Object
-            .byte roomnum_BlackMazeBottomLeft,           81,  18                  ;dot
-            .byte roomnum_BlackMazeTopRight,             80,  32,  $a0,  0        ;red dragon
-            .byte roomnum_RedMazeBottomLeft,             80,  32,  $a0,  0        ;yellow dragon
-            .byte roomnum_BlueMazeTop,                   80,  32,  $a0,  0        ;green dragon
-            .byte roomnum_TopEntryRoom1,                128,  32                  ;magnet
-            .byte roomnum_YellowCastle,                  32,  32                  ;sword
-            .byte roomnum_BlackMazeTopRight,             48,  32                  ;chalice
-            .byte roomnum_MazeSide,                      64,  64                  ;bridge
-            .byte roomnum_MazeMiddle,                    32,  64                  ;yellow key
-            .byte roomnum_BlueMazeBottom,                32,  64                  ;white key
-            .byte roomnum_RedMazeBottomLeft,             32,  64                  ;black key
-            .byte PortCullisState::closed                                         ;portcullis state - Ylw
-            .byte PortCullisState::closed                                         ;portcullis state - Wht
-            .byte PortCullisState::closed                                         ;portcullis state - Blk
-            .byte roomnum_BelowYellowCastle,             32,  32,  $90,  0,  $78  ;bat
+; DynamicType     Location                                X    Y   Mvt   State      Object
+            .byte roomnum_BlackMazeBottomLeft,           81,  18                    ;dot
+            .byte roomnum_BlackMazeTopRight,             80,  32,  $a0,  0          ;red dragon
+            .byte roomnum_RedMazeBottomLeft,             80,  32,  $a0,  0          ;yellow dragon
+            .byte roomnum_BlueMazeTop,                   80,  32,  $a0,  0          ;green dragon
+            .byte roomnum_TopEntryRoom1,                128,  32                    ;magnet
+            .byte roomnum_YellowCastle,                  32,  32                    ;sword
+            .byte roomnum_BlackMazeTopRight,             48,  32                    ;chalice
+            .byte roomnum_MazeSide,                      64,  64                    ;bridge
+            .byte roomnum_MazeMiddle,                    32,  64                    ;yellow key
+            .byte roomnum_BlueMazeBottom,                32,  64                    ;white key
+            .byte roomnum_RedMazeBottomLeft,             32,  64                    ;black key
+            .byte PortCullisState::closed                                           ;portcullis state - Ylw
+            .byte PortCullisState::closed                                           ;portcullis state - Wht
+            .byte PortCullisState::closed                                           ;portcullis state - Blk
+            .byte roomnum_BelowYellowCastle,             32,  32,  $90,  0, $78, 0  ;bat
 Game2ObjectLocationsEnd:
-.ifdef FIXME
-.else
-            .byte 0
-.endif
 
 ;; Check ball (man) collisions and move ball
 ;  input:

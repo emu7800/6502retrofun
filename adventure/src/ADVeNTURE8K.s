@@ -1253,7 +1253,7 @@ SetupRoomObjects:
             sta dr_ptr+1
 
 @CopyToGameObjectsWorkingArea:
-            ldy #Game1ObjectLocationsEnd - Game1ObjectLocations
+            ldy #Game1ObjectLocationsEnd - Game1ObjectLocations - 1
 :           lda (dr_ptr),y
             sta GameObjectsWorkingArea,y
             dey
